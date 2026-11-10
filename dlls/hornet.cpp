@@ -30,6 +30,7 @@ int iHornetTrail;
 int iHornetPuff;
 
 LINK_ENTITY_TO_CLASS( hornet, CHornet );
+LINK_ENTITY_TO_CLASS( playerhornet, CHornet );
 
 //=========================================================
 // Save/Restore
@@ -61,21 +62,15 @@ void CHornet :: Spawn( void )
 {
 	Precache();
 
-	pev->movetype	= MOVETYPE_FLY;
-	pev->solid		= SOLID_BBOX;
+	AddEntityFlag( 4 );
+
+	pev->movetype	= MOVETYPE_BOUNCEMISSILE;
+	pev->solid		= SOLID_SLIDEBOX;
 	pev->takedamage = DAMAGE_YES;
 	pev->flags		|= FL_MONSTER;
 	pev->health		= 1;// weak!
 	
-	if ( g_pGameRules->IsMultiplayer() )
-	{
-		// hornets don't live as long in multiplayer
-		m_flStopAttack = gpGlobals->time + 3.5;
-	}
-	else
-	{
-		m_flStopAttack	= gpGlobals->time + 5.0;
-	}
+	m_flStopAttack	= gpGlobals->time + 5.0;
 
 	m_flFieldOfView = 0.9; // +- 25 degrees
 
@@ -91,7 +86,7 @@ void CHornet :: Spawn( void )
 	}
 
 	SET_MODEL(ENT( pev ), "models/hornet.mdl");
-	UTIL_SetSize( pev, Vector( -4, -4, -4 ), Vector( 4, 4, 4 ) );
+	UTIL_SetSize( pev, g_vecZero, g_vecZero );
 
 	SetTouch( &CHornet::DieTouch );
 	SetThink( &CHornet::StartTrack );
@@ -100,9 +95,26 @@ void CHornet :: Spawn( void )
 	if ( !pSoundEnt )
 		pSoundEnt = edict();
 
+	if ( !FClassnameIs( pev, "playerhornet" ) )
+	{
+		switch ( RANDOM_LONG( 0, 2 ) )
+		{
+		case 0:
+			EMIT_SOUND( pSoundEnt, CHAN_WEAPON, "agrunt/ag_fire1.wav", 1, ATTN_NORM );
+			break;
+		case 1:
+			EMIT_SOUND( pSoundEnt, CHAN_WEAPON, "agrunt/ag_fire2.wav", 1, ATTN_NORM );
+			break;
+		case 2:
+			EMIT_SOUND( pSoundEnt, CHAN_WEAPON, "agrunt/ag_fire3.wav", 1, ATTN_NORM );
+			break;
+		}
+	}
+
 	if ( !FNullEnt(pev->owner) && (pev->owner->v.flags & FL_CLIENT) )
 	{
-		pev->dmg = gSkillData.plrDmgHornet;
+		if ( pev->dmg <= 0 )
+			pev->dmg = gSkillData.plrDmgHornet;
 	}
 	else
 	{
@@ -136,16 +148,12 @@ void CHornet :: Precache()
 }	
 
 //=========================================================
-// hornets will never get mad at each other, no matter who the owner is.
-//=========================================================
-int CHornet::IRelationship ( CBaseEntity *pTarget )
+int CHornet::IRelationship ( CBaseEntity *pTarget, bool ignoreNoTarget )
 {
-	if ( pTarget->pev->modelindex == pev->modelindex )
-	{
+	if ( !pTarget )
 		return R_NO;
-	}
 
-	return CBaseMonster :: IRelationship( pTarget );
+	return CBaseMonster :: IRelationship( pTarget, ignoreNoTarget );
 }
 
 //=========================================================
@@ -159,7 +167,13 @@ int CHornet::Classify ( void )
 		return CLASS_PLAYER_BIOWEAPON;
 	}
 
-	return	CLASS_ALIEN_BIOWEAPON;
+	if ( m_fOverrideClass )
+		return m_iClassSelection;
+
+	if ( m_fPlayerAlly )
+		return CLASS_PLAYER_BIOWEAPON;
+
+	return CLASS_ALIEN_BIOWEAPON;
 }
 
 //=========================================================
@@ -224,18 +238,37 @@ old colors
 		WRITE_BYTE( 10 ); // life
 		WRITE_BYTE( 2 );  // width
 		
-		switch ( m_iHornetType )
+		if ( m_fPlayerAlly )
 		{
-		case HORNET_TYPE_RED:
-			WRITE_BYTE( 179 );   // r, g, b
-			WRITE_BYTE( 39 );   // r, g, b
-			WRITE_BYTE( 14 );   // r, g, b
-			break;
-		case HORNET_TYPE_ORANGE:
-			WRITE_BYTE( 255 );   // r, g, b
-			WRITE_BYTE( 128 );   // r, g, b
-			WRITE_BYTE( 0 );   // r, g, b
-			break;
+			switch ( m_iHornetType )
+			{
+			case HORNET_TYPE_RED:
+				WRITE_BYTE( 14 );   // r, g, b
+				WRITE_BYTE( 39 );   // r, g, b
+				WRITE_BYTE( 179 );   // r, g, b
+				break;
+			case HORNET_TYPE_ORANGE:
+				WRITE_BYTE( 0 );   // r, g, b
+				WRITE_BYTE( 128 );   // r, g, b
+				WRITE_BYTE( 255 );   // r, g, b
+				break;
+			}
+		}
+		else
+		{
+			switch ( m_iHornetType )
+			{
+			case HORNET_TYPE_RED:
+				WRITE_BYTE( 179 );   // r, g, b
+				WRITE_BYTE( 39 );   // r, g, b
+				WRITE_BYTE( 14 );   // r, g, b
+				break;
+			case HORNET_TYPE_ORANGE:
+				WRITE_BYTE( 255 );   // r, g, b
+				WRITE_BYTE( 128 );   // r, g, b
+				WRITE_BYTE( 0 );   // r, g, b
+				break;
+			}
 		}
 
 		WRITE_BYTE( 128 );	// brightness
@@ -376,13 +409,10 @@ void CHornet :: TrackTouch ( CBaseEntity *pOther )
 	{
 		// hit something we don't want to hurt, so turn around.
 
-		pev->velocity = pev->velocity.Normalize();
-
 		pev->velocity.x *= -1;
 		pev->velocity.y *= -1;
 
-		pev->origin = pev->origin + pev->velocity * 4; // bounce the hornet off a bit.
-		pev->velocity = pev->velocity * m_flFlySpeed;
+		pev->solid = SOLID_NOT;
 
 		return;
 	}
@@ -407,11 +437,12 @@ void CHornet::DieTouch ( CBaseEntity *pOther )
 			case 2:	EMIT_SOUND( ENT(pev), CHAN_VOICE, "hornet/ag_hornethit3.wav", 1, ATTN_NORM);	break;
 		}
 			
-		pOther->TakeDamage( pev, VARS( pev->owner ), pev->dmg, DMG_BULLET );
+		pOther->TakeDamage( pev, pev->owner ? VARS( pev->owner ) : pev, pev->dmg, DMG_BULLET );
 	}
 
 	pev->modelindex = 0;// so will disappear for the 0.1 secs we wait until NEXTTHINK gets rid
 	pev->solid = SOLID_NOT;
+	pev->health = 0;
 
 	SetThink ( &CHornet::SUB_Remove );
 	pev->nextthink = gpGlobals->time + 1;// stick around long enough for the sound to finish!

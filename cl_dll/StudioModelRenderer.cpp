@@ -21,6 +21,10 @@
 
 #include "StudioModelRenderer.h"
 #include "GameStudioModelRenderer.h"
+#include "portal_manager.h"
+
+extern "C" int CL_IsThirdPerson(void);
+extern int g_iViewEntity;
 
 extern cvar_t *tfc_newmodels;
 
@@ -31,6 +35,17 @@ extern extra_player_info_t  g_PlayerExtraInfo[MAX_PLAYERS+1];
 #define TEAM2_COLOR		250
 #define TEAM3_COLOR		45
 #define TEAM4_COLOR		100
+
+// monster gaitsequence value for no separate gait animation
+#define GAITSEQUENCE_NONE	255
+
+// player.mdl movement sequences, played in step with the gait
+#define PLAYER_SEQ_RUN2			3
+#define PLAYER_SEQ_WALK2HANDED	4
+#define PLAYER_SEQ_CRAWL		6
+
+// upper bound of the player top and bottom colors
+#define REMAP_COLOR_MAX		255
 
 int m_nPlayerGaitSequences[MAX_CLIENTS];
 
@@ -55,6 +70,11 @@ void CStudioModelRenderer::Init( void )
 
 	m_pChromeSprite			= IEngineStudio.GetChromeSprite();
 
+	m_pCvarIndex[0] = CVAR_CREATE("index_1", "1.0", 0);
+	m_pCvarIndex[1] = CVAR_CREATE("index_2", "1.0", 0);
+	m_pCvarIndex[2] = CVAR_CREATE("index_3", "1.0", 0);
+	m_pCvarIndex[3] = CVAR_CREATE("index_4", "1.0", 0);
+
 	IEngineStudio.GetModelCounters( &m_pStudioModelCount, &m_pModelsDrawn );
 
 	// Get pointers to engine data structures
@@ -76,6 +96,10 @@ CStudioModelRenderer::CStudioModelRenderer( void )
 	m_fGaitEstimation	= 1;
 	m_pCurrentEntity	= NULL;
 	m_pCvarHiModels		= NULL;
+	m_pCvarIndex[0]		= NULL;
+	m_pCvarIndex[1]		= NULL;
+	m_pCvarIndex[2]		= NULL;
+	m_pCvarIndex[3]		= NULL;
 	m_pCvarDeveloper	= NULL;
 	m_pCvarDrawEntities	= NULL;
 	m_pChromeSprite		= NULL;
@@ -90,6 +114,8 @@ CStudioModelRenderer::CStudioModelRenderer( void )
 	m_pSubModel			= NULL;
 	m_pPlayerInfo		= NULL;
 	m_pRenderModel		= NULL;
+	m_iUnknown76		= 0;
+	m_bPortalLocalPlayer = false;
 }
 
 /*
@@ -124,7 +150,7 @@ void CStudioModelRenderer::StudioCalcBoneAdj( float dadt, float *adj, const byte
 			// check for 360% wrapping
 			if (pbonecontroller[j].type & STUDIO_RLOOP)
 			{
-				if (fabs(pcontroller1[i] - pcontroller2[i]) > 128)
+				if (abs(pcontroller1[i] - pcontroller2[i]) > 128)
 				{
 					int a, b;
 					a = (pcontroller1[j] + 128) % 256;
@@ -379,12 +405,12 @@ mstudioanim_t *CStudioModelRenderer::StudioGetAnim( model_t *m_pSubModel, mstudi
 		m_pSubModel->submodels = (dmodel_t *)paSequences;
 	}
 
-	if (!IEngineStudio.Cache_Check( (struct cache_user_s *)&(paSequences[pseqdesc->seqgroup])))
+	if (!IEngineStudio.Cache_Check(&(paSequences[pseqdesc->seqgroup])))
 	{
-		gEngfuncs.Con_DPrintf("loading %s\n", pseqgroup->name );
-		IEngineStudio.LoadCacheFile( pseqgroup->name, (struct cache_user_s *)&paSequences[pseqdesc->seqgroup] );
+		gEngfuncs.Con_DPrintf("loading %s\n", pseqgroup->name);
+		IEngineStudio.LoadCacheFile(pseqgroup->name, &paSequences[pseqdesc->seqgroup]);
 	}
-	return (mstudioanim_t *)((byte *)paSequences[pseqdesc->seqgroup].data + pseqdesc->animindex);
+	return (mstudioanim_t*)((byte*)paSequences[pseqdesc->seqgroup].data + pseqdesc->animindex);
 }
 
 /*
@@ -394,6 +420,36 @@ StudioPlayerBlend
 ====================
 */
 void CStudioModelRenderer::StudioPlayerBlend( mstudioseqdesc_t *pseqdesc, int *pBlend, float *pPitch )
+{
+	// calc up/down pointing
+	*pBlend = (*pPitch * 3);
+	if (*pBlend < pseqdesc->blendstart[0])
+	{
+		*pPitch -= pseqdesc->blendstart[0] / 3.0;
+		*pBlend = 0;
+	}
+	else if (*pBlend > pseqdesc->blendend[0])
+	{
+		*pPitch -= pseqdesc->blendend[0] / 3.0;
+		*pBlend = 255;
+	}
+	else
+	{
+		if (pseqdesc->blendend[0] - pseqdesc->blendstart[0] < 0.1) // catch qc error
+			*pBlend = 127;
+		else
+			*pBlend = 255 * (*pBlend - pseqdesc->blendstart[0]) / (pseqdesc->blendend[0] - pseqdesc->blendstart[0]);
+		*pPitch = 0;
+	}
+}
+
+/*
+====================
+StudioMonsterBlend
+
+====================
+*/
+void CStudioModelRenderer::StudioMonsterBlend( mstudioseqdesc_t *pseqdesc, int *pBlend, float *pPitch )
 {
 	// calc up/down pointing
 	*pBlend = (*pPitch * 3);
@@ -444,7 +500,9 @@ void CStudioModelRenderer::StudioSetUpTransform (int trivial_accept)
 
 	//Con_DPrintf("Angles %4.2f prev %4.2f for %i\n", angles[PITCH], m_pCurrentEntity->index);
 	//Con_DPrintf("movetype %d %d\n", m_pCurrentEntity->movetype, m_pCurrentEntity->aiment );
-	if (m_pCurrentEntity->curstate.movetype == MOVETYPE_STEP) 
+	if (m_pCurrentEntity->curstate.movetype == MOVETYPE_STEP &&
+		m_pCurrentEntity->curstate.velocity == vec3_origin &&
+		m_pCurrentEntity->curstate.onground != -1 )
 	{
 		float			f = 0;
 		float			d;
@@ -470,6 +528,8 @@ void CStudioModelRenderer::StudioSetUpTransform (int trivial_accept)
 		{
 			f = 0;
 		}
+
+		f = V_max( -1.0f, V_min( 1.0f, f ) );
 
 		for (i = 0; i < 3; i++)
 		{
@@ -519,7 +579,7 @@ void CStudioModelRenderer::StudioSetUpTransform (int trivial_accept)
 
 		VectorCopy (m_vRight, viewmatrix[0]);
 		VectorCopy (m_vUp, viewmatrix[1]);
-		VectorInverse (viewmatrix[1]);
+		VectorInverseTemp (viewmatrix[1]);
 		VectorCopy (m_vNormal, viewmatrix[2]);
 
 		(*m_protationmatrix)[0][3] = modelpos[0] - m_vRenderOrigin[0];
@@ -767,6 +827,55 @@ float CStudioModelRenderer::StudioEstimateFrame( mstudioseqdesc_t *pseqdesc )
 
 /*
 ====================
+StudioEstimateGaitFrame
+
+====================
+*/
+float CStudioModelRenderer::StudioEstimateGaitFrame( mstudioseqdesc_t *pseqdesc )
+{
+	float dfdt, f;
+
+	if (m_fDoInterp)
+	{
+		if (m_clTime < m_pCurrentEntity->curstate.fuser2)
+			dfdt = 0;
+		else
+			dfdt = (m_clTime - m_pCurrentEntity->curstate.fuser2) * m_pCurrentEntity->curstate.framerate * pseqdesc->fps;
+	}
+	else
+	{
+		dfdt = 0;
+	}
+
+	if (pseqdesc->numframes <= 1)
+		f = 0;
+	else
+		f = (pseqdesc->numframes - 1) * m_pCurrentEntity->curstate.fuser1 / 256.0;
+
+	f += dfdt;
+
+	if (pseqdesc->flags & STUDIO_LOOPING)
+	{
+		if (pseqdesc->numframes > 1)
+			f -= (int)(f / (pseqdesc->numframes - 1)) * (pseqdesc->numframes - 1);
+
+		if (f < 0)
+			f += (pseqdesc->numframes - 1);
+	}
+	else
+	{
+		if (f >= pseqdesc->numframes - 1.001)
+			f = pseqdesc->numframes - 1.001;
+
+		if (f < 0.0)
+			f = 0.0;
+	}
+
+	return f;
+}
+
+/*
+====================
 StudioSetupBones
 
 ====================
@@ -814,7 +923,18 @@ void CStudioModelRenderer::StudioSetupBones ( void )
 //		gEngfuncs.Con_Printf( "index: %d     gaitsequence: %d\n",playerNum, m_pPlayerInfo->gaitsequence);
 	}
 */
-	f = StudioEstimateFrame( pseqdesc );
+	// player movement sequences follow the legs
+	if ( m_pPlayerInfo &&
+		( m_pCurrentEntity->curstate.sequence == PLAYER_SEQ_RUN2 ||
+		m_pCurrentEntity->curstate.sequence == PLAYER_SEQ_WALK2HANDED ||
+		m_pCurrentEntity->curstate.sequence == PLAYER_SEQ_CRAWL ) )
+	{
+		f = m_pPlayerInfo->gaitframe;
+	}
+	else
+	{
+		f = StudioEstimateFrame( pseqdesc );
+	}
 
 	if (m_pCurrentEntity->latched.prevframe > f)
 	{
@@ -948,6 +1068,47 @@ void CStudioModelRenderer::StudioSetupBones ( void )
 				memcpy( pos[i], pos2[i], sizeof( pos[i] ) );
 				memcpy( q[i], q2[i], sizeof( q[i] ) );
 			}
+		}
+	}
+
+	// calc monster gait animation
+	if ( !m_pPlayerInfo && m_pCurrentEntity->curstate.iuser1
+		&& m_pCurrentEntity->curstate.gaitsequence != GAITSEQUENCE_NONE
+		&& m_pCurrentEntity->curstate.gaitsequence != m_pCurrentEntity->curstate.sequence )
+	{
+		if ( m_pCurrentEntity->curstate.gaitsequence >= m_pStudioHeader->numseq )
+			m_pCurrentEntity->curstate.gaitsequence = 0;
+
+		int copy = 1;
+
+		pseqdesc = (mstudioseqdesc_t *)( (byte *)m_pStudioHeader + m_pStudioHeader->seqindex ) + m_pCurrentEntity->curstate.gaitsequence;
+
+		f = StudioEstimateGaitFrame( pseqdesc );
+		panim = StudioGetAnim( m_pRenderModel, pseqdesc );
+		StudioCalcRotations( pos2, q2, pseqdesc, panim, f );
+
+		for ( i = 0; i < m_pStudioHeader->numbones; i++ )
+		{
+			if ( !strcmp( pbones[i].name, "Bip01 Spine" ) )
+				copy = 0;
+			else if ( !strcmp( pbones[ pbones[i].parent ].name, "Bip01 Pelvis" ) )
+				copy = 1;
+
+			if ( copy )
+			{
+				memcpy( pos[i], pos2[i], sizeof( pos[i] ) );
+				memcpy( q[i], q2[i], sizeof( q[i] ) );
+			}
+		}
+	}
+
+	if ( m_pCurrentEntity->curstate.scale > 0 )
+	{
+		for ( i = 0; i < 3; i++ )
+		{
+			(*m_protationmatrix)[i][0] *= m_pCurrentEntity->curstate.scale;
+			(*m_protationmatrix)[i][1] *= m_pCurrentEntity->curstate.scale;
+			(*m_protationmatrix)[i][2] *= m_pCurrentEntity->curstate.scale;
 		}
 	}
 
@@ -1101,7 +1262,7 @@ void CStudioModelRenderer::StudioMergeBones ( model_t *m_pSubModel )
 #if defined( _TFC )
 #include "pm_shared.h"
 const Vector& GetTeamColor( int team_no );
-#define IS_FIRSTPERSON_SPEC ( g_iUser1 == OBS_IN_EYE || (g_iUser1 && (gHUD.m_Spectator.m_pip->value == INSET_IN_EYE)) )
+#define IS_FIRSTPERSON_SPEC (g_iUser1 == OBS_IN_EYE)
 
 int GetRemapColor( int iTeam, bool bTopColor )
 {
@@ -1160,6 +1321,32 @@ int CStudioModelRenderer::StudioDrawModel( int flags )
 	IEngineStudio.GetViewInfo( m_vRenderOrigin, m_vUp, m_vRight, m_vNormal );
 	IEngineStudio.GetAliasScale( &m_fSoftwareXScale, &m_fSoftwareYScale );
 
+	if (!CL_IsThirdPerson() && P_ShouldGameStudioModelRendererRenderPlayerModel())
+	{
+		int save_interp = m_fDoInterp;
+
+		m_bPortalLocalPlayer = true;
+		m_fDoInterp = 0;
+
+		cl_entity_t *player = gEngfuncs.GetLocalPlayer();
+		entity_state_t *state = IEngineStudio.GetPlayerState(player->index - 1);
+
+		m_pCurrentEntity = player;
+		player->curstate = *state;
+		StudioDrawPlayer(STUDIO_RENDER | STUDIO_EVENTS, state);
+
+		m_pCurrentEntity = IEngineStudio.GetCurrentEntity();
+		m_fDoInterp = save_interp;
+		m_bPortalLocalPlayer = false;
+	}
+
+	if (P_IsEntityIntelHDFixTempEnt(IEngineStudio.GetCurrentEntity()))
+	{
+		IEngineStudio.SetupRenderer(0);
+		IEngineStudio.RestoreRenderer();
+		return 1;
+	}
+
 	if (m_pCurrentEntity->curstate.renderfx == kRenderFxDeadPlayer)
 	{
 		entity_state_t deadplayer;
@@ -1191,6 +1378,9 @@ int CStudioModelRenderer::StudioDrawModel( int flags )
 		m_fDoInterp = save_interp;
 		return result;
 	}
+
+	if (m_pCurrentEntity->curstate.movetype == MOVETYPE_STEP)
+		return StudioDrawMonster( flags, m_pCurrentEntity );
 
 	m_pRenderModel = m_pCurrentEntity->model;
 	m_pStudioHeader = (studiohdr_t *)IEngineStudio.Mod_Extradata (m_pRenderModel);
@@ -1336,6 +1526,82 @@ int CStudioModelRenderer::StudioDrawModel( int flags )
 
 /*
 ====================
+StudioDrawMonster
+
+====================
+*/
+int CStudioModelRenderer::StudioDrawMonster( int flags, cl_entity_t *pmonster )
+{
+	alight_t lighting;
+	vec3_t dir;
+
+	IEngineStudio.GetTimes( &m_nFrameCount, &m_clTime, &m_clOldTime );
+	IEngineStudio.GetViewInfo( m_vRenderOrigin, m_vUp, m_vRight, m_vNormal );
+	IEngineStudio.GetAliasScale( &m_fSoftwareXScale, &m_fSoftwareYScale );
+
+	m_pRenderModel = pmonster->model;
+
+	if (!m_pRenderModel)
+		return 0;
+
+	m_pStudioHeader = (studiohdr_t *)IEngineStudio.Mod_Extradata( m_pRenderModel );
+	IEngineStudio.StudioSetHeader( m_pStudioHeader );
+	IEngineStudio.SetRenderModel( m_pRenderModel );
+
+	StudioProcessMonsterGait( pmonster );
+	StudioSetUpTransform( 0 );
+
+	if (flags & STUDIO_RENDER)
+	{
+		if (!IEngineStudio.StudioCheckBBox())
+			return 0;
+
+		(*m_pModelsDrawn)++;
+		(*m_pStudioModelCount)++;
+
+		if (m_pStudioHeader->numbodyparts == 0)
+			return 1;
+	}
+
+	if (m_pCurrentEntity->curstate.movetype == MOVETYPE_FOLLOW)
+		StudioMergeBones( m_pRenderModel );
+	else
+		StudioSetupBones();
+
+	StudioSaveBones();
+
+	if (flags & STUDIO_EVENTS)
+	{
+		StudioCalcAttachments();
+		IEngineStudio.StudioClientEvents();
+
+		if (m_pCurrentEntity->index > 0)
+		{
+			cl_entity_t *ent = gEngfuncs.GetEntityByIndex( pmonster->index );
+
+			memcpy( ent->attachment, pmonster->attachment, sizeof( vec3_t ) * 4 );
+		}
+	}
+
+	if (flags & STUDIO_RENDER)
+	{
+		lighting.plightvec = dir;
+		IEngineStudio.StudioDynamicLight( pmonster, &lighting );
+		IEngineStudio.StudioEntityLight( &lighting );
+		IEngineStudio.StudioSetupLighting( &lighting );
+
+		m_nTopColor = m_pCurrentEntity->curstate.colormap & 0xFF;
+		m_nBottomColor = (m_pCurrentEntity->curstate.colormap & 0xFF00) >> 8;
+		IEngineStudio.StudioSetRemapColors( m_nTopColor, m_nBottomColor );
+
+		StudioRenderModel();
+	}
+
+	return 1;
+}
+
+/*
+====================
 StudioEstimateGait
 
 ====================
@@ -1404,6 +1670,43 @@ void CStudioModelRenderer::StudioEstimateGait( entity_state_t *pplayer )
 			m_pPlayerInfo->gaityaw = -180;
 	}
 
+}
+
+void GetSequenceInfo( studiohdr_t *pstudiohdr, int sequence, float *pflFrameRate, float *pflGroundSpeed )
+{
+	mstudioseqdesc_t *pseqdesc;
+
+	if (!pstudiohdr)
+		return;
+
+	pseqdesc = (mstudioseqdesc_t *)((byte *)pstudiohdr + pstudiohdr->seqindex) + sequence;
+
+	if (pseqdesc->numframes > 1)
+	{
+		*pflFrameRate = 256 * pseqdesc->fps / (pseqdesc->numframes - 1);
+		*pflGroundSpeed = Length( pseqdesc->linearmovement );
+		*pflGroundSpeed = *pflGroundSpeed * pseqdesc->fps / (pseqdesc->numframes - 1);
+	}
+	else
+	{
+		*pflFrameRate = 256.0;
+		*pflGroundSpeed = 0.0;
+	}
+}
+
+/*
+====================
+StudioEstimateMonsterGait
+
+====================
+*/
+void CStudioModelRenderer::StudioEstimateMonsterGait( cl_entity_t *pmonster )
+{
+	float flFrameRate;
+	float flGroundSpeed = 0;
+
+	GetSequenceInfo( m_pStudioHeader, m_pCurrentEntity->curstate.sequence, &flFrameRate, &flGroundSpeed );
+	m_flGaitMovement = flGroundSpeed;
 }
 
 /*
@@ -1502,6 +1805,23 @@ void CStudioModelRenderer::StudioProcessGait( entity_state_t *pplayer )
 	m_pPlayerInfo->gaitframe = m_pPlayerInfo->gaitframe - (int)(m_pPlayerInfo->gaitframe / pseqdesc->numframes) * pseqdesc->numframes;
 	if (m_pPlayerInfo->gaitframe < 0)
 		m_pPlayerInfo->gaitframe += pseqdesc->numframes;
+}
+
+/*
+====================
+StudioProcessMonsterGait
+
+====================
+*/
+void CStudioModelRenderer::StudioProcessMonsterGait( cl_entity_t *pmonster )
+{
+	if (pmonster->curstate.sequence >= m_pStudioHeader->numseq)
+		pmonster->curstate.sequence = 0;
+
+	pmonster->latched.prevblending[0] = pmonster->curstate.blending[0];
+	pmonster->latched.prevseqblending[0] = pmonster->curstate.blending[0];
+
+	StudioEstimateMonsterGait( pmonster );
 }
 
 #if defined _TFC
@@ -1647,6 +1967,20 @@ float g_flSpinDownTime[ 33 ];
 #endif
 
 
+void UpdatePlayerPitch(cl_entity_t *entity, float pitch)
+{
+	if (pitch > 180.0f)
+		pitch -= 360.0f;
+	else if (pitch < -180.0f)
+		pitch += 360.0f;
+
+	pitch /= -3.0f;
+	entity->angles[PITCH] = pitch;
+	entity->curstate.angles[PITCH] = pitch;
+	entity->prevstate.angles[PITCH] = pitch;
+	entity->latched.prevangles[PITCH] = pitch;
+}
+
 /*
 ====================
 StudioDrawPlayer
@@ -1657,8 +1991,27 @@ int CStudioModelRenderer::StudioDrawPlayer( int flags, entity_state_t *pplayer )
 {
 	alight_t lighting;
 	vec3_t dir;
+	vec3_t orig_angles;
+	bool bClientEvents = false;
 
-	m_pCurrentEntity = IEngineStudio.GetCurrentEntity();
+	if ( m_bPortalLocalPlayer )
+		m_pCurrentEntity = gEngfuncs.GetLocalPlayer();
+	else
+		m_pCurrentEntity = IEngineStudio.GetCurrentEntity();
+
+	if (m_pCurrentEntity == gEngfuncs.GetLocalPlayer() && !CL_IsThirdPerson())
+	{
+		vec3_t angles = { 0, 0, 0 };
+
+		gEngfuncs.GetViewAngles(angles);
+		UpdatePlayerPitch(m_pCurrentEntity, angles[PITCH]);
+
+		cl_entity_t *player = gEngfuncs.GetLocalPlayer();
+
+		if (!g_bRenderingPortals && player && player->index == g_iViewEntity)
+			return 0;
+	}
+
 	IEngineStudio.GetTimes( &m_nFrameCount, &m_clTime, &m_clOldTime );
 	IEngineStudio.GetViewInfo( m_vRenderOrigin, m_vUp, m_vRight, m_vNormal );
 	IEngineStudio.GetAliasScale( &m_fSoftwareXScale, &m_fSoftwareYScale );
@@ -1700,13 +2053,10 @@ int CStudioModelRenderer::StudioDrawPlayer( int flags, entity_state_t *pplayer )
 	IEngineStudio.StudioSetHeader( m_pStudioHeader );
 	IEngineStudio.SetRenderModel( m_pRenderModel );
 
-	if (pplayer->gaitsequence)
-	{
-		vec3_t orig_angles;
-		m_pPlayerInfo = IEngineStudio.PlayerInfo( m_nPlayerIndex );
+	m_pPlayerInfo = IEngineStudio.PlayerInfo( m_nPlayerIndex );
 
 		VectorCopy( m_pCurrentEntity->angles, orig_angles );
-	
+
 		StudioProcessGait( pplayer );
 
 		m_pPlayerInfo->gaitsequence = pplayer->gaitsequence;
@@ -1714,23 +2064,6 @@ int CStudioModelRenderer::StudioDrawPlayer( int flags, entity_state_t *pplayer )
 
 		StudioSetUpTransform( 0 );
 		VectorCopy( orig_angles, m_pCurrentEntity->angles );
-	}
-	else
-	{
-		m_pCurrentEntity->curstate.controller[0] = 127;
-		m_pCurrentEntity->curstate.controller[1] = 127;
-		m_pCurrentEntity->curstate.controller[2] = 127;
-		m_pCurrentEntity->curstate.controller[3] = 127;
-		m_pCurrentEntity->latched.prevcontroller[0] = m_pCurrentEntity->curstate.controller[0];
-		m_pCurrentEntity->latched.prevcontroller[1] = m_pCurrentEntity->curstate.controller[1];
-		m_pCurrentEntity->latched.prevcontroller[2] = m_pCurrentEntity->curstate.controller[2];
-		m_pCurrentEntity->latched.prevcontroller[3] = m_pCurrentEntity->curstate.controller[3];
-		
-		m_pPlayerInfo = IEngineStudio.PlayerInfo( m_nPlayerIndex );
-		m_pPlayerInfo->gaitsequence = 0;
-
-		StudioSetUpTransform( 0 );
-	}
 
 	if (flags & STUDIO_RENDER)
 	{
@@ -1752,10 +2085,12 @@ int CStudioModelRenderer::StudioDrawPlayer( int flags, entity_state_t *pplayer )
 
 	m_pPlayerInfo = NULL;
 
-	if (flags & STUDIO_EVENTS)
+	if ( ( flags & STUDIO_EVENTS ) &&
+		!( ( flags & STUDIO_RENDER ) && pplayer->weaponmodel && WeaponHasAttachments( pplayer ) ) )
 	{
 		StudioCalcAttachments( );
 		IEngineStudio.StudioClientEvents( );
+		bClientEvents = true;
 		// copy attachments into global entity array
 		if ( m_pCurrentEntity->index > 0 )
 		{
@@ -1767,15 +2102,10 @@ int CStudioModelRenderer::StudioDrawPlayer( int flags, entity_state_t *pplayer )
 
 	if (flags & STUDIO_RENDER)
 	{
-		if (m_pCvarHiModels->value && m_pRenderModel != m_pCurrentEntity->model  )
+		if (m_pCvarHiModels->value)
 		{
 			// show highest resolution multiplayer model
-			m_pCurrentEntity->curstate.body = 255;
-		}
-
-		if (!(m_pCvarDeveloper->value == 0 && gEngfuncs.GetMaxClients() == 1 ) && ( m_pRenderModel == m_pCurrentEntity->model ) )
-		{
-			m_pCurrentEntity->curstate.body = 1; // force helmet
+			m_pCurrentEntity->curstate.body = 255; // force helmet
 		}
 
 		lighting.plightvec = dir;
@@ -1830,14 +2160,8 @@ int CStudioModelRenderer::StudioDrawPlayer( int flags, entity_state_t *pplayer )
 #endif
 
 		// bounds check
-		if (m_nTopColor < 0)
-			m_nTopColor = 0;
-		if (m_nTopColor > 360)
-			m_nTopColor = 360;
-		if (m_nBottomColor < 0)
-			m_nBottomColor = 0;
-		if (m_nBottomColor > 360)
-			m_nBottomColor = 360;
+		m_nTopColor    = V_min( V_max( m_nTopColor, 0 ), REMAP_COLOR_MAX );
+		m_nBottomColor = V_min( V_max( m_nBottomColor, 0 ), REMAP_COLOR_MAX );
 
 		IEngineStudio.StudioSetRemapColors( m_nTopColor, m_nBottomColor );
 
@@ -1847,6 +2171,7 @@ int CStudioModelRenderer::StudioDrawPlayer( int flags, entity_state_t *pplayer )
 		if (pplayer->weaponmodel)
 		{
 			cl_entity_t saveent = *m_pCurrentEntity;
+			studiohdr_t *pplayerheader = m_pStudioHeader;
 
 			model_t *pweaponmodel = IEngineStudio.GetModelByIndex( pplayer->weaponmodel );
 
@@ -1928,11 +2253,39 @@ int CStudioModelRenderer::StudioDrawPlayer( int flags, entity_state_t *pplayer )
 
 			StudioCalcAttachments( );
 
+			// the player keeps the attachments of its weapon model
+			if ( m_pCurrentEntity->index > 0 )
+				memcpy( saveent.attachment, m_pCurrentEntity->attachment, sizeof( vec3_t ) * m_pStudioHeader->numattachments );
+
 			*m_pCurrentEntity = saveent;
+
+			m_pStudioHeader = pplayerheader;
+			IEngineStudio.StudioSetHeader( m_pStudioHeader );
+
+			if ( ( flags & STUDIO_EVENTS ) && !bClientEvents )
+				IEngineStudio.StudioClientEvents( );
 		}
 	}
 
 	return 1;
+}
+
+/*
+====================
+WeaponHasAttachments
+
+====================
+*/
+bool CStudioModelRenderer::WeaponHasAttachments( entity_state_t *pplayer )
+{
+	studiohdr_t *modelheader;
+
+	if ( !pplayer )
+		return false;
+
+	modelheader = (studiohdr_t *)IEngineStudio.Mod_Extradata( IEngineStudio.GetModelByIndex( pplayer->weaponmodel ) );
+
+	return modelheader->numattachments != 0;
 }
 
 /*

@@ -1,4 +1,4 @@
-//========= Copyright � 1996-2002, Valve LLC, All rights reserved. ============
+//========= Copyright (c) 1996-2002, Valve LLC, All rights reserved. ============
 //
 // Purpose: 
 //
@@ -23,7 +23,7 @@
 
 // Scoreboard cells
 #define COLUMN_TRACKER	0
-#define COLUMN_PRIVILEGE 1
+#define COLUMN_PRIVILEGE	1
 #define COLUMN_NAME		2
 #define COLUMN_KILLS	3
 #define COLUMN_HEALTH	4
@@ -35,13 +35,7 @@
 #define COLUMN_SERVEROP	10
 #define COLUMN_BLANK	11
 #define NUM_COLUMNS		12
-
-
-
-
-
 #define NUM_ROWS		(MAX_PLAYERS + (MAX_SCOREBOARD_TEAMS * 2))
-
 using namespace vgui;
 
 class CTextImage2 : public Image
@@ -71,7 +65,7 @@ public:
 		_image[1]->getTextSize(w2, t2);
 
 		wide = w1 + w2;
-		tall = max(t1, t2);
+		tall = V_max(t1, t2);
 		setSize(wide, tall);
 	}
 
@@ -119,6 +113,7 @@ public:
 		_dualImage = new CTextImage2();
 		_dualImage->setColor2(Color(255, 170, 0, 0));
 		_row = -2;
+		_gap = 0;
 		_useFgColorAsImageColor = true;
 		_offset[0] = 0;
 		_offset[1] = 0;
@@ -132,6 +127,11 @@ public:
 	void setRow(int row)
 	{
 		_row = row;
+	}
+
+	void setColumn(int column)
+	{
+		_column = column;
 	}
 
 	void setFgColorAsImageColor(bool state)
@@ -158,18 +158,12 @@ public:
 
 	virtual void setText(const char* text)
 	{
-		// std::isspace assert-fails on UTF-8 chars
-		auto fnIsSpace = [](char c)
-			{
-				return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r';
-			};
-
 		// strip any non-alnum characters from the end
 		char buf[512];
 		strcpy(buf, text);
 
 		int len = strlen(buf);
-		while (len && fnIsSpace(buf[--len]))
+		while (len && isspace(buf[--len]))
 		{
 			buf[len] = 0;
 		}
@@ -228,11 +222,12 @@ public:
 	void calcAlignment(int iwide, int itall, int &x, int &y);
 
 private:
-	CTextImage2 *_dualImage;
-	int _row;
-	int _gap;
-	int _offset[2];
-	bool _useFgColorAsImageColor;
+	CTextImage2	*_dualImage;
+	int			_row;
+	int			_column;
+	int			_gap;
+	int			_offset[2];
+	bool		_useFgColorAsImageColor;
 };
 
 class ScoreTablePanel;
@@ -257,9 +252,9 @@ private:
 private:
 
 	Label			m_TitleLabel;
-	Label*			m_pCurrentMapLabel;
-	Label*			m_pNextMapLabel;
-	Label*			m_pTimeleftLabel;
+	Label			*m_pCurrentMapLabel;
+	Label			*m_pNextMapLabel;
+	Label			*m_pTimeleftLabel;
 	
 	// Here is how these controls are arranged hierarchically.
 	// m_HeaderGrid
@@ -278,8 +273,12 @@ private:
 	CGrid			m_PlayerGrids[NUM_ROWS];				// The grid with player and team info. 
 	CLabelHeader	m_PlayerEntries[NUM_COLUMNS][NUM_ROWS];	// Labels for the grid entries.
 
+	CLabelHeader	m_PlayerExtraEntries[NUM_ROWS];
+
 	ScorePanel::HitTestPanel	m_HitTestPanel;
-	CommandButton				*m_pCloseButton;
+	Image			*m_pExtrasIcons[6];
+	Image			*m_pAdminIcon;
+	Image			*m_pOwnerIcon;
 	CLabelHeader*	GetPlayerEntry(int x, int y)	{return &m_PlayerEntries[x][y];}
 
 public:
@@ -291,7 +290,7 @@ public:
 	int				m_iRows;
 	int				m_iSortedRows[NUM_ROWS];
 	int				m_iIsATeam[NUM_ROWS];
-	bool			m_bHasBeenSorted[MAX_PLAYERS];
+	bool			m_bHasBeenSorted[MAX_PLAYERS+1];
 	int				m_iLastKilledBy;
 	int				m_fLastKillTime;
 

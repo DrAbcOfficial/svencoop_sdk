@@ -23,6 +23,7 @@
 #include	"gamerules.h"
 #include	"teamplay_gamerules.h"
 #include	"game.h"
+#include	"server_support.h"
 
 static char team_names[MAX_TEAMS][MAX_TEAMNAME_LENGTH];
 static int team_scores[MAX_TEAMS];
@@ -145,19 +146,9 @@ void CHalfLifeTeamplay :: Think ( void )
 //=========================================================
 BOOL CHalfLifeTeamplay :: ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 {
-	if(g_VoiceGameMgr.ClientCommand(pPlayer, pcmd))
-		return TRUE;
-
 	if ( FStrEq( pcmd, "menuselect" ) )
 	{
-		if ( CMD_ARGC() < 2 )
-			return TRUE;
-
-		int slot = atoi( CMD_ARGV(1) );
-
-		// select the item from the current menu
-
-		return TRUE;
+		return CHalfLifeMultiplay::ClientCommand( pPlayer, pcmd );
 	}
 
 	return FALSE;
@@ -296,14 +287,6 @@ void CHalfLifeTeamplay::ChangePlayerTeam( CBasePlayer *pPlayer, const char *pTea
 		WRITE_BYTE( clientIndex );
 		WRITE_STRING( pPlayer->m_szTeamName );
 	MESSAGE_END();
-
-	MESSAGE_BEGIN( MSG_ALL, gmsgScoreInfo );
-		WRITE_BYTE( clientIndex );
-		WRITE_SHORT( pPlayer->pev->frags );
-		WRITE_SHORT( pPlayer->m_iDeaths );
-		WRITE_SHORT( 0 );
-		WRITE_SHORT( g_pGameRules->GetTeamIndex( pPlayer->m_szTeamName ) + 1 );
-	MESSAGE_END();
 }
 
 
@@ -331,7 +314,7 @@ void CHalfLifeTeamplay::ClientUserInfoChanged( CBasePlayer *pPlayer, char *infob
 		return;
 	}
 
-	if ( defaultteam.value || !IsValidTeam( mdls ) )
+	if ( !IsValidTeam( mdls ) )
 	{
 		int clientIndex = pPlayer->entindex();
 
@@ -343,19 +326,16 @@ void CHalfLifeTeamplay::ClientUserInfoChanged( CBasePlayer *pPlayer, char *infob
 		return;
 	}
 	// notify everyone of the team change
-	sprintf( text, "* %s has changed to team \'%s\'\n", STRING(pPlayer->pev->netname), mdls );
+	sprintf( text, "* %s has changed to team \"%s\"\n", STRING(pPlayer->pev->netname), mdls );
 	UTIL_SayTextAll( text, pPlayer );
 
-	UTIL_LogPrintf( "\"%s<%i><%s><%s>\" joined team \"%s\"\n", 
-		STRING(pPlayer->pev->netname),
-		GETPLAYERUSERID( pPlayer->edict() ),
-		GETPLAYERAUTHID( pPlayer->edict() ),
-		pPlayer->m_szTeamName,
+	UTIL_LogPrintf( "\"%s\" changed to team \"%s\"\n",
+		PlayerLog( pPlayer->edict() ),
 		mdls );
 
 	ChangePlayerTeam( pPlayer, mdls, TRUE, TRUE );
 	// recound stuff
-	RecountTeams( TRUE );
+	RecountTeams();
 }
 
 extern int gmsgDeathMsg;
@@ -430,10 +410,15 @@ int CHalfLifeTeamplay::PlayerRelationship( CBaseEntity *pPlayer, CBaseEntity *pT
 {
 	// half life multiplay has a simple concept of Player Relationships.
 	// you are either on another player's team, or you are not.
-	if ( !pPlayer || !pTarget || !pTarget->IsPlayer() )
+	if ( !pPlayer || !pTarget )
 		return GR_NOTTEAMMATE;
 
 	if ( (*GetTeamID(pPlayer) != '\0') && (*GetTeamID(pTarget) != '\0') && !stricmp( GetTeamID(pPlayer), GetTeamID(pTarget) ) )
+	{
+		return GR_TEAMMATE;
+	}
+
+	if ( pTarget->Classify() == CLASS_PLAYER_ALLY || pTarget->Classify() == CLASS_HUMAN_PASSIVE )
 	{
 		return GR_TEAMMATE;
 	}
@@ -555,7 +540,7 @@ const char *CHalfLifeTeamplay::TeamWithFewestPlayers( void )
 
 //=========================================================
 //=========================================================
-void CHalfLifeTeamplay::RecountTeams( bool bResendInfo )
+void CHalfLifeTeamplay::RecountTeams( void )
 {
 	char	*pName;
 	char	teamlist[TEAMPLAY_TEAMLISTLENGTH];
@@ -613,17 +598,6 @@ void CHalfLifeTeamplay::RecountTeams( bool bResendInfo )
 			if ( tm >= 0 )
 			{
 				team_scores[tm] += plr->pev->frags;
-			}
-
-			if ( bResendInfo ) //Someone's info changed, let's send the team info again.
-			{
-				if ( plr && IsValidTeam( plr->TeamID() ) )
-				{
-					MESSAGE_BEGIN( MSG_ALL, gmsgTeamInfo, NULL );
-						WRITE_BYTE( plr->entindex() );
-						WRITE_STRING( plr->TeamID() );
-					MESSAGE_END();
-				}
 			}
 		}
 	}

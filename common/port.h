@@ -10,36 +10,35 @@
 #ifdef _WIN32
 
 // Insert your headers here
-#define WIN32_LEAN_AND_MEAN		// Exclude rarely-used stuff from Windows headers
-#define WIN32_EXTRA_LEAN
-
-#include "winsani_in.h"
-#include <windows.h>
-#include "winsani_out.h"
-
-#include <stdlib.h>
-#include <stdio.h>
+#include "tier0/platform.h"
+#include "basetypes.h"
+#include <sys/stat.h>
 #include <stdarg.h>
-
-#define snprintf _snprintf
-#define vsnprintf _vsnprintf
 
 #else // _WIN32
 
+#include "tier0/platform.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h> // exit()
 #include <string.h> // strncpy()
 #include <ctype.h> // tolower()
-#include <limits.h>
+#include <linux/limits.h>
 #include <sys/time.h>
 #include <errno.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <netinet/in.h>
+
+#ifndef u_long
+#define u_long unsigned long
+#endif
 
 typedef unsigned char BYTE;
 typedef short int WORD;
 typedef unsigned int DWORD;
-typedef int32 LONG;
+//typedef int32 LONG;
 //typedef uint32 ULONG;
 #ifndef ARCHTYPES_H
 typedef uint32 ULONG;
@@ -54,7 +53,7 @@ typedef char * LPSTR;
 
 
 //const int MAX_PATH = PATH_MAX;
-#define MAX_PATH PATH_MAX
+#define MAX_PATH 260
 
 #ifdef LINUX
 typedef struct POINT_s
@@ -109,6 +108,22 @@ inline void		DebugBreak( void ) { exit( 1 ); }
 extern char g_szEXEName[ 4096 ];
 
 #define _snprintf snprintf
+
+// Define min/max macros only for C to avoid conflicts with std::min and std::max
+#if !defined( __cplusplus )
+#ifndef min
+#define min( a, b )		( ( ( a ) < ( b ) ) ? ( a ) : ( b ) )
+#endif
+#ifndef max
+#define max( a, b )		( ( ( a ) > ( b ) ) ? ( a ) : ( b ) )
+#endif
+#ifndef __min
+#define __min( a, b )	min( a, b )
+#endif
+#ifndef __max
+#define __max( a, b )	max( a, b )
+#endif
+#endif // !__cplusplus
 
 #if defined(OSX)
 #define SO_ARCH_SUFFIX ".dylib"

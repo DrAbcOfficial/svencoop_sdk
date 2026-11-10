@@ -20,8 +20,13 @@
 
 
 #define WEAPON_FLAGS_SELECTONEMPTY	1
+#define WEAPON_FLAGS_ALTERNATE		0x20
 
-#define WEAPON_IS_ONTARGET 0x40
+#define WEAPON_IS_ONTARGET 2
+
+#define WEAPON_STATE_CURRENT		1
+#define WEAPON_STATE_ONTARGET		2
+#define WEAPON_STATE_ALTERNATE	4
 
 struct WEAPON
 {
@@ -35,8 +40,12 @@ struct WEAPON
 	int		iFlags;
 	int		iId;
 	int		iClip;
+	int		iClip2;
+	byte	bState;
 
 	int		iCount;		// # of itesm in plist
+	char	szSpriteName[261];
+	char	szCustomDirectory[261];
 
 	HSPRITE hActive;
 	wrect_t rcActive;

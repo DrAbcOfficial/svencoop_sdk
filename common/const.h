@@ -50,14 +50,18 @@
 #define FL_ONTRAIN				(1<<24) // Player is _controlling_ a train, so movement commands should be ignored on client during prediction.
 #define FL_WORLDBRUSH			(1<<25)	// Not moveable/removeable brush entity (really part of the world, but represented as an entity for transparency or something)
 #define FL_SPECTATOR            (1<<26) // This client is a spectator, don't run touch functions, etc.
+#define FL_NOWEAPONS			(1<<27)	// Sven Co-op: this client can't use weapons
 #define FL_CUSTOMENTITY			(1<<29)	// This is a custom entity
 #define FL_KILLME				(1<<30)	// This entity is marked for death -- This allows the engine to kill ents at the appropriate time
 #define FL_DORMANT				(1<<31)	// Entity is dormant, no updates to client
 
+// Engine's edict->spawnflags
+#define SF_NOTINDEATHMATCH		0x0800	// Do not spawn when deathmatch and loading entities from a file
+#define SF_FORCE_POINT_HULL_FOR_BRUSH_MODEL_COLLISIONS		0x01000000
+#define SF_FORCE_LEFT_ALIGNED_HULL_FOR_BRUSH_MODEL_COLLISIONS	0x02000000
 
 // Goes into globalvars_t.trace_flags
 #define FTRACE_SIMPLEBOX		(1<<0)	// Traceline with a simple box
-
 
 // walkmove modes
 #define	WALKMOVE_NORMAL		0 // normal walkmove
@@ -112,6 +116,10 @@
 #define EF_NIGHTVISION			256 // player nightvision
 #define EF_SNIPERLASER			512 // sniper laser effect
 #define EF_FIBERCAMERA			1024// fiber camera
+#define EF_SPRITE_CUSTOM_VP		1024// Sven Co-op: curstate.sequence carries a sprite orientation
+#define EF_NODECALS				2048// Sven Co-op: don't draw decals on this entity
+#define EF_FULLBRIGHT			4096// Sven Co-op: render the entity at full brightness
+#define EF_NOSHADOW				8192// Sven Co-op: don't render a studio shadow for this entity
 
 
 // entity flags
@@ -577,6 +585,10 @@
 #define MSG_PAS_R			7		// Reliable to PAS
 #define MSG_ONE_UNRELIABLE	8		// Send to one client, but don't put in reliable stream, put in unreliable datagram ( could be dropped )
 #define	MSG_SPEC			9		// Sends to all spectator proxies
+#define MSG_PAS_NOTHOST		10		// PAS multicast excluding the target client
+#define MSG_PVS_NOTHOST		11		// PVS multicast excluding the target client
+#define MSG_BROADCAST_FORCE	12		// Broadcast without the preflight overflow check
+#define MSG_ONE_UNRELIABLE_FORCE	13	// Unreliable to one without user-message connection checks
 
 // contents of a spot in the world
 #define	CONTENTS_EMPTY		-1
@@ -715,22 +727,22 @@ enum
 	kRenderFxLightMultiplier,   //CTM !!!CZERO added to tell the studiorender that the value in iuser2 is a lightmultiplier
 };
 
+#define MAX_WORLD_SIZE		131072 // +/- value, the actual world cube size is (MAX_WORLD_SIZE * 2) on X/Y/Z
 
-typedef unsigned int	func_t;
-typedef unsigned int	string_t;
+typedef unsigned int func_t;
+typedef unsigned int string_t;
 
-typedef unsigned char 		byte;
-typedef unsigned short 		word;
+typedef unsigned char byte;
+typedef unsigned short word;
+
 #define _DEF_BYTE_
 
+#ifdef __cplusplus
 #undef true
 #undef false
-
-#ifndef __cplusplus
-typedef enum {false, true}	qboolean;
-#else 
-typedef int qboolean;
 #endif
+
+typedef int qboolean;
 
 typedef struct
 {

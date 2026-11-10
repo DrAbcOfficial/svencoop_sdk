@@ -1,4 +1,4 @@
-//========= Copyright � 1996-2001, Valve LLC, All rights reserved. ============
+//========= Copyright (c) 1996-2001, Valve LLC, All rights reserved. ============
 //
 // Purpose: 
 //
@@ -21,7 +21,6 @@
 #include <string.h>
 #include <stdio.h>
 #include "parsemsg.h"
-#include "hud_servers.h"
 #include "demo.h"
 #include "demo_api.h"
 #include "voice_status.h"
@@ -202,7 +201,7 @@ int CVoiceStatus::Init(
 	g_pInternalVoiceStatus = this;
 
 	m_BlinkTimer = 0;
-	m_VoiceHeadModel = NULL;
+	m_VoiceHeadModel = 0;
 	memset(m_Labels, 0, sizeof(m_Labels));
 	
 	for(int i=0; i < MAX_VOICE_SPEAKERS; i++)
@@ -349,7 +348,7 @@ void CVoiceStatus::CreateEntities()
 		if(!m_VoicePlayers[i])
 			continue;
 		
-		cl_entity_s *pClient = gEngfuncs.GetEntityByIndex(i+1);
+		cl_entity_t *pClient = gEngfuncs.GetEntityByIndex(i+1);
 		
 		// Don't show an icon if the player is not in our PVS.
 		if(!pClient || pClient->curstate.messagenum < localPlayer->curstate.messagenum)
@@ -363,7 +362,7 @@ void CVoiceStatus::CreateEntities()
 		if(pClient == localPlayer && !cam_thirdperson)
 			continue;
 
-		cl_entity_s *pEnt = &m_VoiceHeadModels[iOutModel];
+		cl_entity_t *pEnt = &m_VoiceHeadModels[iOutModel];
 		++iOutModel;
 
 		memset(pEnt, 0, sizeof(*pEnt));
@@ -554,7 +553,7 @@ void CVoiceStatus::UpdateServerState(bool bForce)
 
 		// Ok, the server needs to be updated.
 		char numStr[512];
-		sprintf(numStr, " %x", banMask);
+		sprintf(numStr, " %lx", banMask);
 		strcat(str, numStr);
 	}
 
@@ -648,10 +647,10 @@ void CVoiceStatus::HandleVoiceMaskMsg(int iSize, void *pbuf)
 			char str[256];
 			gEngfuncs.pfnConsolePrint("CVoiceStatus::HandleVoiceMaskMsg\n");
 			
-			sprintf(str, "    - m_AudiblePlayers[%d] = %lu\n", dw, m_AudiblePlayers.GetDWord(dw));
+			sprintf(str, "    - m_AudiblePlayers[%lu] = %u\n", dw, m_AudiblePlayers.GetDWord(dw));
 			gEngfuncs.pfnConsolePrint(str);
 			
-			sprintf(str, "    - m_ServerBannedPlayers[%d] = %lu\n", dw, m_ServerBannedPlayers.GetDWord(dw));
+			sprintf(str, "    - m_ServerBannedPlayers[%lu] = %u\n", dw, m_ServerBannedPlayers.GetDWord(dw));
 			gEngfuncs.pfnConsolePrint(str);
 		}
 	}
@@ -741,7 +740,7 @@ void CVoiceStatus::RepositionLabels()
 		// Setup the background label to fit everything in.
 		int border = 2;
 		int bgWide = textWide + iconWide + border*3;
-		int bgTall = max( textTall, iconTall ) + border*2;
+		int bgTall = V_max( textTall, iconTall ) + border*2;
 		pLabel->m_pBackground->setBounds( ScreenWidth - bgWide - 8, y, bgWide, bgTall );
 
 		// Put the text at the left.
@@ -772,8 +771,8 @@ void CVoiceStatus::RepositionLabels()
 		int sizeX, sizeY;
 		m_pLocalBitmap->getSize(sizeX, sizeY);
 
-		int local_xPos = ScreenWidth - sizeX - 10;
-		int local_yPos = m_pHelper->GetAckIconHeight() - sizeY;
+		int local_xPos = m_pHelper->GetAckIconXOffset() - sizeX;
+		int local_yPos = m_pHelper->GetAckIconYOffset() - sizeY;
 		
 		m_pLocalLabel->setPos( local_xPos, local_yPos );
 	}

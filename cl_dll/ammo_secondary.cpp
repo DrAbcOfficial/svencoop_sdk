@@ -60,8 +60,8 @@ int CHudAmmoSecondary :: Draw(float flTime)
 
 	// draw secondary ammo icons above normal ammo readout
 	int a, x, y, r, g, b, AmmoWidth;
-	UnpackRGB( r, g, b, RGB_BLUEISH );
-	a = (int) max( MIN_ALPHA, m_fFade );
+	UnpackRGB( r, g, b, RGB_YELLOWISH );
+	a = (int) V_max( MIN_ALPHA, m_fFade );
 	if (m_fFade > 0)
 		m_fFade -= (gHUD.m_flTimeDelta * 20);  // slowly lower alpha to fade out icons
 	ScaleColors( r, g, b, a );
@@ -77,7 +77,8 @@ int CHudAmmoSecondary :: Draw(float flTime)
 		x -= (gHUD.GetSpriteRect(m_HUD_ammoicon).right - gHUD.GetSpriteRect(m_HUD_ammoicon).left);
 		y -= (gHUD.GetSpriteRect(m_HUD_ammoicon).top - gHUD.GetSpriteRect(m_HUD_ammoicon).bottom);
 
-		gHUD.DrawSprite(x, y, gHUD.GetSprite(m_HUD_ammoicon), &gHUD.GetSpriteRect(m_HUD_ammoicon), r, g, b, 0, SPR_ADDITIVE);
+		SPR_Set( gHUD.GetSprite(m_HUD_ammoicon), r, g, b );
+		SPR_DrawAdditive( 0, x, y, &gHUD.GetSpriteRect(m_HUD_ammoicon) );
 	}
 	else
 	{  // move the cursor by the '0' char instead, since we don't have an icon to work with
@@ -140,7 +141,7 @@ int CHudAmmoSecondary :: MsgFunc_SecAmmoVal( const char *pszName, int iSize, voi
 	int count = 0;
 	for ( int i = 0; i < MAX_SEC_AMMO_VALUES; i++ )
 	{
-		count += max( 0, m_iAmmoAmounts[i] );
+		count += V_max( 0, m_iAmmoAmounts[i] );
 	}
 
 	if ( count == 0 ) 

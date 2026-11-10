@@ -20,11 +20,19 @@
 #include	"util.h"
 #include	"cbase.h"
 #include	"monsters.h"
+#include "game.h"
 #include	"squadmonster.h"
 #include	"schedule.h"
 #include	"effects.h"
 #include	"weapons.h"
 #include	"soundent.h"
+#include "CClassicMode.h"
+
+extern cvar_t sk_islave_dmg_claw;
+extern cvar_t sk_islave_dmg_clawrake;
+extern cvar_t sk_islave_dmg_zap;
+extern cvar_t sk_islave_speed_zap;
+extern cvar_t sk_islave_health;
 
 extern DLL_GLOBAL int		g_iSkillLevel;
 
@@ -42,16 +50,25 @@ extern DLL_GLOBAL int		g_iSkillLevel;
 class CISlave : public CSquadMonster
 {
 public:
+	float GetPointsForDamage( float flDamage );
+	int ObjectCaps( void );
+	void UseSound( void );
+	void UnUseSound( void );
+
 	void Spawn( void );
+	void SetupFriendly( void );
+	void SetObjectCollisionBox( void );
+	void UpdateOnRemove( void );
 	void Precache( void );
 	void SetYawSpeed( void );
 	int	 ISoundMask( void );
 	int  Classify ( void );
-	int  IRelationship( CBaseEntity *pTarget );
+	int  IRelationship( CBaseEntity *pTarget, bool ignoreNoTarget = false );
 	void HandleAnimEvent( MonsterEvent_t *pEvent );
 	BOOL CheckRangeAttack1 ( float flDot, float flDist );
+	BOOL CheckRangeAttack1_Move( float flDot, float flDist );
 	BOOL CheckRangeAttack2 ( float flDot, float flDist );
-	void CallForHelp( char *szClassname, float flDist, EHANDLE hEnemy, Vector &vecLocation );
+	void CallForHelp( const char *szClassname, float flDist, EHANDLE hEnemy, Vector &vecLocation );
 	void TraceAttack( entvars_t *pevAttacker, float flDamage, Vector vecDir, TraceResult *ptr, int bitsDamageType);
 	int TakeDamage( entvars_t* pevInflictor, entvars_t* pevAttacker, float flDamage, int bitsDamageType);
 
@@ -79,14 +96,14 @@ public:
 
 	int m_iBravery;
 
-	CBeam *m_pBeam[ISLAVE_MAX_BEAMS];
+	CEntityHandle<CBeam> m_hBeam[ISLAVE_MAX_BEAMS];
 
-	int m_iBeams;
-	float m_flNextAttack;
+	int		m_iBeams;
+	float	m_flNextAttack;
 
 	int	m_voicePitch;
 
-	EHANDLE m_hDead;
+	CEntityHandle<CBaseEntity> m_hDead;
 
 	static const char *pAttackHitSounds[];
 	static const char *pAttackMissSounds[];
@@ -101,7 +118,7 @@ TYPEDESCRIPTION	CISlave::m_SaveData[] =
 {
 	DEFINE_FIELD( CISlave, m_iBravery, FIELD_INTEGER ),
 
-	DEFINE_ARRAY( CISlave, m_pBeam, FIELD_CLASSPTR, ISLAVE_MAX_BEAMS ),
+	DEFINE_ARRAY( CISlave, m_hBeam, FIELD_EHANDLE, ISLAVE_MAX_BEAMS ),
 	DEFINE_FIELD( CISlave, m_iBeams, FIELD_INTEGER ),
 	DEFINE_FIELD( CISlave, m_flNextAttack, FIELD_TIME ),
 
@@ -145,22 +162,71 @@ const char *CISlave::pDeathSounds[] =
 // Classify - indicates this monster's place in the 
 // relationship table.
 //=========================================================
+void CISlave::SetupFriendly( void )
+{
+	if ( CClassicMode::GetInstance()->IsEnabled() )
+		SetModel_Intercept( edict(), "models/hlclassic/islave.mdl" );
+	else if ( m_fPlayerAlly )
+		SetModel_Intercept( edict(), "models/islavef.mdl" );
+	else
+		SetModel_Intercept( edict(), "models/islave.mdl" );
+
+	UTIL_SetSize( pev, VEC_HUMAN_HULL_MIN, VEC_HUMAN_HULL_MAX );
+	pev->solid = SOLID_SLIDEBOX;
+	pev->movetype = MOVETYPE_STEP;
+}
+
+void CISlave::SetObjectCollisionBox( void )
+{
+	if ( ( pev->spawnflags & SF_MONSTER_NO_MODEL_BOX ) || !m_fCustomModel )
+	{
+		CBaseEntity::SetObjectCollisionBox();
+		return;
+	}
+
+	Vector mins = g_vecZero;
+	Vector maxs = g_vecZero;
+
+	ExtractBbox( 1, mins, maxs );
+	mins.z = 0;
+	pev->absmin = pev->origin + mins;
+	pev->absmax = pev->origin + maxs;
+}
+
+void CISlave::UpdateOnRemove( void )
+{
+	CBaseEntity::UpdateOnRemove();
+	ClearBeams();
+}
+
+BOOL CISlave::CheckRangeAttack1_Move( float flDot, float flDist )
+{
+	if ( m_flNextAttack > gpGlobals->time || !FCanCheckAttacks() )
+		return FALSE;
+
+	if ( flDist > 64.0f && flDist <= 1024.0f && flDot >= 0.5f )
+		return TRUE;
+
+	ClearBeams();
+	return FALSE;
+}
+
 int	CISlave :: Classify ( void )
 {
-	return	CLASS_ALIEN_MILITARY;
+	return GetClassification( CLASS_ALIEN_MONSTER );
 }
 
 
-int CISlave::IRelationship( CBaseEntity *pTarget )
+int CISlave::IRelationship( CBaseEntity *pTarget, bool ignoreNoTarget )
 {
 	if ( (pTarget->IsPlayer()) )
 		if ( (pev->spawnflags & SF_MONSTER_WAIT_UNTIL_PROVOKED ) && ! (m_afMemory & bits_MEMORY_PROVOKED ))
 			return R_NO;
-	return CBaseMonster::IRelationship( pTarget );
+	return CBaseMonster::IRelationship( pTarget, ignoreNoTarget );
 }
 
 
-void CISlave :: CallForHelp( char *szClassname, float flDist, EHANDLE hEnemy, Vector &vecLocation )
+void CISlave :: CallForHelp( const char *szClassname, float flDist, EHANDLE hEnemy, Vector &vecLocation )
 {
 	// ALERT( at_aiconsole, "help " );
 
@@ -176,7 +242,7 @@ void CISlave :: CallForHelp( char *szClassname, float flDist, EHANDLE hEnemy, Ve
 		if (d < flDist)
 		{
 			CBaseMonster *pMonster = pEntity->MyMonsterPointer( );
-			if (pMonster)
+			if ( pMonster && pMonster->IsPlayerAlly() == IsPlayerAlly() && FClassnameIs( pMonster->pev, szClassname ) )
 			{
 				pMonster->m_afMemory |= bits_MEMORY_PROVOKED;
 				pMonster->PushEnemy( hEnemy, vecLocation );
@@ -280,25 +346,7 @@ void CISlave::Killed( entvars_t *pevAttacker, int iGib )
 //=========================================================
 void CISlave :: SetYawSpeed ( void )
 {
-	int ys;
-
-	switch ( m_Activity )
-	{
-	case ACT_WALK:		
-		ys = 50;	
-		break;
-	case ACT_RUN:		
-		ys = 70;
-		break;
-	case ACT_IDLE:		
-		ys = 50;
-		break;
-	default:
-		ys = 90;
-		break;
-	}
-
-	pev->yaw_speed = ys;
+	pev->yaw_speed = 270;
 }
 
 //=========================================================
@@ -313,33 +361,20 @@ void CISlave :: HandleAnimEvent( MonsterEvent_t *pEvent )
 	switch( pEvent->event )
 	{
 		case ISLAVE_AE_CLAW:
-		{
-			// SOUND HERE!
-			CBaseEntity *pHurt = CheckTraceHullAttack( 70, gSkillData.slaveDmgClaw, DMG_SLASH );
-			if ( pHurt )
-			{
-				if ( pHurt->pev->flags & (FL_MONSTER|FL_CLIENT) )
-				{
-					pHurt->pev->punchangle.z = -18;
-					pHurt->pev->punchangle.x = 5;
-				}
-				// Play a random attack hit sound
-				EMIT_SOUND_DYN ( ENT(pev), CHAN_WEAPON, pAttackHitSounds[ RANDOM_LONG(0,ARRAYSIZE(pAttackHitSounds)-1) ], 1.0, ATTN_NORM, 0, m_voicePitch );
-			}
-			else
-			{
-				// Play a random attack miss sound
-				EMIT_SOUND_DYN ( ENT(pev), CHAN_WEAPON, pAttackMissSounds[ RANDOM_LONG(0,ARRAYSIZE(pAttackMissSounds)-1) ], 1.0, ATTN_NORM, 0, m_voicePitch );
-			}
-		}
-		break;
-
 		case ISLAVE_AE_CLAWRAKE:
 		{
-			CBaseEntity *pHurt = CheckTraceHullAttack( 70, gSkillData.slaveDmgClawrake, DMG_SLASH );
+			float damage;
+
+			if ( pEvent->event == ISLAVE_AE_CLAW )
+				damage = sk_islave_dmg_claw.value;
+			else
+				damage = sk_islave_dmg_clawrake.value;
+
+			CBaseEntity *pHurt = CheckTraceHullAttack( 70, (int) damage, DMG_SLASH );
 			if ( pHurt )
 			{
-				if ( pHurt->pev->flags & (FL_MONSTER|FL_CLIENT) )
+				if ( ( pHurt->pev->flags & FL_CLIENT )
+					|| ( ( pHurt->pev->flags & FL_MONSTER ) && pHurt->pev->movetype != MOVETYPE_FLY ) )
 				{
 					pHurt->pev->punchangle.z = -18;
 					pHurt->pev->punchangle.x = 5;
@@ -355,9 +390,15 @@ void CISlave :: HandleAnimEvent( MonsterEvent_t *pEvent )
 
 		case ISLAVE_AE_ZAP_POWERUP:
 		{
-			// speed up attack when on hard
-			if (g_iSkillLevel == SKILL_HARD)
-				pev->framerate = 1.5;
+			float speed = sk_islave_speed_zap.value;
+
+			if ( speed < 0.1f )
+				speed = 0.1f;
+
+			if ( speed > 10.0f )
+				speed = 10.0f;
+
+			pev->framerate = speed;
 
 			UTIL_MakeAimVectors( pev->angles );
 
@@ -391,7 +432,6 @@ void CISlave :: HandleAnimEvent( MonsterEvent_t *pEvent )
 			}
 
 			EMIT_SOUND_DYN( ENT(pev), CHAN_WEAPON, "debris/zap4.wav", 1, ATTN_NORM, 0, 100 + m_iBeams * 10 );
-			pev->skin = m_iBeams / 2;
 		}
 		break;
 
@@ -407,12 +447,16 @@ void CISlave :: HandleAnimEvent( MonsterEvent_t *pEvent )
 
 				if ( !trace.fStartSolid )
 				{
-					CBaseEntity *pNew = Create( "monster_alien_slave", m_hDead->pev->origin, m_hDead->pev->angles );
-					CBaseMonster *pNewMonster = pNew->MyMonsterPointer( );
-					pNew->pev->spawnflags |= 1;
-					WackBeam( -1, pNew );
-					WackBeam( 1, pNew );
-					UTIL_Remove( m_hDead );
+					WackBeam( -1, m_hDead );
+					WackBeam( 1, m_hDead );
+					m_hDead->Spawn();
+					m_hDead->pev->rendermode = kRenderNormal;
+					m_hDead->pev->renderamt = 0;
+
+					float yaw = m_hDead->pev->angles.y;
+
+					m_hDead->pev->angles = Vector( 0, yaw, 0 );
+					m_hDead = NULL;
 					EMIT_SOUND_DYN( ENT(pev), CHAN_WEAPON, "hassault/hw_shoot1.wav", 1, ATTN_NORM, 0, RANDOM_LONG( 130, 160 ) );
 
 					/*
@@ -433,15 +477,15 @@ void CISlave :: HandleAnimEvent( MonsterEvent_t *pEvent )
 			// STOP_SOUND( ENT(pev), CHAN_WEAPON, "debris/zap4.wav" );
 			ApplyMultiDamage(pev, pev);
 
-			m_flNextAttack = gpGlobals->time + RANDOM_FLOAT( 0.5, 4.0 );
+			float cooldown = RANDOM_FLOAT( 0.5, 4.0 );
+
+			m_flNextAttack = gpGlobals->time + cooldown;
 		}
 		break;
 
 		case ISLAVE_AE_ZAP_DONE:
-		{
 			ClearBeams( );
-		}
-		break;
+			break;
 
 		default:
 			CSquadMonster::HandleAnimEvent( pEvent );
@@ -467,9 +511,7 @@ BOOL CISlave :: CheckRangeAttack1 ( float flDot, float flDist )
 //=========================================================
 BOOL CISlave :: CheckRangeAttack2 ( float flDot, float flDist )
 {
-	return FALSE;
-
-	if (m_flNextAttack > gpGlobals->time)
+	if ( CClassicMode::GetInstance()->IsEnabled() || m_flNextAttack > gpGlobals->time )
 	{
 		return FALSE;
 	}
@@ -480,6 +522,14 @@ BOOL CISlave :: CheckRangeAttack2 ( float flDot, float flDist )
 	CBaseEntity *pEntity = NULL;
 	while ((pEntity = UTIL_FindEntityByClassname( pEntity, "monster_alien_slave" )) != NULL)
 	{
+		if ( pEntity == this || pEntity->pev->max_health < 1 || IRelationship( pEntity ) > R_NO )
+			continue;
+
+		CBaseMonster *pMonster = pEntity->MyMonsterPointer();
+
+		if ( !pMonster || pMonster->m_fIsNotRevivable )
+			continue;
+
 		TraceResult tr;
 
 		UTIL_TraceLine( EyePosition( ), pEntity->EyePosition( ), ignore_monsters, ENT(pev), &tr );
@@ -526,22 +576,37 @@ void CISlave :: Spawn()
 {
 	Precache( );
 
-	SET_MODEL(ENT(pev), "models/islave.mdl");
+	if ( !SetupModel() )
+		SetupFriendly();
 	UTIL_SetSize(pev, VEC_HUMAN_HULL_MIN, VEC_HUMAN_HULL_MAX);
 
 	pev->solid			= SOLID_SLIDEBOX;
 	pev->movetype		= MOVETYPE_STEP;
 	m_bloodColor		= BLOOD_COLOR_GREEN;
 	pev->effects		= 0;
-	pev->health			= gSkillData.slaveHealth;
+
+	if ( pev->health == 0.0f )
+		pev->health			= sk_islave_health.value;
 	pev->view_ofs		= Vector ( 0, 0, 64 );// position of the eyes relative to monster's origin.
 	m_flFieldOfView		= VIEW_FIELD_WIDE; // NOTE: we need a wide field of view so npc will notice player and say hello
 	m_MonsterState		= MONSTERSTATE_NONE;
-	m_afCapability		= bits_CAP_HEAR | bits_CAP_TURN_HEAD | bits_CAP_RANGE_ATTACK2 | bits_CAP_DOORS_GROUP;
+	m_afCapability		= bits_CAP_HEAR | bits_CAP_TURN_HEAD | bits_CAP_RANGE_ATTACK2 | bits_CAP_DOORS_GROUP | bits_CAP_USE_TANK;
+	m_fCheckCreatureDanger = true;
+	m_afMoveShootCap = 0;
+	m_hDead = NULL;
 
 	m_voicePitch		= RANDOM_LONG( 85, 110 );
 
+	if ( !m_FormattedName )
+		m_FormattedName = MAKE_STRING( "Alien Slave" );
+
 	MonsterInit();
+
+	if ( m_fPlayerAlly && !( pev->spawnflags & SF_MONSTER_PREDISASTER ) )
+	{
+		SetUse( &CBaseMonster::CallFollowerPlayerUse );
+		m_fCanPlayerFollow = true;
+	}
 }
 
 //=========================================================
@@ -549,31 +614,42 @@ void CISlave :: Spawn()
 //=========================================================
 void CISlave :: Precache()
 {
-	int i;
+	CBaseEntity::Precache();
 
-	PRECACHE_MODEL("models/islave.mdl");
-	PRECACHE_MODEL("sprites/lgtning.spr");
-	PRECACHE_SOUND("debris/zap1.wav");
-	PRECACHE_SOUND("debris/zap4.wav");
-	PRECACHE_SOUND("weapons/electro4.wav");
-	PRECACHE_SOUND("hassault/hw_shoot1.wav");
-	PRECACHE_SOUND("zombie/zo_pain2.wav");
-	PRECACHE_SOUND("headcrab/hc_headbite.wav");
-	PRECACHE_SOUND("weapons/cbar_miss1.wav");
+	if ( pev->model == 0 )
+	{
+		if ( CClassicMode::GetInstance()->IsEnabled() )
+			UTIL_PrecacheModel( this, "models/hlclassic/islave.mdl" );
+		else if ( m_fPlayerAlly )
+			UTIL_PrecacheModel( this, "models/islavef.mdl" );
+		else
+			UTIL_PrecacheModel( this, "models/islave.mdl");
+	}
 
-	for ( i = 0; i < ARRAYSIZE( pAttackHitSounds ); i++ )
-		PRECACHE_SOUND((char *)pAttackHitSounds[i]);
+	UTIL_PrecacheModel( this, "sprites/lgtning.spr");
+	PrecacheSound_Intercept( this, "debris/zap1.wav");
+	PrecacheSound_Intercept( this, "debris/zap4.wav");
+	PrecacheSound_Intercept( this, "weapons/electro4.wav");
+	PrecacheSound_Intercept( this, "hassault/hw_shoot1.wav");
+	PrecacheSound_Intercept( this, "zombie/zo_pain2.wav");
+	PrecacheSound_Intercept( this, "headcrab/hc_headbite.wav");
+	PrecacheSound_Intercept( this, "weapons/cbar_miss1.wav" );
+	PrecacheSound_Intercept( this, "aslave/slv_word3.wav" );
+	PrecacheSound_Intercept( this, "aslave/slv_word4.wav" );
+	PrecacheSound_Intercept( this, "aslave/slv_word5.wav" );
+	PrecacheSound_Intercept( this, "aslave/slv_word7.wav" );
 
-	for ( i = 0; i < ARRAYSIZE( pAttackMissSounds ); i++ )
-		PRECACHE_SOUND((char *)pAttackMissSounds[i]);
+	for ( size_t i = 0; i < ARRAYSIZE( pAttackHitSounds ); ++i )
+		PrecacheSound_Intercept( this, pAttackHitSounds[i]);
 
-	for ( i = 0; i < ARRAYSIZE( pPainSounds ); i++ )
-		PRECACHE_SOUND((char *)pPainSounds[i]);
+	for ( size_t i = 0; i < ARRAYSIZE( pAttackMissSounds ); ++i )
+		PrecacheSound_Intercept( this, pAttackMissSounds[i]);
 
-	for ( i = 0; i < ARRAYSIZE( pDeathSounds ); i++ )
-		PRECACHE_SOUND((char *)pDeathSounds[i]);
+	for ( size_t i = 0; i < ARRAYSIZE( pPainSounds ); ++i )
+		PrecacheSound_Intercept( this, pPainSounds[i]);
 
-	UTIL_PrecacheOther( "test_effect" );
+	for ( size_t i = 0; i < ARRAYSIZE( pDeathSounds ); ++i )
+		PrecacheSound_Intercept( this, pDeathSounds[i]);
 }	
 
 
@@ -701,17 +777,24 @@ Schedule_t *CISlave :: GetScheduleOfType ( int Type )
 {
 	switch	( Type )
 	{
-	case SCHED_FAIL:
-		if (HasConditions( bits_COND_CAN_MELEE_ATTACK1 ))
-		{
-			return CSquadMonster :: GetScheduleOfType( SCHED_MELEE_ATTACK1 ); ;
-		}
-		break;
 	case SCHED_RANGE_ATTACK1:
-		return slSlaveAttack1;
 	case SCHED_RANGE_ATTACK2:
 		return slSlaveAttack1;
+	case SCHED_FAIL:
+		ClearBeams();
+
+		if (HasConditions( bits_COND_CAN_MELEE_ATTACK1 ))
+		{
+			return CSquadMonster :: GetScheduleOfType( SCHED_MELEE_ATTACK1 );
+		}
+		break;
+	case SCHED_MOVE_TO_TANK:
+		break;
+	default:
+		ClearBeams();
+		break;
 	}
+
 	return CSquadMonster :: GetScheduleOfType( Type );
 }
 
@@ -724,22 +807,25 @@ void CISlave :: ArmBeam( int side )
 {
 	TraceResult tr;
 	float flDist = 1.0;
-	
+
 	if (m_iBeams >= ISLAVE_MAX_BEAMS)
 		return;
 
 	UTIL_MakeAimVectors( pev->angles );
 	Vector vecSrc = pev->origin + gpGlobals->v_up * 36 + gpGlobals->v_right * side * 16 + gpGlobals->v_forward * 32;
 
-	for (int i = 0; i < 3; i++)
+	for (int i = 0; i < 3; ++i )
 	{
-		Vector vecAim = gpGlobals->v_right * side * RANDOM_FLOAT( 0, 1 ) + gpGlobals->v_up * RANDOM_FLOAT( -1, 1 );
+		Vector vecAim = gpGlobals->v_right;
+		float rightDeflection = RANDOM_FLOAT( 0, 1 );
+		float upDeflection = RANDOM_FLOAT( -1, 1 );
+		Vector aim = vecAim * side * rightDeflection + gpGlobals->v_up * upDeflection;
 		TraceResult tr1;
-		UTIL_TraceLine ( vecSrc, vecSrc + vecAim * 512, dont_ignore_monsters, ENT( pev ), &tr1);
+		UTIL_TraceLine ( vecSrc, vecSrc + aim * 512, dont_ignore_monsters, ENT( pev ), &tr1);
 		if (flDist > tr1.flFraction)
 		{
 			tr = tr1;
-			flDist = tr.flFraction;
+			flDist = tr1.flFraction;
 		}
 	}
 
@@ -748,18 +834,21 @@ void CISlave :: ArmBeam( int side )
 		return;
 
 	DecalGunshot( &tr, BULLET_PLAYER_CROWBAR );
-
-	m_pBeam[m_iBeams] = CBeam::BeamCreate( "sprites/lgtning.spr", 30 );
-	if (!m_pBeam[m_iBeams])
+	m_hBeam[m_iBeams] = CBeam::BeamCreate( "sprites/lgtning.spr", 30 );
+	if (!m_hBeam[m_iBeams])
 		return;
 
-	m_pBeam[m_iBeams]->PointEntInit( tr.vecEndPos, entindex( ) );
-	m_pBeam[m_iBeams]->SetEndAttachment( side < 0 ? 2 : 1 );
-	// m_pBeam[m_iBeams]->SetColor( 180, 255, 96 );
-	m_pBeam[m_iBeams]->SetColor( 96, 128, 16 );
-	m_pBeam[m_iBeams]->SetBrightness( 64 );
-	m_pBeam[m_iBeams]->SetNoise( 80 );
-	m_iBeams++;
+	m_hBeam[m_iBeams]->PointEntInit( tr.vecEndPos, entindex( ) );
+	m_hBeam[m_iBeams]->SetEndAttachment( side < 0 ? 2 : 1 );
+
+	if ( m_fPlayerAlly )
+		m_hBeam[m_iBeams]->SetColor( 194, 40, 16 );
+	else
+		m_hBeam[m_iBeams]->SetColor( 96, 128, 16 );
+
+	m_hBeam[m_iBeams]->SetBrightness( 64 );
+	m_hBeam[m_iBeams]->SetNoise( 80 );
+	++m_iBeams;
 }
 
 
@@ -772,14 +861,12 @@ void CISlave :: BeamGlow( )
 	if (b > 255)
 		b = 255;
 
-	for (int i = 0; i < m_iBeams; i++)
+	for (int i = 0; i < m_iBeams; ++i )
 	{
-		if (m_pBeam[i]->GetBrightness() != 255) 
-		{
-			m_pBeam[i]->SetBrightness( b );
+		if ( m_hBeam[i] && m_hBeam[i]->GetBrightness() != 255)
+			m_hBeam[i]->SetBrightness( b );
 		}
 	}
-}
 
 
 //=========================================================
@@ -787,25 +874,28 @@ void CISlave :: BeamGlow( )
 //=========================================================
 void CISlave :: WackBeam( int side, CBaseEntity *pEntity )
 {
-	Vector vecDest;
-	float flDist = 1.0;
-	
-	if (m_iBeams >= ISLAVE_MAX_BEAMS)
+	if (m_iBeams >= 4 || !pEntity )
 		return;
 
-	if (pEntity == NULL)
+	m_hBeam[m_iBeams] = CBeam::BeamCreate( "sprites/lgtning.spr", 30 );
+	if (!m_hBeam[m_iBeams])
 		return;
 
-	m_pBeam[m_iBeams] = CBeam::BeamCreate( "sprites/lgtning.spr", 30 );
-	if (!m_pBeam[m_iBeams])
-		return;
+	m_hBeam[m_iBeams]->PointEntInit( pEntity->pev->origin, entindex( ) );
+	m_hBeam[m_iBeams]->SetEndAttachment( side < 0 ? 2 : 1 );
+	m_hBeam[m_iBeams]->SetColor( 180, 255, 96 );
 
-	m_pBeam[m_iBeams]->PointEntInit( pEntity->Center(), entindex( ) );
-	m_pBeam[m_iBeams]->SetEndAttachment( side < 0 ? 2 : 1 );
-	m_pBeam[m_iBeams]->SetColor( 180, 255, 96 );
-	m_pBeam[m_iBeams]->SetBrightness( 255 );
-	m_pBeam[m_iBeams]->SetNoise( 80 );
-	m_iBeams++;
+	if ( m_fPlayerAlly )
+		m_hBeam[m_iBeams]->SetColor( 194, 40, 16 );
+	else
+		m_hBeam[m_iBeams]->SetColor( 96, 128, 16 );
+
+	m_hBeam[m_iBeams]->SetBrightness( 255 );
+	m_hBeam[m_iBeams]->SetNoise( 60 );
+	++m_iBeams;
+
+	MakeIdealYaw( pEntity->Center() );
+	ChangeYaw( (int) pev->yaw_speed );
 }
 
 //=========================================================
@@ -813,35 +903,55 @@ void CISlave :: WackBeam( int side, CBaseEntity *pEntity )
 //=========================================================
 void CISlave :: ZapBeam( int side )
 {
-	Vector vecSrc, vecAim;
 	TraceResult tr;
-	CBaseEntity *pEntity;
 
 	if (m_iBeams >= ISLAVE_MAX_BEAMS)
 		return;
 
-	vecSrc = pev->origin + gpGlobals->v_up * 36;
-	vecAim = ShootAtEnemy( vecSrc );
-	float deflection = 0.01;
-	vecAim = vecAim + side * gpGlobals->v_right * RANDOM_FLOAT( 0, deflection ) + gpGlobals->v_up * RANDOM_FLOAT( -deflection, deflection );
-	UTIL_TraceLine ( vecSrc, vecSrc + vecAim * 1024, dont_ignore_monsters, ENT( pev ), &tr);
+	Vector vecSrc = pev->origin + gpGlobals->v_up * 36;
+	Vector aim = ShootAtEnemy( vecSrc );
+	Vector deflection = side * gpGlobals->v_right;
+	float rightDeflection = RANDOM_FLOAT( 0, 0.01 );
 
-	m_pBeam[m_iBeams] = CBeam::BeamCreate( "sprites/lgtning.spr", 50 );
-	if (!m_pBeam[m_iBeams])
+	aim = aim + deflection * rightDeflection;
+
+	float upDeflection = RANDOM_FLOAT( -0.01, 0.01 );
+
+	aim = aim + gpGlobals->v_up * upDeflection;
+	UTIL_TraceLine ( vecSrc, vecSrc + aim * 1024, dont_ignore_monsters, ENT( pev ), &tr);
+	m_hBeam[m_iBeams] = CBeam::BeamCreate( "sprites/lgtning.spr", 50 );
+	if (!m_hBeam[m_iBeams])
 		return;
 
-	m_pBeam[m_iBeams]->PointEntInit( tr.vecEndPos, entindex( ) );
-	m_pBeam[m_iBeams]->SetEndAttachment( side < 0 ? 2 : 1 );
-	m_pBeam[m_iBeams]->SetColor( 180, 255, 96 );
-	m_pBeam[m_iBeams]->SetBrightness( 255 );
-	m_pBeam[m_iBeams]->SetNoise( 20 );
-	m_iBeams++;
+	m_hBeam[m_iBeams]->PointEntInit( tr.vecEndPos, entindex( ) );
+	m_hBeam[m_iBeams]->SetEndAttachment( side < 0 ? 2 : 1 );
 
-	pEntity = CBaseEntity::Instance(tr.pHit);
-	if (pEntity != NULL && pEntity->pev->takedamage)
-	{
-		pEntity->TraceAttack( pev, gSkillData.slaveDmgZap, vecAim, &tr, DMG_SHOCK );
-	}
+	if ( m_fPlayerAlly )
+		m_hBeam[m_iBeams]->SetColor( 255, 40, 16 );
+	else
+		m_hBeam[m_iBeams]->SetColor( 96, 128, 16 );
+
+	m_hBeam[m_iBeams]->SetBrightness( 255 );
+	m_hBeam[m_iBeams]->SetNoise( 20 );
+	++m_iBeams;
+
+	edict_t *hit;
+
+	if ( tr.pHit )
+		hit = tr.pHit;
+	else
+		hit = INDEXENT( 0 );
+
+	CBaseEntity *pEntity;
+
+	if ( hit && !hit->free )
+		pEntity = CBaseEntity::Instance( hit );
+	else
+		pEntity = NULL;
+
+	if (pEntity && pEntity->pev->takedamage)
+		pEntity->TraceAttack( pev, sk_islave_dmg_zap.value, aim, &tr, DMG_SHOCK );
+
 	UTIL_EmitAmbientSound( ENT(pev), tr.vecEndPos, "weapons/electro4.wav", 0.5, ATTN_NORM, 0, RANDOM_LONG( 140, 160 ) );
 }
 
@@ -851,16 +961,42 @@ void CISlave :: ZapBeam( int side )
 //=========================================================
 void CISlave :: ClearBeams( )
 {
-	for (int i = 0; i < ISLAVE_MAX_BEAMS; i++)
+	for (int i = 0; i < ISLAVE_MAX_BEAMS; ++i )
 	{
-		if (m_pBeam[i])
+		CBeam *beam = m_hBeam[i];
+
+		if ( beam )
 		{
-			UTIL_Remove( m_pBeam[i] );
-			m_pBeam[i] = NULL;
+			UTIL_Remove( beam );
+			m_hBeam[i] = NULL;
 		}
 	}
 	m_iBeams = 0;
 	pev->skin = 0;
 
 	STOP_SOUND( ENT(pev), CHAN_WEAPON, "debris/zap4.wav" );
+}
+
+int CISlave::ObjectCaps( void )
+{
+	return IsPlayerAlly() ? FCAP_IMPULSE_USE : FCAP_ACROSS_TRANSITION;
+}
+
+float CISlave::GetPointsForDamage( float flDamage )
+{
+	float points = pev->max_health / sk_islave_health.value;
+
+	points *= 3.0f;
+
+	return points * ( flDamage / pev->max_health );
+}
+
+void CISlave::UseSound( void )
+{
+	AlertSound();
+}
+
+void CISlave::UnUseSound( void )
+{
+	PainSound();
 }

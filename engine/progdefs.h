@@ -14,43 +14,51 @@
 ****/
 #ifndef PROGDEFS_H
 #define PROGDEFS_H
+
 #ifdef _WIN32
 #pragma once
 #endif
 
-typedef struct
+typedef struct globalvars_s
 {	
 	float		time;
 	float		frametime;
 	float		force_retouch;
+
 	string_t	mapname;
 	string_t	startspot;
+
 	float		deathmatch;
 	float		coop;
 	float		teamplay;
+
 	float		serverflags;
 	float		found_secrets;
+
 	vec3_t		v_forward;
 	vec3_t		v_up;
 	vec3_t		v_right;
+
 	float		trace_allsolid;
 	float		trace_startsolid;
 	float		trace_fraction;
 	vec3_t		trace_endpos;
 	vec3_t		trace_plane_normal;
 	float		trace_plane_dist;
-	edict_t		*trace_ent;
+	edict_t*	trace_ent;
 	float		trace_inopen;
 	float		trace_inwater;
 	int			trace_hitgroup;
 	int			trace_flags;
+
 	int			msg_entity;
 	int			cdAudioTrack;
 	int			maxClients;
 	int			maxEntities;
-	const char	*pStringBase;
 
-	void		*pSaveData;
+	const char* pStringBase;
+
+	void*		pSaveData;
 	vec3_t		vecLandmarkOffset;
 } globalvars_t;
 
@@ -138,12 +146,12 @@ typedef struct entvars_s
 	int			button;
 	int			impulse;
 
-	edict_t		*chain;			// Entity pointer when linked into a linked list
-	edict_t		*dmg_inflictor;
-	edict_t		*enemy;
-	edict_t		*aiment;		// entity pointer when MOVETYPE_FOLLOW
-	edict_t		*owner;
-	edict_t		*groundentity;
+	edict_t*	chain;			// Entity pointer when linked into a linked list
+	edict_t*	dmg_inflictor;
+	edict_t*	enemy;
+	edict_t*	aiment;		// entity pointer when MOVETYPE_FOLLOW
+	edict_t*	owner;
+	edict_t*	groundentity;
 
 	int			spawnflags;
 	int			flags;
@@ -178,7 +186,7 @@ typedef struct entvars_s
 	float		pain_finished;
 	float		radsuit_finished;
 	
-	edict_t		*pContainingEntity;
+	edict_t*	pContainingEntity;
 
 	int			playerclass;
 	float		maxspeed;
@@ -206,18 +214,21 @@ typedef struct entvars_s
 	int			iuser2;
 	int			iuser3;
 	int			iuser4;
+
 	float		fuser1;
 	float		fuser2;
 	float		fuser3;
 	float		fuser4;
+
 	vec3_t		vuser1;
 	vec3_t		vuser2;
 	vec3_t		vuser3;
 	vec3_t		vuser4;
-	edict_t		*euser1;
-	edict_t		*euser2;
-	edict_t		*euser3;
-	edict_t		*euser4;
+
+	edict_t*	euser1;
+	edict_t*	euser2;
+	edict_t*	euser3;
+	edict_t*	euser4;
 } entvars_t;
 
 

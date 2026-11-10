@@ -40,12 +40,12 @@ public:
 	void Spawn( void );
 	void Precache( void );
 	int iItemSlot( void ) { return 2; }
-	int GetItemInfo(ItemInfo *p);
+	bool GetItemInfo(ItemInfo *p);
 
 	void PrimaryAttack( void );
 	void SecondaryAttack( void );
 	void GlockFire( float flSpread, float flCycleTime, BOOL fUseAutoAim );
-	BOOL Deploy( void );
+	bool Deploy( void );
 	void Reload( void );
 	void WeaponIdle( void );
 
@@ -92,7 +92,7 @@ void CGlock::Precache( void )
 	m_usFireGlock2 = PRECACHE_EVENT( 1, "events/glock2.sc" );
 }
 
-int CGlock::GetItemInfo(ItemInfo *p)
+bool CGlock::GetItemInfo(ItemInfo *p)
 {
 	p->pszName = STRING(pev->classname);
 	p->pszAmmo1 = "9mm";
@@ -109,7 +109,7 @@ int CGlock::GetItemInfo(ItemInfo *p)
 	return 1;
 }
 
-BOOL CGlock::Deploy( )
+bool CGlock::Deploy( )
 {
 	// pev->body = 1;
 	return DefaultDeploy( "models/v_9mmhandgun.mdl", "models/p_9mmhandgun.mdl", GLOCK_DRAW, "onehanded" );
@@ -140,7 +140,7 @@ void CGlock::GlockFire( float flSpread , float flCycleTime, BOOL fUseAutoAim )
 
 	m_iClip--;
 
-	m_pPlayer->pev->effects = (int)(m_pPlayer->pev->effects) | EF_MUZZLEFLASH;
+	m_hPlayer->pev->effects = (int)(m_hPlayer->pev->effects) | EF_MUZZLEFLASH;
 
 #if defined ( OLD_WEAPONS )
 	if (m_iClip != 0)
@@ -151,39 +151,39 @@ void CGlock::GlockFire( float flSpread , float flCycleTime, BOOL fUseAutoAim )
 
 	if ( fUseAutoAim )
 	{
-		PLAYBACK_EVENT_FULL( 0, m_pPlayer->edict(), m_usFireGlock1, 0.0, (float *)&g_vecZero, (float *)&g_vecZero, 0.0, 0.0, 0, 0, ( m_iClip == 0 ) ? 1 : 0, 0 );
+		PLAYBACK_EVENT_FULL( 0, m_hPlayer->edict(), m_usFireGlock1, 0.0, (float *)&g_vecZero, (float *)&g_vecZero, 0.0, 0.0, 0, 0, ( m_iClip == 0 ) ? 1 : 0, 0 );
 	}
 	else
 	{
-		PLAYBACK_EVENT_FULL( 0, m_pPlayer->edict(), m_usFireGlock2, 0.0, (float *)&g_vecZero, (float *)&g_vecZero, 0.0, 0.0, 0, 0, ( m_iClip == 0 ) ? 1 : 0, 0 );
+		PLAYBACK_EVENT_FULL( 0, m_hPlayer->edict(), m_usFireGlock2, 0.0, (float *)&g_vecZero, (float *)&g_vecZero, 0.0, 0.0, 0, 0, ( m_iClip == 0 ) ? 1 : 0, 0 );
 	}
 
 	// player "shoot" animation
-	m_pPlayer->SetAnimation( PLAYER_ATTACK1 );
+	m_hPlayer->SetAnimation( PLAYER_ATTACK1 );
 
 #if defined ( OLD_WEAPONS )
-	UTIL_MakeVectors( m_pPlayer->pev->v_angle + m_pPlayer->pev->punchangle );
+	UTIL_MakeVectors( m_hPlayer->pev->v_angle + m_hPlayer->pev->punchangle );
 		
-	Vector	vecShellVelocity = m_pPlayer->pev->velocity 
+	Vector	vecShellVelocity = m_hPlayer->pev->velocity 
 							 + gpGlobals->v_right * RANDOM_FLOAT(50,70) 
 							 + gpGlobals->v_up * RANDOM_FLOAT(100,150) 
 							 + gpGlobals->v_forward * 25;
-	EjectBrass ( pev->origin + m_pPlayer->pev->view_ofs + gpGlobals->v_up * -12 + gpGlobals->v_forward * 32 + gpGlobals->v_right * 6 , vecShellVelocity, pev->angles.y, m_iShell, TE_BOUNCE_SHELL ); 
+	EjectBrass ( pev->origin + m_hPlayer->pev->view_ofs + gpGlobals->v_up * -12 + gpGlobals->v_forward * 32 + gpGlobals->v_right * 6 , vecShellVelocity, pev->angles.y, m_iShell, TE_BOUNCE_SHELL ); 
 #endif
 
 	// silenced
 	if (pev->body == 1)
 	{
-		m_pPlayer->m_iWeaponVolume = QUIET_GUN_VOLUME;
-		m_pPlayer->m_iWeaponFlash = DIM_GUN_FLASH;
+		m_hPlayer->m_iWeaponVolume = QUIET_GUN_VOLUME;
+		m_hPlayer->m_iWeaponFlash = DIM_GUN_FLASH;
 #if defined ( OLD_WEAPONS )
 		switch(RANDOM_LONG(0,1))
 		{
 		case 0:
-			EMIT_SOUND(ENT(m_pPlayer->pev), CHAN_WEAPON, "weapons/pl_gun1.wav", RANDOM_FLOAT(0.9, 1.0), ATTN_NORM);
+			EMIT_SOUND(ENT(m_hPlayer->pev), CHAN_WEAPON, "weapons/pl_gun1.wav", RANDOM_FLOAT(0.9, 1.0), ATTN_NORM);
 			break;
 		case 1:
-			EMIT_SOUND(ENT(m_pPlayer->pev), CHAN_WEAPON, "weapons/pl_gun2.wav", RANDOM_FLOAT(0.9, 1.0), ATTN_NORM);
+			EMIT_SOUND(ENT(m_hPlayer->pev), CHAN_WEAPON, "weapons/pl_gun2.wav", RANDOM_FLOAT(0.9, 1.0), ATTN_NORM);
 			break;
 		}
 #endif
@@ -191,37 +191,37 @@ void CGlock::GlockFire( float flSpread , float flCycleTime, BOOL fUseAutoAim )
 	else
 	{
 		// non-silenced
-		m_pPlayer->m_iWeaponVolume = NORMAL_GUN_VOLUME;
-		m_pPlayer->m_iWeaponFlash = NORMAL_GUN_FLASH;
+		m_hPlayer->m_iWeaponVolume = NORMAL_GUN_VOLUME;
+		m_hPlayer->m_iWeaponFlash = NORMAL_GUN_FLASH;
 #if defined ( OLD_WEAPONS )
-		EMIT_SOUND_DYN(ENT(m_pPlayer->pev), CHAN_WEAPON, "weapons/pl_gun3.wav", RANDOM_FLOAT(0.92, 1.0), ATTN_NORM, 0, 98 + RANDOM_LONG(0,3));
+		EMIT_SOUND_DYN(ENT(m_hPlayer->pev), CHAN_WEAPON, "weapons/pl_gun3.wav", RANDOM_FLOAT(0.92, 1.0), ATTN_NORM, 0, 98 + RANDOM_LONG(0,3));
 #endif
 	}
 
-	Vector vecSrc	 = m_pPlayer->GetGunPosition( );
+	Vector vecSrc	 = m_hPlayer->GetGunPosition( );
 	Vector vecAiming;
 	
 	if ( fUseAutoAim )
 	{
-		vecAiming = m_pPlayer->GetAutoaimVector( AUTOAIM_10DEGREES );
+		vecAiming = m_hPlayer->GetAutoaimVector( AUTOAIM_10DEGREES );
 	}
 	else
 	{
 		vecAiming = gpGlobals->v_forward;
 	}
 
-	m_pPlayer->FireBullets( 1, vecSrc, vecAiming, Vector( flSpread, flSpread, flSpread ), 8192, BULLET_PLAYER_9MM, 0 );
+	m_hPlayer->FireBullets( 1, vecSrc, vecAiming, Vector( flSpread, flSpread, flSpread ), 8192, BULLET_PLAYER_9MM, 0 );
 
 	m_flNextPrimaryAttack = m_flNextSecondaryAttack = gpGlobals->time + flCycleTime;
 
-	if (!m_iClip && m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0)
+	if (!m_iClip && m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0)
 		// HEV suit - indicate out of ammo condition
-		m_pPlayer->SetSuitUpdate("!HEV_AMO0", FALSE, 0);
+		m_hPlayer->SetSuitUpdate("!HEV_AMO0", FALSE, 0);
 
 	m_flTimeWeaponIdle = gpGlobals->time + RANDOM_FLOAT ( 10, 15 );
 
 #if defined ( OLD_WEAPONS )
-	m_pPlayer->pev->punchangle.x -= 2;
+	m_hPlayer->pev->punchangle.x -= 2;
 #endif
 }
 
@@ -247,7 +247,7 @@ void CGlock::WeaponIdle( void )
 {
 	ResetEmptySound( );
 
-	m_pPlayer->GetAutoaimVector( AUTOAIM_10DEGREES );
+	m_hPlayer->GetAutoaimVector( AUTOAIM_10DEGREES );
 
 	if (m_flTimeWeaponIdle > gpGlobals->time)
 		return;

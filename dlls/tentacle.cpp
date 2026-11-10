@@ -26,6 +26,7 @@
 #include	"monsters.h"
 #include	"weapons.h"
 #include	"soundent.h"
+#include	"CClassicMode.h"
 
 
 #define ACT_T_IDLE		1010
@@ -65,6 +66,7 @@ public:
 	void EXPORT HitTouch( CBaseEntity *pOther );
 
 	float HearingSensitivity( void ) { return 2.0; };
+	float GetPointsForDamage( float flDamage );
 
 	int TakeDamage( entvars_t* pevInflictor, entvars_t* pevAttacker, float flDamage, int bitsDamageType );
 	void HandleAnimEvent( MonsterEvent_t *pEvent );
@@ -78,6 +80,12 @@ public:
 	int Level( float dz );
 	int MyLevel( void );
 	float MyHeight( void );
+
+	bool CheckLevelHeights( void );
+	void SetDefaultLevelHeights( void );
+	int ISoundMask( void ) { return bits_SOUND_WORLD | bits_SOUND_COMBAT | bits_SOUND_PLAYER; }
+
+	float m_flLevelHeights[4];	// heights of the four levels, from the map or the defaults
 
 	float m_flInitialYaw;
 	int m_iGoalAnim;
@@ -241,7 +249,15 @@ typedef enum
 //=========================================================
 int	CTentacle :: Classify ( void )
 {
-	return	CLASS_ALIEN_MONSTER;
+	return GetClassification( CLASS_ALIEN_MONSTER );
+}
+
+extern cvar_t sk_tentacle;
+
+float CTentacle::GetPointsForDamage( float flDamage )
+{
+	return (double) ( pev->max_health / sk_tentacle.value ) * 0.5
+	       * (double) ( flDamage / pev->max_health );
 }
 
 //
@@ -251,13 +267,21 @@ void CTentacle :: Spawn( )
 {
 	Precache( );
 
+	if ( !CheckLevelHeights() )
+		SetDefaultLevelHeights( );
+
+	pev->scale			= 1.0;
 	pev->solid			= SOLID_BBOX;
 	pev->movetype		= MOVETYPE_FLY;
 	pev->effects		= 0;
-	pev->health			= 75;
+	if ( pev->health == 0.0f )
+		pev->health			= sk_tentacle.value;
+
+	pev->max_health = pev->health;
 	pev->sequence		= 0;
 
-	SET_MODEL(ENT(pev), "models/tentacle2.mdl");
+	if ( !SetupModel() )
+		UTIL_SetModel( this, CClassicMode::GetInstance()->IsEnabled() ? "models/hlclassic/tentacle2.mdl" : "models/tentacle2.mdl" );
 	UTIL_SetSize( pev, Vector( -32, -32, 0 ), Vector( 32, 32, 64 ) );
 
 	pev->takedamage		= DAMAGE_AIM;
@@ -294,7 +318,9 @@ void CTentacle :: Spawn( )
 
 void CTentacle :: Precache( )
 {
-	PRECACHE_MODEL("models/tentacle2.mdl");
+	CBaseEntity::Precache();
+
+	UTIL_PrecacheModel( this, CClassicMode::GetInstance()->IsEnabled() ? "models/hlclassic/tentacle2.mdl" : "models/tentacle2.mdl" );
 
 	PRECACHE_SOUND("ambience/flies.wav");
 	PRECACHE_SOUND("ambience/squirm2.wav");
@@ -341,19 +367,72 @@ void CTentacle::KeyValue( KeyValueData *pkvd )
 		pkvd->fHandled = TRUE;
 
 	}
+	else if ( FStrEq( pkvd->szKeyName, "level0height" ) )
+	{
+		m_flLevelHeights[0] = atof( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if ( FStrEq( pkvd->szKeyName, "level1height" ) )
+	{
+		m_flLevelHeights[1] = atof( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if ( FStrEq( pkvd->szKeyName, "level2height" ) )
+	{
+		m_flLevelHeights[2] = atof( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if ( FStrEq( pkvd->szKeyName, "level3height" ) )
+	{
+		m_flLevelHeights[3] = atof( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
 	else
 		CBaseMonster::KeyValue( pkvd );
 }
 
 
 
+#define TENTACLE_LEVEL_MIN_GAP	40
+
+// Each level must clear the one below it by the gap
+bool CTentacle::CheckLevelHeights( void )
+{
+	if ( m_flLevelHeights[0] < 0 )
+	{
+		ALERT( at_console, "Tentacle \"%s\": Invalid level 0 height (%f). Default values will be used.\n",
+			STRING( pev->targetname ), m_flLevelHeights[0] );
+		return false;
+	}
+
+	for ( int i = 1; i < ARRAYSIZE( m_flLevelHeights ); i++ )
+	{
+		if ( m_flLevelHeights[i - 1] + TENTACLE_LEVEL_MIN_GAP >= m_flLevelHeights[i] )
+		{
+			ALERT( at_console, "Tentacle \"%s\": Invalid level %d height (%f). Default values will be used.\n",
+				STRING( pev->targetname ), i, m_flLevelHeights[i] );
+			return false;
+		}
+	}
+
+	return true;
+}
+
+void CTentacle::SetDefaultLevelHeights( void )
+{
+	m_flLevelHeights[0] = 0;
+	m_flLevelHeights[1] = 256;
+	m_flLevelHeights[2] = 448;
+	m_flLevelHeights[3] = 640;
+}
+
 int CTentacle :: Level( float dz )
 {
-	if (dz < 216)
+	if (dz < m_flLevelHeights[1] - TENTACLE_LEVEL_MIN_GAP )
 		return 0;
-	if (dz < 408)
+	if (dz < m_flLevelHeights[2] - TENTACLE_LEVEL_MIN_GAP )
 		return 1;
-	if (dz < 600)
+	if (dz < m_flLevelHeights[3] - TENTACLE_LEVEL_MIN_GAP )
 		return 2;
 	return 3;
 }
@@ -361,16 +440,12 @@ int CTentacle :: Level( float dz )
 
 float CTentacle :: MyHeight( )
 {
-	switch ( MyLevel( ) )
-	{
-	case 1:
-		return 256;
-	case 2:
-		return 448;
-	case 3:
-		return 640;
-	}
-	return 0;
+	int iLevel = MyLevel( );
+
+	if ( iLevel < 0 || iLevel >= ARRAYSIZE( m_flLevelHeights ) )
+		iLevel = 0;
+
+	return m_flLevelHeights[iLevel];
 }
 
 
@@ -515,7 +590,7 @@ void CTentacle :: Cycle( void )
 		if (m_flSoundTime < gpGlobals->time)
 		{
 			// play "I hear new something" sound
-			char *sound;	
+			const char *sound;	
 
 			switch( RANDOM_LONG(0,1) )
 			{
@@ -611,7 +686,7 @@ void CTentacle :: Cycle( void )
 				if (m_flNextSong < gpGlobals->time)
 				{
 					// play "I hear new something" sound
-					char *sound;	
+					const char *sound;	
 
 					switch( RANDOM_LONG(0,1) )
 					{
@@ -813,7 +888,7 @@ void CTentacle :: DieThink( void )
 
 void CTentacle :: HandleAnimEvent( MonsterEvent_t *pEvent )
 {
-	char *sound;
+	const char *sound;
 
 	switch( pEvent->event )
 	{
@@ -1022,7 +1097,9 @@ LINK_ENTITY_TO_CLASS( monster_tentaclemaw, CTentacleMaw );
 void CTentacleMaw :: Spawn( )
 {
 	Precache( );
-	SET_MODEL(ENT(pev), "models/maw.mdl");
+
+	if ( !SetupModel() )
+		UTIL_SetModel( this, "models/maw.mdl");
 	UTIL_SetSize(pev, Vector(-32, -32, 0), Vector(32, 32, 64));
 
 	pev->solid			= SOLID_NOT;
@@ -1038,7 +1115,7 @@ void CTentacleMaw :: Spawn( )
 
 void CTentacleMaw :: Precache( )
 {
-	PRECACHE_MODEL("models/maw.mdl");
+	UTIL_PrecacheModel( this, "models/maw.mdl");
 }
 
 #endif

@@ -25,7 +25,6 @@
 #include "event_api.h"
 #include "pm_shared.h"
 
-#define IS_FIRSTPERSON_SPEC ( g_iUser1 == OBS_IN_EYE || (g_iUser1 && (gHUD.m_Spectator.m_pip->value == INSET_IN_EYE)) )
 /*
 =================
 GetEntity
@@ -33,7 +32,7 @@ GetEntity
 Return's the requested cl_entity_t
 =================
 */
-struct cl_entity_s *GetEntity( int idx )
+cl_entity_t *GetEntity( int idx )
 {
 	return gEngfuncs.GetEntityByIndex( idx );
 }
@@ -45,7 +44,7 @@ GetViewEntity
 Return's the current weapon/view model
 =================
 */
-struct cl_entity_s *GetViewEntity( void )
+cl_entity_t *GetViewEntity( void )
 {
 	return gEngfuncs.GetViewModel();
 }
@@ -69,9 +68,9 @@ EV_IsPlayer
 Is the entity's index in the player range?
 =================
 */
-qboolean EV_IsPlayer( int idx )
+bool EV_IsPlayer( int idx )
 {
-	if ( idx >= 1 && idx <= gEngfuncs.GetMaxClients() )
+	if (idx >= 1 && idx <= gEngfuncs.GetMaxClients())
 		return true;
 
 	return false;
@@ -86,11 +85,7 @@ Is the entity == the local player
 */
 qboolean EV_IsLocal( int idx )
 {
-	// check if we are in some way in first person spec mode
-	if ( IS_FIRSTPERSON_SPEC  )
-		return (g_iUser2 == idx);
-	else
-		return gEngfuncs.pEventAPI->EV_IsLocal( idx - 1 ) ? true : false;
+	return gEngfuncs.pEventAPI->EV_IsLocal( idx - 1 ) != 0;
 }
 
 /*
@@ -113,7 +108,7 @@ void EV_GetGunPosition( event_args_t *args, float *pos, float *origin )
 	if ( EV_IsPlayer( idx ) )
 	{
 		// in spec mode use entity viewheigh, not own
-		if ( EV_IsLocal( idx ) && !IS_FIRSTPERSON_SPEC )
+		if ( EV_IsLocal( idx ) )
 		{
 			// Grab predicted result for local player
 			gEngfuncs.pEventAPI->EV_LocalPlayerViewheight( view_ofs );
@@ -139,7 +134,16 @@ void EV_EjectBrass( float *origin, float *velocity, float rotation, int model, i
 	vec3_t endpos;
 	VectorClear( endpos );
 	endpos[1] = rotation;
-	gEngfuncs.pEfxAPI->R_TempModel( origin, velocity, endpos, 2.5, model, soundtype );
+
+	TEMPENTITY *shell = gEngfuncs.pEfxAPI->R_TempModel( origin, velocity, endpos, 7.0f, model, soundtype );
+
+	if (!shell)
+		return;
+
+	if (soundtype == TE_BOUNCE_SHELL)
+		VectorScale(shell->entity.baseline.angles, 8.0f, shell->entity.baseline.angles);
+	else if (soundtype == TE_BOUNCE_SHOTSHELL)
+		VectorScale(shell->entity.baseline.angles, 2.0f, shell->entity.baseline.angles);
 }
 
 /*
@@ -153,7 +157,7 @@ void EV_GetDefaultShellInfo( event_args_t *args, float *origin, float *velocity,
 {
 	int i;
 	vec3_t view_ofs;
-	float fR, fU;
+	float fR, fU, fF;
 
 	int idx;
 
@@ -174,12 +178,13 @@ void EV_GetDefaultShellInfo( event_args_t *args, float *origin, float *velocity,
 		}
 	}
 
-	fR = gEngfuncs.pfnRandomFloat( 50, 70 );
-	fU = gEngfuncs.pfnRandomFloat( 100, 150 );
+	fR = gEngfuncs.pfnRandomFloat(100, 120);
+	fU = gEngfuncs.pfnRandomFloat(150, 200);
+	fF = gEngfuncs.pfnRandomFloat(50, 150 );
 
 	for ( i = 0; i < 3; i++ )
 	{
-		ShellVelocity[i] = velocity[i] + right[i] * fR + up[i] * fU + forward[i] * 25;
+		ShellVelocity[i] = velocity[i] + right[i] * fR + up[i] * fU + forward[i] * fF;
 		ShellOrigin[i]   = origin[i] + view_ofs[i] + up[i] * upScale + forward[i] * forwardScale + right[i] * rightScale;
 	}
 }

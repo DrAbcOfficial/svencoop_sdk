@@ -80,22 +80,14 @@ typedef int BOOL;
 #define M_PI			3.14159265358979323846
 
 // Keeps clutter down a bit, when declaring external entity/global method prototypes
-#define DECLARE_GLOBAL_METHOD(MethodName)  extern void UTIL_DLLEXPORT MethodName( void )
-#define GLOBAL_METHOD(funcname)					void UTIL_DLLEXPORT funcname(void)
-
-#ifndef UTIL_DLLEXPORT
-#ifdef _WIN32
-#define UTIL_DLLEXPORT _declspec( dllexport )
-#else
-#define UTIL_DLLEXPORT __attribute__ ((visibility("default")))
-#endif
-#endif
+#define DECLARE_GLOBAL_METHOD(MethodName)  extern void DLLEXPORT MethodName( void )
+#define GLOBAL_METHOD(funcname)					void DLLEXPORT funcname(void)
 
 // This is the glue that hooks .MAP entity class names to our CPP classes
 // The _declspec forces them to be exported by name so we can do a lookup with GetProcAddress()
 // The function is used to intialize / allocate the object for the entity
 #define LINK_ENTITY_TO_CLASS(mapClassName,DLLClassName) \
-	extern "C" UTIL_DLLEXPORT void mapClassName( entvars_t *pev ); \
+	extern "C" DLLEXPORT void mapClassName( entvars_t *pev ); \
 	void mapClassName( entvars_t *pev ) { GetClassPtr( (DLLClassName *)pev ); }
 
 
@@ -141,7 +133,7 @@ inline entvars_t* VARS(EOFFSET eoffset)				{ return VARS(ENT(eoffset)); }
 inline int	  ENTINDEX(edict_t *pEdict)			{ return (*g_engfuncs.pfnIndexOfEdict)(pEdict); }
 inline edict_t* INDEXENT( int iEdictNum )		{ return (*g_engfuncs.pfnPEntityOfEntIndex)(iEdictNum); }
 inline void MESSAGE_BEGIN( int msg_dest, int msg_type, const float *pOrigin, entvars_t *ent ) {
-	(*g_engfuncs.pfnMessageBegin)(msg_dest, msg_type, pOrigin, ENT(ent));
+	MESSAGE_BEGIN( msg_dest, msg_type, pOrigin, ENT( ent ) );
 }
 
 // Testing the three types of "entity" for nullity
@@ -212,6 +204,8 @@ extern float		UTIL_AngleMod			(float a);
 extern float		UTIL_AngleDiff			( float destAngle, float srcAngle );
 
 extern CBaseEntity	*UTIL_FindEntityInSphere(CBaseEntity *pStartEntity, const Vector &vecCenter, float flRadius);
+extern CBaseEntity *UTIL_FindEntityInSphere( CBaseEntity *start, const Vector &center, float radius,
+	const char *value, const char *key );
 extern CBaseEntity	*UTIL_FindEntityByString(CBaseEntity *pStartEntity, const char *szKeyword, const char *szValue );
 extern CBaseEntity	*UTIL_FindEntityByClassname(CBaseEntity *pStartEntity, const char *szName );
 extern CBaseEntity	*UTIL_FindEntityByTargetname(CBaseEntity *pStartEntity, const char *szName );
@@ -224,10 +218,13 @@ extern CBaseEntity	*UTIL_PlayerByIndex( int playerIndex );
 
 #define UTIL_EntitiesInPVS(pent)			(*g_engfuncs.pfnEntitiesInPVS)(pent)
 extern void			UTIL_MakeVectors		(const Vector &vecAngles);
+extern void AngleVectors( const Vector &angles, Vector *forward, Vector *right, Vector *up );
 
 // Pass in an array of pointers and an array size, it fills the array and returns the number inserted
 extern int			UTIL_MonstersInSphere( CBaseEntity **pList, int listMax, const Vector &center, float radius );
 extern int			UTIL_EntitiesInBox( CBaseEntity **pList, int listMax, const Vector &mins, const Vector &maxs, int flagMask );
+extern int UTIL_TargetsInBox( CBaseEntity **list, int listMax, const Vector &mins, const Vector &maxs );
+extern int UTIL_BrushEntsInBox( CBaseEntity **list, int listMax, const Vector &mins, const Vector &maxs );
 
 inline void UTIL_MakeVectorsPrivate( const Vector &vecAngles, float *p_vForward, float *p_vRight, float *p_vUp )
 {
@@ -242,6 +239,12 @@ extern void			UTIL_EmitAmbientSound	( edict_t *entity, const Vector &vecOrigin, 
 extern void			UTIL_ParticleEffect		( const Vector &vecOrigin, const Vector &vecDirection, ULONG ulColor, ULONG ulCount );
 extern void			UTIL_ScreenShake		( const Vector &center, float amplitude, float frequency, float duration, float radius );
 extern void			UTIL_ScreenShakeAll		( const Vector &center, float amplitude, float frequency, float duration );
+
+#ifndef CLIENT_DLL
+extern void UTIL_SendTextMenu( entvars_t *const *entityVars, int validSlots, int displayTime,
+	char *text, unsigned int textLength );
+#endif
+
 extern void			UTIL_ShowMessage		( const char *pString, CBaseEntity *pPlayer );
 extern void			UTIL_ShowMessageAll		( const char *pString );
 extern void			UTIL_ScreenFadeAll		( const Vector &color, float fadeTime, float holdTime, int alpha, int flags );
@@ -253,6 +256,8 @@ extern void			UTIL_TraceLine			(const Vector &vecStart, const Vector &vecEnd, IG
 extern void			UTIL_TraceLine			(const Vector &vecStart, const Vector &vecEnd, IGNORE_MONSTERS igmon, IGNORE_GLASS ignoreGlass, edict_t *pentIgnore, TraceResult *ptr);
 enum { point_hull=0, human_hull=1, large_hull=2, head_hull=3 };
 extern void			UTIL_TraceHull			(const Vector &vecStart, const Vector &vecEnd, IGNORE_MONSTERS igmon, int hullNumber, edict_t *pentIgnore, TraceResult *ptr);
+extern void UTIL_FindHullIntersection( const Vector &vecSrc, TraceResult &trace, const Vector &mins,
+	const Vector &maxs, edict_t *ignore, float distanceLimit );
 extern TraceResult	UTIL_GetGlobalTrace		(void);
 extern void			UTIL_TraceModel			(const Vector &vecStart, const Vector &vecEnd, int hullNumber, edict_t *pentModel, TraceResult *ptr);
 extern Vector		UTIL_GetAimVector		(edict_t* pent, float flSpeed);
@@ -269,14 +274,37 @@ extern void			UTIL_PlayerDecalTrace( TraceResult *pTrace, int playernum, int dec
 extern void			UTIL_GunshotDecalTrace( TraceResult *pTrace, int decalNumber );
 extern void			UTIL_Sparks( const Vector &position );
 extern void			UTIL_Ricochet( const Vector &position, float scale );
+
+#ifdef CLIENT_DLL
 extern void			UTIL_StringToVector( float *pVector, const char *pString );
 extern void			UTIL_StringToIntArray( int *pVector, int count, const char *pString );
+#else
+bool UTIL_StringToVector(float *values, const char *text, char separator = ' ');
+void UTIL_StringToIntArray(int *values, int count, const char *text,
+	char separator = ' ', char *remaining = NULL, int remainingSize = 0);
+#endif
+
 extern Vector		UTIL_ClampVectorToBox( const Vector &input, const Vector &clampSize );
 extern float		UTIL_Approach( float target, float value, float speed );
 extern float		UTIL_ApproachAngle( float target, float value, float speed );
+#ifndef CLIENT_DLL
+void AlignToGroundStatic( CBaseEntity *entity, float speed );
+#endif
 extern float		UTIL_AngleDistance( float next, float cur );
 
-extern char			*UTIL_VarArgs( char *format, ... );
+extern char			*UTIL_VarArgs( const char *format, ... );
+
+extern string_t g_szSoundReplacement;
+#ifndef CLIENT_DLL
+extern bool g_iActiveIdle;
+extern int g_iMapForGameVersion;
+#endif
+const char *FindSoundReplacementSample( CBaseEntity *entity, const char *sample );
+const char *FindSoundReplacementSample( edict_t *entity, const char *sample );
+void PrecacheSound_Intercept( CBaseEntity *entity, const char *sample );
+
+void UTIL_PrecacheSkymap( const char *sky );
+
 extern void			UTIL_Remove( CBaseEntity *pEntity );
 extern BOOL			UTIL_IsValidEntity( edict_t *pent );
 extern BOOL			UTIL_TeamsMatch( const char *pTeamName1, const char *pTeamName2 );
@@ -291,6 +319,19 @@ extern void			UTIL_BubbleTrail( Vector from, Vector to, int count );
 
 // allows precacheing of other entities
 extern void			UTIL_PrecacheOther( const char *szClassname );
+#ifndef CLIENT_DLL
+void UTIL_PrecacheMonster( const char *className, bool ally );
+#endif
+
+int PrecacheModel_Intercept( CBaseEntity *entity, const char *model );
+void SetModel_Intercept( edict_t *entity, const char *model );
+
+#ifndef CLIENT_DLL
+extern string_t g_szModelReplacement;
+void SetModelWithBounds( CBaseEntity *entity, const char *model );
+void UTIL_SetModel( CBaseEntity *entity, const char *model );
+#endif
+int UTIL_PrecacheModel( CBaseEntity *entity, const char *model );
 
 // prints a message to each client
 extern void			UTIL_ClientPrintAll( int msg_dest, const char *msg_name, const char *param1 = NULL, const char *param2 = NULL, const char *param3 = NULL, const char *param4 = NULL );
@@ -301,6 +342,27 @@ inline void			UTIL_CenterPrintAll( const char *msg_name, const char *param1 = NU
 
 class CBasePlayerItem;
 class CBasePlayer;
+
+#ifndef CLIENT_DLL
+#include "IPlayerInVolumeListener.h"
+
+extern CBasePlayer *UTIL_PlayerBySteamId( const char *authId );
+extern CBasePlayer *UTIL_GetActivePlayer( int index );
+extern CBaseEntity *FindEntityForward( CBaseEntity *entity, float distance );
+extern int UTIL_GetPrecachedModelCount( void );
+extern void UTIL_ResetPrecachedModelCount( void );
+extern int UTIL_CountPlayersInBrushVolume( bool ignoreDeadPlayers, CBaseEntity *volume, int &inside,
+                                           int &outside, IPlayerInVolumeListener *listener );
+#endif
+
+extern bool CanHaveXtra( int kind, CBasePlayer *player );
+extern CBaseEntity *UTIL_RandomTargetname( const char *targetname );
+extern bool UTIL_CanTeleportToEntity( CBaseEntity *destination, int flags );
+extern void UTIL_RotateVector( Vector *vector, const Vector &angles, const Vector &origin, bool reverse );
+extern bool UTIL_TeleportEntity( CBaseEntity *entity, CBaseEntity *destination, int flags,
+	const Vector &relativeOrigin );
+extern void UTIL_RespawnPlayer( CBasePlayer *player, bool allowLiving, bool respawnObserver );
+extern void UTIL_RespawnAllPlayers( bool allowLiving, bool respawnObserver );
 extern BOOL UTIL_GetNextBestWeapon( CBasePlayer *pPlayer, CBasePlayerItem *pCurrentWeapon );
 
 // prints messages through the HUD
@@ -336,12 +398,24 @@ extern char *UTIL_dtos3( int d );
 extern char *UTIL_dtos4( int d );
 
 // Writes message to console with timestamp and FragLog header.
-extern void			UTIL_LogPrintf( char *fmt, ... );
+extern void			UTIL_LogPrintf( const char *fmt, ... );
 
 // Sorta like FInViewCone, but for nonmonsters. 
 extern float UTIL_DotPoints ( const Vector &vecSrc, const Vector &vecCheck, const Vector &vecDir );
 
-extern void UTIL_StripToken( const char *pKey, char *pDest );// for redundant keynames
+extern void UTIL_StripToken( const char *pKey, char *pDest, unsigned int size );// for redundant keynames
+extern void UTIL_StripToken2( const char *pKey, char *pDest, unsigned int size );// the part after the '#'
+extern const char *UTIL_FindTokenInTokenList( const char *pszToken, const char *pszList );
+extern CBaseEntity *UTIL_FindEntityByIndex( int iIndex, bool fBackward );
+extern int UTIL_GetNumPlayers( void );
+extern bool UTIL_IsWholeNumber( float flValue, int &iWhole );
+extern byte UTIL_TranslateChannel( byte channel, int iGroup );
+extern void MESSAGE_BEGIN_AUTO( CBaseEntity *pEntity, int iMsgType );
+extern void WRITE_CLAMP_BYTE( int iValue, int iMin, int iMax );
+extern void WRITE_CLAMP_SHORT( int iValue, int iMin, int iMax );
+extern void WRITE_CLAMP_FLOAT( float flValue, float flMin, float flMax );
+extern void EulerFromMatrix( float ( *matrix )[3], float *angles );
+extern void AngleVectors( const Vector &angles, Vector *forward );
 
 // Misc functions
 extern void SetMovedir(entvars_t* pev);
@@ -423,9 +497,11 @@ extern DLL_GLOBAL int			g_Language;
 #define VEC_DUCK_HULL_MAX	Vector( 16,  16,  18)
 #define VEC_DUCK_VIEW		Vector( 0, 0, 12 )
 
+#define SVC_STUFFTEXT		9
 #define SVC_TEMPENTITY		23
 #define SVC_INTERMISSION	30
 #define SVC_CDTRACK			32
+#define SVC_WEAPONANIMEX		19
 #define SVC_WEAPONANIM		35
 #define SVC_ROOMTYPE		37
 #define	SVC_DIRECTOR		51
@@ -464,7 +540,7 @@ extern DLL_GLOBAL int			g_Language;
 
 // sentence groups
 #define CBSENTENCENAME_MAX 16
-#define CVOXFILESENTENCEMAX		1536		// max number of sentences in game. NOTE: this must match
+#define CVOXFILESENTENCEMAX		2048		// max number of sentences in game. NOTE: this must match
 											// CVOXFILESENTENCEMAX in engine\sound.h!!!
 
 extern char gszallsentencenames[CVOXFILESENTENCEMAX][CBSENTENCENAME_MAX];
@@ -494,6 +570,9 @@ float TEXTURETYPE_PlaySound(TraceResult *ptr,  Vector vecSrc, Vector vecEnd, int
 
 void EMIT_SOUND_DYN(edict_t *entity, int channel, const char *sample, float volume, float attenuation,
 						   int flags, int pitch);
+
+void EMIT_SOUND_DYN( edict_t *entity, int channel, const char *sample, float volume, float attenuation,
+	int flags, int pitch, int targetPlayer, bool useOrigin, const Vector &origin );
 
 
 inline void EMIT_SOUND(edict_t *entity, int channel, const char *sample, float volume, float attenuation)
@@ -543,4 +622,8 @@ void UTIL_UnsetGroupTrace( void );
 int UTIL_SharedRandomLong( unsigned int seed, int low, int high );
 float UTIL_SharedRandomFloat( unsigned int seed, float low, float high );
 
+void UTIL_GetGameDir( char *buffer, unsigned int size );
+float UTIL_GetCurrentTime( void );
 float UTIL_WeaponTimeBase( void );
+
+char *UTIL_StringTokens( const char *source, const char *delimiters, char **buffer, char **context );

@@ -18,9 +18,9 @@ int Bench_Active( void );
 
 void Bench_SetDotAdded( int dot );
 void Bench_SpotPosition( vec3_t dot, vec3_t target );
-void Bench_CheckEntity( int type, struct cl_entity_s *ent, const char *modelname );
+void Bench_CheckEntity( int type, cl_entity_t *ent, const char *modelname );
 void Bench_AddObjects( void );
-void Bench_SetViewAngles( int recalc_wander, float *viewangles, float frametime, struct usercmd_s *cmd );
+void Bench_SetViewAngles( int recalc_wander, float *viewangles, float frametime, usercmd_t *cmd );
 void Bench_SetViewOrigin( float *vieworigin, float frametime );
 
 #endif

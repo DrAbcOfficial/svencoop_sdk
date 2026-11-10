@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2002, Valve LLC, All rights reserved. ============
+//========= Copyright Â© 1996-2002, Valve LLC, All rights reserved. ============
 //
 // Purpose: 
 //
@@ -810,7 +810,7 @@ int CHudServers::LoadMasterAddresses( int maxservers, int *count, netadr_t *padr
 		// Parse addresses until we get to "}"
 		while ( nCount < maxservers )
 		{
-			char base[256];
+			char base[1024];
 
 			// Now parse all addresses between { }
 			pstart = gEngfuncs.COM_ParseFile( pstart, m_szToken );
@@ -947,11 +947,6 @@ void CHudServers::RequestBroadcastList( int clearpending )
 	adr.type = NA_BROADCAST;
 
 	// Request Servers from LAN via IP
-	NET_API->SendRequest( context_id++, NETAPI_REQUEST_DETAILS, FNETAPI_MULTIPLE_RESPONSE, 5.0, &adr, ::ServerResponse );
-
-	adr.type = NA_BROADCAST_IPX;
-
-	// Request Servers from LAN via IPX ( if supported )
 	NET_API->SendRequest( context_id++, NETAPI_REQUEST_DETAILS, FNETAPI_MULTIPLE_RESPONSE, 5.0, &adr, ::ServerResponse );
 }
 

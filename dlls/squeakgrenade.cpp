@@ -21,8 +21,11 @@
 #include "weapons.h"
 #include "nodes.h"
 #include "player.h"
+#include "CClassicMode.h"
+#include "game.h"
 #include "soundent.h"
 #include "gamerules.h"
+#include "squeakgrenade.h"
 
 enum w_squeak_e {
 	WSQUEAK_IDLE1 = 0,
@@ -41,34 +44,6 @@ enum squeak_e {
 };
 
 #ifndef CLIENT_DLL
-
-class CSqueakGrenade : public CGrenade
-{
-	void Spawn( void );
-	void Precache( void );
-	int  Classify( void );
-	void EXPORT SuperBounceTouch( CBaseEntity *pOther );
-	void EXPORT HuntThink( void );
-	int  BloodColor( void ) { return BLOOD_COLOR_YELLOW; }
-	void Killed( entvars_t *pevAttacker, int iGib );
-	void GibMonster( void );
-
-	virtual int		Save( CSave &save ); 
-	virtual int		Restore( CRestore &restore );
-	
-	static	TYPEDESCRIPTION m_SaveData[];
-
-	static float m_flNextBounceSoundTime;
-
-	// CBaseEntity *m_pTarget;
-	float m_flDie;
-	Vector m_vecTarget;
-	float m_flNextHunt;
-	float m_flNextHit;
-	Vector m_posPrev;
-	EHANDLE m_hOwner;
-	int  m_iMyClass;
-};
 
 float CSqueakGrenade::m_flNextBounceSoundTime = 0;
 
@@ -89,24 +64,7 @@ IMPLEMENT_SAVERESTORE( CSqueakGrenade, CGrenade );
 
 int CSqueakGrenade :: Classify ( void )
 {
-	if (m_iMyClass != 0)
-		return m_iMyClass; // protect against recursion
-
-	if (m_hEnemy != NULL)
-	{
-		m_iMyClass = CLASS_INSECT; // no one cares about it
-		switch( m_hEnemy->Classify( ) )
-		{
-			case CLASS_PLAYER:
-			case CLASS_HUMAN_PASSIVE:
-			case CLASS_HUMAN_MILITARY:
-				m_iMyClass = 0;
-				return CLASS_ALIEN_MILITARY; // barney's get mad, grunts get mad at it
-		}
-		m_iMyClass = 0;
-	}
-
-	return CLASS_ALIEN_BIOWEAPON;
+	return GetClassification( 5 );
 }
 
 void CSqueakGrenade :: Spawn( void )
@@ -116,7 +74,13 @@ void CSqueakGrenade :: Spawn( void )
 	pev->movetype = MOVETYPE_BOUNCE;
 	pev->solid = SOLID_BBOX;
 
-	SET_MODEL(ENT(pev), "models/w_squeak.mdl");
+	if ( !SetupModel() )
+	{
+		if ( CClassicMode::GetInstance()->IsEnabled() )
+			SET_MODEL( ENT(pev), "models/hlclassic/w_squeak.mdl" );
+		else
+			SET_MODEL(ENT(pev), "models/w_squeak.mdl");
+	}
 	UTIL_SetSize(pev, Vector( -4, -4, 0), Vector(4, 4, 8));
 	UTIL_SetOrigin( pev, pev->origin );
 
@@ -144,11 +108,17 @@ void CSqueakGrenade :: Spawn( void )
 
 	pev->sequence = WSQUEAK_RUN;
 	ResetSequenceInfo( );
+	m_bNestAlly = false;
 }
 
 void CSqueakGrenade::Precache( void )
 {
-	PRECACHE_MODEL("models/w_squeak.mdl");
+	CBaseEntity::Precache();
+
+	if ( CClassicMode::GetInstance()->IsEnabled() )
+		PRECACHE_MODEL( "models/hlclassic/w_squeak.mdl" );
+	else
+		PRECACHE_MODEL( "models/w_squeak.mdl" );
 	PRECACHE_SOUND("squeek/sqk_blast1.wav");
 	PRECACHE_SOUND("common/bodysplat.wav");
 	PRECACHE_SOUND("squeek/sqk_die1.wav");
@@ -270,7 +240,7 @@ void CSqueakGrenade::HuntThink( void )
 	if (flpitch < 80)
 		flpitch = 80;
 
-	if (m_hEnemy != NULL)
+	if (m_hEnemy != NULL && ( !m_bNestAlly || !m_hEnemy->IsPlayer() ) )
 	{
 		if (FVisible( m_hEnemy ))
 		{
@@ -411,191 +381,256 @@ void CSqueakGrenade::SuperBounceTouch( CBaseEntity *pOther )
 
 LINK_ENTITY_TO_CLASS( weapon_snark, CSqueak );
 
-
-void CSqueak::Spawn( )
+void CSqueak::Spawn( void )
 {
-	Precache( );
+	Precache();
+
+	const char *model;
+
+	if ( CClassicMode::GetInstance()->IsEnabled() )
+		model = "models/hlclassic/w_sqknest.mdl";
+	else
+		model = "models/w_sqknest.mdl";
+
+	SetModel_Intercept( edict(), GetW_Model( model ) );
+	CBasePhysicsObject::Spawn( );
 	m_iId = WEAPON_SNARK;
-	SET_MODEL(ENT(pev), "models/w_sqknest.mdl");
-
-	FallInit();//get ready to fall down.
-
 	m_iDefaultAmmo = SNARK_DEFAULT_GIVE;
-		
+	m_flCustomDmg = pev->dmg;
+
 	pev->sequence = 1;
 	pev->animtime = gpGlobals->time;
 	pev->framerate = 1.0;
 }
 
+void CSqueak::OnCreate( void )
+{
+	CBasePlayerWeapon::OnCreate();
+	m_iBounceMaterial = 2;
+}
 
 void CSqueak::Precache( void )
 {
-	PRECACHE_MODEL("models/w_sqknest.mdl");
-	PRECACHE_MODEL("models/v_squeak.mdl");
-	PRECACHE_MODEL("models/p_squeak.mdl");
-	PRECACHE_SOUND("squeek/sqk_hunt2.wav");
-	PRECACHE_SOUND("squeek/sqk_hunt3.wav");
-	UTIL_PrecacheOther("monster_snark");
+	PrecacheCustomModels();
 
-	m_usSnarkFire = PRECACHE_EVENT ( 1, "events/snarkfire.sc" );
+	bool classic = CClassicMode::GetInstance()->IsEnabled();
+
+	UTIL_PrecacheModel( this, classic ? "models/hlclassic/v_squeak.mdl" : "models/v_squeak.mdl" );
+	UTIL_PrecacheModel( this, classic ? "models/hlclassic/p_squeak.mdl" : "models/p_squeak.mdl" );
+	UTIL_PrecacheModel( this, classic ? "models/hlclassic/w_sqknest.mdl" : "models/w_sqknest.mdl");
+	PrecacheSound_Intercept( this, "squeek/sqk_hunt2.wav");
+	PrecacheSound_Intercept( this, "squeek/sqk_hunt3.wav");
+	UTIL_PrecacheOther("monster_snark");
+	UTIL_PrecacheOther( "monster_chumtoad" );
 }
 
-
-int CSqueak::GetItemInfo(ItemInfo *p)
+bool CSqueak::GetItemInfo(ItemInfo *p)
 {
 	p->pszName = STRING(pev->classname);
 	p->pszAmmo1 = "Snarks";
 	p->iMaxAmmo1 = SNARK_MAX_CARRY;
+	p->pszAmmo1Entity = "weapon_snark";
+	p->iAmmo1Drop = 1;
 	p->pszAmmo2 = NULL;
 	p->iMaxAmmo2 = -1;
+	p->pszAmmo2Entity = NULL;
+	p->iAmmo2Drop = AMMO_DROP_NONE;
 	p->iMaxClip = WEAPON_NOCLIP;
 	p->iSlot = 4;
 	p->iPosition = 3;
 	p->iId = m_iId = WEAPON_SNARK;
 	p->iWeight = SNARK_WEIGHT;
-	p->iFlags = ITEM_FLAG_LIMITINWORLD | ITEM_FLAG_EXHAUSTIBLE;
+	p->iFlags = ITEM_FLAG_LIMITINWORLD | ITEM_FLAG_EXHAUSTIBLE | ITEM_FLAG_NOAUTORELOAD;
 
-	return 1;
+	return true;
 }
 
-
-
-BOOL CSqueak::Deploy( )
+bool CSqueak::Deploy( void )
 {
-	// play hunt sound
-	float flRndSound = RANDOM_FLOAT ( 0 , 1 );
+	const char *sample;
 
-	if ( flRndSound <= 0.5 )
-		EMIT_SOUND_DYN(ENT(pev), CHAN_VOICE, "squeek/sqk_hunt2.wav", 1, ATTN_NORM, 0, 100);
-	else 
-		EMIT_SOUND_DYN(ENT(pev), CHAN_VOICE, "squeek/sqk_hunt3.wav", 1, ATTN_NORM, 0, 100);
+	if ( RANDOM_FLOAT ( 0 , 1 ) <= 0.5f )
+		sample = "squeek/sqk_hunt2.wav";
+	else
+		sample = "squeek/sqk_hunt3.wav";
 
-	m_pPlayer->m_iWeaponVolume = QUIET_GUN_VOLUME;
+	EMIT_SOUND_DYN( m_hPlayer->edict(), CHAN_WEAPON, sample, 1.0f, ATTN_NORM, 0, 100,
+	                m_hPlayer->entindex(), false, g_vecZero );
 
-	return DefaultDeploy( "models/v_squeak.mdl", "models/p_squeak.mdl", SQUEAK_UP, "squeak" );
+	m_hPlayer->m_iWeaponVolume = QUIET_GUN_VOLUME;
+
+	bool classic = CClassicMode::GetInstance()->IsEnabled();
+
+	const char *playerModel = GetP_Model( classic ? "models/hlclassic/p_squeak.mdl" : "models/p_squeak.mdl" );
+	const char *viewModel = GetV_Model( classic ? "models/hlclassic/v_squeak.mdl" : "models/v_squeak.mdl" );
+
+	return DefaultDeploy( viewModel, playerModel, SQUEAK_UP, "squeak" );
 }
-
 
 void CSqueak::Holster( int skiplocal /* = 0 */ )
 {
-	m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 0.5;
-	
-	if ( !m_pPlayer->m_rgAmmo[ m_iPrimaryAmmoType ] )
+	m_fInReload = false;
+
+	m_hPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 0.5;
+
+	if ( !m_hPlayer->m_rgAmmo[ m_iPrimaryAmmoType ] )
 	{
-		m_pPlayer->pev->weapons &= ~(1<<WEAPON_SNARK);
 		SetThink( &CSqueak::DestroyItem );
 		pev->nextthink = gpGlobals->time + 0.1;
 		return;
 	}
-	
-	SendWeaponAnim( SQUEAK_DOWN );
-	EMIT_SOUND(ENT(m_pPlayer->pev), CHAN_WEAPON, "common/null.wav", 1.0, ATTN_NORM);
+
+	EMIT_SOUND_DYN(m_hPlayer->edict(), CHAN_WEAPON, "common/null.wav", 1.0, ATTN_NORM,
+	                0, 100, 0, false, g_vecZero );
+	m_hPlayer->pev->viewmodel = 0;
 }
 
-
-void CSqueak::PrimaryAttack()
+void CSqueak::PrimaryAttack( void )
 {
-	if ( m_pPlayer->m_rgAmmo[ m_iPrimaryAmmoType ] )
+	if ( m_hPlayer->m_rgAmmo[ m_iPrimaryAmmoType ] <= 0 )
+		return;
+
+	UTIL_MakeVectors( m_hPlayer->pev->v_angle );
+
+	Vector trace_origin = m_hPlayer->pev->origin;
+	TraceResult tr;
+		if ( m_hPlayer->pev->flags & FL_DUCKING )
+		trace_origin = trace_origin - ( VEC_HULL_MIN - VEC_DUCK_HULL_MIN );
+
+	UTIL_TraceLine( trace_origin + gpGlobals->v_forward * 20, trace_origin + gpGlobals->v_forward * 64, dont_ignore_monsters, NULL, &tr );
+
+	if ( tr.fAllSolid || tr.fStartSolid || !( tr.flFraction > 0.25f ) )
+		return;
+
+	SendWeaponAnim( SQUEAK_THROW, 0, 0 );
+	m_hPlayer->SetAnimation( PLAYER_ATTACK1 );
+
+	CSqueakGrenade *pSqueak = (CSqueakGrenade *) CBaseEntity::Create( "monster_snark", g_vecZero, m_hPlayer->pev->v_angle, false, m_hPlayer->edict() );
+			pSqueak->pev->velocity = gpGlobals->v_forward * 200 + m_hPlayer->pev->velocity;
+	pSqueak->SetClassification( m_hPlayer->Classify() );
+	pSqueak->m_bNestAlly = true;
+	pSqueak->pev->spawnflags = 1;
+
+	if ( m_flCustomDmg > 0.0f )
 	{
-		UTIL_MakeVectors( m_pPlayer->pev->v_angle );
-		TraceResult tr;
-		Vector trace_origin;
-
-		// HACK HACK:  Ugly hacks to handle change in origin based on new physics code for players
-		// Move origin up if crouched and start trace a bit outside of body ( 20 units instead of 16 )
-		trace_origin = m_pPlayer->pev->origin;
-		if ( m_pPlayer->pev->flags & FL_DUCKING )
-		{
-			trace_origin = trace_origin - ( VEC_HULL_MIN - VEC_DUCK_HULL_MIN );
-		}
-
-		// find place to toss monster
-		UTIL_TraceLine( trace_origin + gpGlobals->v_forward * 20, trace_origin + gpGlobals->v_forward * 64, dont_ignore_monsters, NULL, &tr );
-
-	int flags;
-#ifdef CLIENT_WEAPONS
-	flags = FEV_NOTHOST;
-#else
-	flags = 0;
-#endif
-
-	    PLAYBACK_EVENT_FULL( flags, m_pPlayer->edict(), m_usSnarkFire, 0.0, (float *)&g_vecZero, (float *)&g_vecZero, 0.0, 0.0, 0, 0, 0, 0 );
-
-		if ( tr.fAllSolid == 0 && tr.fStartSolid == 0 && tr.flFraction > 0.25 )
-		{
-			// player "shoot" animation
-			m_pPlayer->SetAnimation( PLAYER_ATTACK1 );
-
-#ifndef CLIENT_DLL
-			CBaseEntity *pSqueak = CBaseEntity::Create( "monster_snark", tr.vecEndPos, m_pPlayer->pev->v_angle, m_pPlayer->edict() );
-			pSqueak->pev->velocity = gpGlobals->v_forward * 200 + m_pPlayer->pev->velocity;
-#endif
-
-			// play hunt sound
-			float flRndSound = RANDOM_FLOAT ( 0 , 1 );
-
-			if ( flRndSound <= 0.5 )
-				EMIT_SOUND_DYN(ENT(pev), CHAN_VOICE, "squeek/sqk_hunt2.wav", 1, ATTN_NORM, 0, 105);
-			else 
-				EMIT_SOUND_DYN(ENT(pev), CHAN_VOICE, "squeek/sqk_hunt3.wav", 1, ATTN_NORM, 0, 105);
-
-			m_pPlayer->m_iWeaponVolume = QUIET_GUN_VOLUME;
-
-			m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType]--;
-
-			m_fJustThrown = 1;
-
-			m_flNextPrimaryAttack = GetNextAttackDelay(0.3);
-			m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 1.0;
-		}
+		m_flCustomDmg *= 0.5f;
+		pSqueak->pev->dmg = m_flCustomDmg;
 	}
-}
+	else
+	{
+		pSqueak->pev->dmg = sk_snark_dmg_pop.value;
+	}
 
+	EMIT_SOUND_DYN( m_hPlayer->edict(), CHAN_VOICE,
+	                RANDOM_FLOAT ( 0 , 1 ) <= 0.5f ? "squeek/sqk_hunt2.wav" : "squeek/sqk_hunt3.wav",
+	                1.0f, ATTN_NORM, 0, 105, 0, false, g_vecZero );
+	m_fJustThrown = 1;
+
+			m_hPlayer->m_iWeaponVolume = QUIET_GUN_VOLUME;
+	m_flNextPrimaryAttack = gpGlobals->time + 0.3;
+	m_flTimeWeaponIdle = gpGlobals->time + 1.0f;
+
+			m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType]--;
+}
 
 void CSqueak::SecondaryAttack( void )
 {
+	if ( !CanHaveXtra( XTRA_CHUMTOAD, m_hPlayer ) || m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType] < 10 )
+	{
+		m_flNextSecondaryAttack = gpGlobals->time + 1.0f;
+		return;
+	}
 
+	UTIL_MakeVectors( m_hPlayer->pev->v_angle );
+
+	Vector origin = m_hPlayer->pev->origin;
+	TraceResult tr;
+
+	if ( m_hPlayer->pev->flags & FL_DUCKING )
+		origin = origin - ( VEC_HULL_MIN - VEC_DUCK_HULL_MIN );
+
+	UTIL_TraceLine( origin + gpGlobals->v_forward * 48, origin + gpGlobals->v_forward * 96,
+	                dont_ignore_monsters, NULL, &tr );
+
+	if ( tr.fAllSolid || tr.fStartSolid || !( tr.flFraction > 0.75f ) )
+		return;
+
+	CBaseEntity *previous = m_hPlayer->m_hChumtoad;
+
+	if ( previous && FClassnameIs( previous->pev, "monster_chumtoad" ) )
+	{
+		previous->pev->health = -1;
+		previous->Killed( m_hPlayer->pev, GIB_ALWAYS );
+		m_hPlayer->m_hChumtoad = NULL;
+	}
+
+	SendWeaponAnim( SQUEAK_THROW, 0, 0 );
+	m_hPlayer->SetAnimation( PLAYER_ATTACK1 );
+
+	Vector angles( 0, m_hPlayer->pev->v_angle.y, 0 );
+	CBaseEntity *chumtoad = CBaseEntity::Create( "monster_chumtoad", origin + gpGlobals->v_forward * 64,
+	                                             angles, true, m_hPlayer->edict() );
+
+	chumtoad->pev->velocity = gpGlobals->v_forward * 200 + m_hPlayer->pev->velocity;
+	chumtoad->SetClassification( m_hPlayer->Classify() );
+	EMIT_SOUND_DYN( edict(), CHAN_VOICE,
+	                RANDOM_FLOAT( 0, 1 ) <= 0.5f ? "squeek/sqk_hunt2.wav" : "squeek/sqk_hunt3.wav",
+	                1.0f, ATTN_NORM, 0, 105, 0, false, g_vecZero );
+	m_fJustThrown = 1;
+	m_hPlayer->m_iWeaponVolume = QUIET_GUN_VOLUME;
+	m_flNextPrimaryAttack = gpGlobals->time + 0.3;
+	m_flTimeWeaponIdle = gpGlobals->time + 1.0f;
+	m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType] -= 10;
+
+	if ( CanHaveXtra( XTRA_CHUMTOAD_HEALTH, m_hPlayer ) )
+		chumtoad->MyMonsterPointer()->m_iMaxHealth = 333;
+	else
+		chumtoad->MyMonsterPointer()->m_iMaxHealth = 100;
+
+	m_hPlayer->m_hChumtoad = chumtoad;
+	chumtoad->Spawn();
+	chumtoad->pev->spawnflags = 1;
+	m_flNextSecondaryAttack = gpGlobals->time + 1.0f;
 }
-
 
 void CSqueak::WeaponIdle( void )
 {
-	if ( m_flTimeWeaponIdle > UTIL_WeaponTimeBase() )
+	if ( m_flTimeWeaponIdle > gpGlobals->time )
 		return;
 
 	if (m_fJustThrown)
 	{
 		m_fJustThrown = 0;
 
-		if ( !m_pPlayer->m_rgAmmo[PrimaryAmmoIndex()] )
+		if ( !m_hPlayer->m_rgAmmo[PrimaryAmmoIndex()] )
 		{
 			RetireWeapon();
 			return;
 		}
 
-		SendWeaponAnim( SQUEAK_UP );
-		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_pPlayer->random_seed, 10, 15 );
+		SendWeaponAnim( SQUEAK_UP, 0, 0 );
+		m_flTimeWeaponIdle = gpGlobals->time + RANDOM_FLOAT( 10, 15 );
 		return;
 	}
 
 	int iAnim;
-	float flRand = UTIL_SharedRandomFloat( m_pPlayer->random_seed, 0, 1 );
+	float flRand = RANDOM_FLOAT( 0, 1 );
 	if (flRand <= 0.75)
 	{
 		iAnim = SQUEAK_IDLE1;
-		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 30.0 / 16 * (2);
+		m_flTimeWeaponIdle = gpGlobals->time + 30.0 / 16 * (2);
 	}
 	else if (flRand <= 0.875)
 	{
 		iAnim = SQUEAK_FIDGETFIT;
-		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 70.0 / 16.0;
+		m_flTimeWeaponIdle = gpGlobals->time + 70.0 / 16.0;
 	}
 	else
 	{
 		iAnim = SQUEAK_FIDGETNIP;
-		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 80.0 / 16.0;
+		m_flTimeWeaponIdle = gpGlobals->time + 80.0 / 16.0;
 	}
-	SendWeaponAnim( iAnim );
+	SendWeaponAnim( iAnim, 0, 0 );
 }
 
 #endif

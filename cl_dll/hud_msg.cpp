@@ -20,17 +20,24 @@
 #include "cl_util.h"
 #include "parsemsg.h"
 #include "r_efx.h"
-#include "port.h"
+#include "clientobject.h"
+#include "particle_engine.h"
+#include "client_sound.h"
+#include "client_electro.h"
 
 #include "particleman.h"
 extern IParticleMan *g_pParticleMan;
 
+float g_iFogColor[3];
+float g_iStartDist;
+float g_iEndDist;
+
 #define MAX_CLIENTS 32
 
-#if !defined( _TFC )
-extern BEAM *pBeam;
-extern BEAM *pBeam2;
-#endif 
+// SDK PlayCDTrack range: -1 stops playback, 1-30 play media/Half-Life00-29
+// READ_BYTE only returns -1 after a bad read
+#define CDAUDIO_TRACK_STOP	-1
+#define CDAUDIO_MAX_TRACK	30
 
 #if defined( _TFC )
 void ClearEventList( void );
@@ -40,8 +47,6 @@ void ClearEventList( void );
 
 int CHud :: MsgFunc_ResetHUD(const char *pszName, int iSize, void *pbuf )
 {
-	ASSERT( iSize == 0 );
-
 	// clear all hud data
 	HUDLIST *pList = m_pHudList;
 
@@ -56,7 +61,9 @@ int CHud :: MsgFunc_ResetHUD(const char *pszName, int iSize, void *pbuf )
 	m_flMouseSensitivity = 0;
 
 	// reset concussion effect
-	m_iConcussionEffect = 0;
+	m_flConcussionScale = 0;
+	m_flConcussionFrequency = 1;
+	m_flConcussionFadeTime = 0;
 
 	return 1;
 }
@@ -70,6 +77,9 @@ void CHud :: MsgFunc_ViewMode( const char *pszName, int iSize, void *pbuf )
 
 void CHud :: MsgFunc_InitHUD( const char *pszName, int iSize, void *pbuf )
 {
+	g_pObjectHandler.CleanList();
+	DisableElectricEffect( gEngfuncs.GetViewModel() );
+
 	// prepare all hud data
 	HUDLIST *pList = m_pHudList;
 
@@ -87,45 +97,44 @@ void CHud :: MsgFunc_InitHUD( const char *pszName, int iSize, void *pbuf )
 	gEngfuncs.pfnServerCmd("sendevents");
 #endif
 
+	ParticleEngine()->m_bInitialized = false;
+	CClient_SoundEngine::GetSoundEngine()->MapStarted();
+
+	g_iFogColor[0] = g_iFogColor[1] = g_iFogColor[2] = 0;
+	g_iStartDist = g_iEndDist = 0;
+
 	if ( g_pParticleMan )
 		 g_pParticleMan->ResetParticles();
 
-#if !defined( _TFC )
-	//Probably not a good place to put this.
-	pBeam = pBeam2 = NULL;
-#endif
+	char szColor[64];
+
+	UTIL_FormatString( szColor, "con_color \"%d %d %d\"", 180, 220, 255 );
+	gEngfuncs.pfnClientCmd( szColor );
 }
 
-void CHud :: MsgFunc_CdAudio( const char* pszName, int iSize, void* pbuf )
+void CHud::MsgFunc_CdAudio(const char *pszName, int iSize, void *pbuf)
 {
-	char pathBuf[MAX_PATH];
-	char cmdBuf[400];
+	BEGIN_READ(pbuf, iSize);
 
-	BEGIN_READ( pbuf, iSize );
-	int audioNum = READ_BYTE();
+	int iTrack = READ_BYTE();
 
-	if (audioNum > 30)
+	if (iTrack < CDAUDIO_TRACK_STOP || !iTrack || iTrack > CDAUDIO_MAX_TRACK)
 		return;
 
-	if (audioNum <= 0)
+	if (iTrack <= 0)
 	{
-#ifdef RESVEN_FIXES
-		gEngfuncs.pfnClientCmd(";mp3 stop;\n");
-#else
 		gEngfuncs.pfnClientCmd("mp3 stop");
-#endif
+		return;
 	}
-	else
-	{
-		sprintf( pathBuf, "media/Half-Life%02d", audioNum - 1 );
-#ifdef RESVEN_FIXES
-		sprintf( cmdBuf, ";mp3 play %s;\n", pathBuf );
-#else
-		sprintf( cmdBuf, "mp3 play %s", pathBuf );
-#endif
-		gEngfuncs.pfnClientCmd(cmdBuf);
-	}
+
+	char szTrack[260];
+	char szCommand[388];
+
+	UTIL_FormatString(szTrack, "media/Half-Life%02d", iTrack - 1);
+	UTIL_FormatString(szCommand, "mp3 play %s", szTrack);
+	gEngfuncs.pfnClientCmd(szCommand);
 }
+
 
 int CHud :: MsgFunc_GameMode(const char *pszName, int iSize, void *pbuf )
 {
@@ -163,17 +172,66 @@ int CHud :: MsgFunc_Damage(const char *pszName, int iSize, void *pbuf )
 int CHud :: MsgFunc_Concuss( const char *pszName, int iSize, void *pbuf )
 {
 	BEGIN_READ( pbuf, iSize );
-	m_iConcussionEffect = READ_BYTE();
-	if (m_iConcussionEffect)
-		this->m_StatusIcons.EnableIcon("dmg_concuss",255,160,0);
-	else
-		this->m_StatusIcons.DisableIcon("dmg_concuss");
+	m_flConcussionScale = READ_FLOAT();
+	m_flConcussionFrequency = READ_FLOAT();
+	m_flConcussionFadeTime = READ_FLOAT();
 	return 1;
 }
 
-int CHud :: MsgFunc_ClassicMode( const char* pszName, int iSize, void* pbuf )
+int CHud::MsgFunc_VModelPos(const char *pszName, int iSize, void *pbuf)
 {
-	BEGIN_READ( pbuf, iSize );
-	gHUD.m_bClassicMode = READ_BYTE();
+	BEGIN_READ(pbuf, iSize);
+	m_bViewModelPos = READ_BYTE() == 1;
+
+	if (m_bViewModelPos)
+	{
+		m_vecViewModelPos.x = READ_COORD();
+		m_vecViewModelPos.y = READ_COORD();
+		m_vecViewModelPos.z = READ_COORD();
+	}
+
+	return 1;
+}
+
+int CHud::MsgFunc_ClassicMode(const char *pszName, int iSize, void *pbuf)
+{
+	BEGIN_READ(pbuf, iSize);
+	m_bClassicMode = READ_BYTE() != 0;
+
+	return m_bClassicMode;
+}
+
+int CHud::MsgFunc_Fog(const char *pszName, int iSize, void *pbuf)
+{
+	BEGIN_READ(pbuf, iSize);
+	READ_SHORT();
+
+	int enabled = READ_BYTE();
+
+	READ_COORD();
+	READ_COORD();
+	READ_COORD();
+	READ_SHORT();
+
+	float red = READ_BYTE();
+	float green = READ_BYTE();
+	float blue = READ_BYTE();
+	int start = READ_SHORT();
+	int end = READ_SHORT();
+
+	if (enabled)
+	{
+		g_iFogColor[0] = red;
+		g_iFogColor[1] = green;
+		g_iFogColor[2] = blue;
+		g_iStartDist = start;
+		g_iEndDist = end;
+	}
+	else
+	{
+		g_iFogColor[0] = g_iFogColor[1] = g_iFogColor[2] = 0;
+		g_iStartDist = g_iEndDist = -1;
+	}
+
 	return 1;
 }

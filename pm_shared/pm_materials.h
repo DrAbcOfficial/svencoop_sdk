@@ -29,6 +29,6 @@
 #define CHAR_TEX_COMPUTER	'P'
 #define CHAR_TEX_GLASS		'Y'
 #define CHAR_TEX_FLESH		'F'
-#define CHAR_TEX_SNOW		'N'
+#define CHAR_TEX_SNOW		'O'
 
 #endif // !PM_MATERIALSH

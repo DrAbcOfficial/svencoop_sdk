@@ -35,7 +35,7 @@
 #include "vgui_loadtga.h"
 
 // Arrow filenames
-char *sArrowFilenames[] =
+const char *sArrowFilenames[] =
 {
 	"arrowup",
 	"arrowdn", 
@@ -76,33 +76,31 @@ BitmapTGA *LoadTGAForRes( const char* pImageName )
 // All TFC Hud buttons are derived from this one.
 CommandButton::CommandButton( const char* text,int x,int y,int wide,int tall, bool bNoHighlight) : Button("",x,y,wide,tall)
 {
-	m_iPlayerClass = 0;
 	m_bNoHighlight = bNoHighlight;
-	m_bFlat = false;
 	Init();
 	setText( text );
 }
 
 CommandButton::CommandButton( int iPlayerClass, const char* text,int x,int y,int wide,int tall, bool bFlat) : Button("",x,y,wide,tall)
 {
-	m_iPlayerClass = iPlayerClass;
 	m_bNoHighlight = false;
-	m_bFlat = bFlat;
 	Init();
+	m_bFlat = bFlat;
 	setText( text );
 }
 
 CommandButton::CommandButton(const char *text, int x, int y, int wide, int tall, bool bNoHighlight, bool bFlat) : Button("",x,y,wide,tall)
 {
-	m_iPlayerClass = 0;
-	m_bFlat = bFlat;
 	m_bNoHighlight = bNoHighlight;
 	Init();
+	m_bFlat = bFlat;
 	setText( text );
 }
 
 void CommandButton::Init( void )
 {
+	m_bFlat = false;
+	m_bNoBorder = false;
 	m_pSubMenu = NULL;
 	m_pSubLabel = NULL;
 	m_pParentMenu = NULL;
@@ -119,6 +117,7 @@ void CommandButton::Init( void )
 
 	// not bound to any button yet
 	m_cBoundKey = 0;
+	m_bNoKeyPrefix = false;
 }
 
 //-----------------------------------------------------------------------------
@@ -127,34 +126,30 @@ void CommandButton::Init( void )
 //-----------------------------------------------------------------------------
 void CommandButton::RecalculateText( void )
 {
-	char szBuf[128];
+	char szBuf[64];
 
 	if ( m_cBoundKey != 0 )
 	{
-		if ( m_cBoundKey == (char)255 )
-		{
-			strcpy( szBuf, m_sMainText );
+		UTIL_FormatString( szBuf, "  %c  %s", m_cBoundKey, m_sMainText );
 		}
-		else
-		{
-			sprintf( szBuf, "  %c  %s", m_cBoundKey, m_sMainText );
-		}
-		szBuf[MAX_BUTTON_SIZE-1] = 0;
+	else if (m_bNoKeyPrefix)
+	{
+		strncpy(szBuf, m_sMainText, sizeof(szBuf));
 	}
 	else
 	{
 		// just draw a space if no key bound
-		sprintf( szBuf, "     %s", m_sMainText );
-		szBuf[MAX_BUTTON_SIZE-1] = 0;
+		UTIL_FormatString( szBuf, "     %s", m_sMainText );
 	}
 
+	szBuf[sizeof(szBuf) -1] = 0;
 	Button::setText( szBuf );
 }
 
 void CommandButton::setText( const char *text )
 {
-	strncpy( m_sMainText, text, MAX_BUTTON_SIZE );
-	m_sMainText[MAX_BUTTON_SIZE-1] = 0;
+	strncpy( m_sMainText, text, sizeof(m_sMainText));
+	m_sMainText[sizeof(m_sMainText) -1] = 0;
 
 	RecalculateText();
 }
@@ -168,6 +163,12 @@ void CommandButton::setBoundKey( char boundKey )
 char CommandButton::getBoundKey( void )
 {
 	return m_cBoundKey;
+}
+
+void CommandButton::setNoKeyPrefix(bool noPrefix)
+{
+	m_bNoKeyPrefix = noPrefix;
+	RecalculateText();
 }
 
 void CommandButton::AddSubMenu( CCommandMenu *pNewMenu )
@@ -210,18 +211,7 @@ void CommandButton::paint()
 
 void CommandButton::paintBackground()
 {
-	if ( m_bFlat )
-	{
-		if ( isArmed() )
-		{
-			// Orange Border
-			drawSetColor( Scheme::sc_secondary1 );
-			drawOutlinedRect(0,0,_size[0],_size[1]);
-		}
-	}
-	else
-	{
-		if ( isArmed() )
+	if (isArmed() && !m_bFlat)
 		{
 			// Orange highlight background
 			drawSetColor( Scheme::sc_primary2 );
@@ -230,9 +220,10 @@ void CommandButton::paintBackground()
 
 		// Orange Border
 		drawSetColor( Scheme::sc_secondary1 );
+
+	if (!m_bNoBorder)
 		drawOutlinedRect(0,0,_size[0],_size[1]);
 	}
-}
 
 //-----------------------------------------------------------------------------
 // Purpose: Highlights the current button, and all it's parent menus
@@ -293,38 +284,7 @@ void CommandButton::setParentMenu( CCommandMenu *pParentMenu )
 
 
 //===========================================================
-int ClassButton::IsNotValid()
-{
-	// If this is the main ChangeClass button, remove it if the player's only able to be civilians
-	if ( m_iPlayerClass == -1 )
-	{
-		if (gViewPort->GetValidClasses(g_iTeamNumber) == -1)
-			return true;
 
-		return false;
-	}
-
-	// Is it an illegal class?
-#ifdef _TFC
-	if ((gViewPort->GetValidClasses(0) & sTFValidClassInts[ m_iPlayerClass ]) || (gViewPort->GetValidClasses(g_iTeamNumber) & sTFValidClassInts[ m_iPlayerClass ]))
-		return true;
-#endif
-
-	// Only check current class if they've got autokill on
-	bool bAutoKill = CVAR_GET_FLOAT( "hud_classautokill" ) != 0;
-	if ( bAutoKill )
-	{	
-		// Is it the player's current class?
-		if ( 
-#ifdef _TFC
-			(gViewPort->IsRandomPC() && m_iPlayerClass == PC_RANDOM) || 
-#endif
-			(!gViewPort->IsRandomPC() && (m_iPlayerClass == g_iPlayerClass)) )
-			return true;
-	}
-
-	return false;
-}
 
 //===========================================================
 // Button with Class image beneath it
@@ -407,12 +367,7 @@ void CImageLabel::LoadImage(const char * pImageName)
 // Various overloaded paint functions for Custom VGUI objects
 void CCommandMenu::paintBackground()
 {
-	// Transparent black background
-
-	if ( m_iSpectCmdMenu ) 
-		 drawSetColor( 0, 0, 0, 64 );
-	else
-		 drawSetColor(Scheme::sc_primary3);
+	drawSetColor(Scheme::sc_primary3);
 
 	drawFilledRect(0,0,_size[0],_size[1]);
 }

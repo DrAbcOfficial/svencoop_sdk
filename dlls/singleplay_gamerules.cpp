@@ -23,6 +23,8 @@
 #include	"gamerules.h"
 #include	"skill.h"
 #include	"items.h"
+#include "CASServerManager.h"
+#include "CMap.h"
 
 extern DLL_GLOBAL CGameRules	*g_pGameRules;
 extern DLL_GLOBAL BOOL	g_fGameOver;
@@ -35,6 +37,9 @@ extern int gmsgMOTD;
 CHalfLifeRules::CHalfLifeRules( void )
 {
 	RefreshSkillData();
+
+	CASServerManager::GetInstance()->OnMapBegin();
+	CMap::GetInstance()->LoadMapScriptConfigs();
 }
 
 //=========================================================
@@ -85,7 +90,7 @@ BOOL CHalfLifeRules::FShouldSwitchWeapon( CBasePlayer *pPlayer, CBasePlayerItem 
 
 //=========================================================
 //=========================================================
-BOOL CHalfLifeRules :: GetNextBestWeapon( CBasePlayer *pPlayer, CBasePlayerItem *pCurrentWeapon )
+bool CHalfLifeRules :: GetNextBestWeapon( CBasePlayer *pPlayer, CBasePlayerItem *pCurrentWeapon )
 {
 	return FALSE;
 }

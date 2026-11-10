@@ -112,6 +112,8 @@ void CFuncMortarField :: Spawn( void )
 
 void CFuncMortarField :: Precache( void )
 {
+	CBaseEntity::Precache();
+
 	PRECACHE_SOUND ("weapons/mortar.wav");
 	PRECACHE_SOUND ("weapons/mortarhit.wav");
 	PRECACHE_MODEL( "sprites/lgtning.spr" );
@@ -179,7 +181,7 @@ void CFuncMortarField :: FieldUse( CBaseEntity *pActivator, CBaseEntity *pCaller
 		edict_t *pentOwner = NULL;
 		if (pActivator)	pentOwner = pActivator->edict();
 
-		CBaseEntity *pMortar = Create("monster_mortar", tr.vecEndPos, Vector( 0, 0, 0 ), pentOwner );
+		CBaseEntity *pMortar = Create("monster_mortar", tr.vecEndPos, Vector( 0, 0, 0 ), false, pentOwner );
 		pMortar->pev->nextthink = gpGlobals->time + t;
 		t += RANDOM_FLOAT( 0.2, 0.5 );
 

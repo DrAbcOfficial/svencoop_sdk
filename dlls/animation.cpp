@@ -12,15 +12,8 @@
 *   without written permission from Valve LLC.
 *
 ****/
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
-#include "../common/nowin.h"
-
-typedef int BOOL;
-#define TRUE	 1	
-#define FALSE	0
+#include "Platform.h"
 
 // hack into header files that we can ship
 typedef int qboolean;
@@ -255,6 +248,48 @@ void GetSequenceInfo( void *pmodel, entvars_t *pev, float *pflFrameRate, float *
 	}
 }
 
+// The same for the gait sequence, though the range check is on pev->sequence, not the gait sequence
+void GetGaitSequenceInfo( void *pmodel, entvars_t *pev, float *pflFrameRate, float *pflGroundSpeed )
+{
+	studiohdr_t *pstudiohdr = (studiohdr_t *)pmodel;
+
+	if ( !pstudiohdr )
+		return;
+
+	if ( pev->sequence >= pstudiohdr->numseq )
+	{
+		*pflFrameRate = 0.0;
+		*pflGroundSpeed = 0.0;
+		return;
+	}
+
+	mstudioseqdesc_t *pseqdesc = (mstudioseqdesc_t *)( (byte *)pstudiohdr + pstudiohdr->seqindex ) + (int)pev->gaitsequence;
+
+	if ( pseqdesc->numframes > 1 )
+	{
+		*pflFrameRate = 256 * pseqdesc->fps / ( pseqdesc->numframes - 1 );
+		*pflGroundSpeed = sqrt( pseqdesc->linearmovement[0] * pseqdesc->linearmovement[0] + pseqdesc->linearmovement[1] * pseqdesc->linearmovement[1] + pseqdesc->linearmovement[2] * pseqdesc->linearmovement[2] );
+		*pflGroundSpeed = *pflGroundSpeed * pseqdesc->fps / ( pseqdesc->numframes - 1 );
+	}
+	else
+	{
+		*pflFrameRate = 256.0;
+		*pflGroundSpeed = 0.0;
+	}
+}
+
+// Despite the name, this returns the sequence's activity number
+int GetSequenceActivityName( void *pmodel, int iSequence )
+{
+	studiohdr_t *pstudiohdr = (studiohdr_t *)pmodel;
+
+	if ( !pstudiohdr )
+		return 0;
+
+	mstudioseqdesc_t *pseqdesc = (mstudioseqdesc_t *)( (byte *)pstudiohdr + pstudiohdr->seqindex );
+	return pseqdesc[iSequence].activity;
+}
+
 
 int GetSequenceFlags( void *pmodel, entvars_t *pev )
 {
@@ -270,6 +305,25 @@ int GetSequenceFlags( void *pmodel, entvars_t *pev )
 	return pseqdesc->flags;
 }
 
+
+int GetSequenceEventFrame( void *pmodel, int sequence, int eventNumber )
+{
+	studiohdr_t *pstudiohdr = (studiohdr_t *) pmodel;
+
+	if ( !pstudiohdr || sequence < 0 || sequence >= pstudiohdr->numseq )
+		return -1;
+
+	mstudioseqdesc_t *pseqdesc = (mstudioseqdesc_t *) ( (byte *) pstudiohdr + pstudiohdr->seqindex ) + sequence;
+	mstudioevent_t *pevent = (mstudioevent_t *) ( (byte *) pstudiohdr + pseqdesc->eventindex );
+
+	for ( int i = 0; i < pseqdesc->numevents; i++ )
+	{
+		if ( pevent[i].event == eventNumber )
+			return pevent[i].frame;
+	}
+
+	return -1;
+}
 
 int GetAnimationEvent( void *pmodel, entvars_t *pev, MonsterEvent_t *pMonsterEvent, float flStart, float flEnd, int index )
 {

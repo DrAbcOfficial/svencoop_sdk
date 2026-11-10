@@ -23,6 +23,7 @@
 #include "extdll.h"
 #include "util.h"
 #include "cbase.h"
+#include "bmodels.h"
 #include "doors.h"
 
 extern DLL_GLOBAL Vector		g_vecAttackDir;
@@ -50,27 +51,33 @@ Vector VecBModelOrigin( entvars_t* pevBModel )
 /*QUAKED func_wall (0 .5 .8) ?
 This is just a solid wall if not inhibited
 */
-class CFuncWall : public CBaseEntity
-{
-public:
-	void	Spawn( void );
-	void	Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
-
-	// Bmodels don't go across transitions
-	virtual int	ObjectCaps( void ) { return CBaseEntity :: ObjectCaps() & ~FCAP_ACROSS_TRANSITION; }
-};
+#define SF_WALL_KEEP_ANGLES	2
+#define SF_WALL_MOVING		4
 
 LINK_ENTITY_TO_CLASS( func_wall, CFuncWall );
 
 void CFuncWall :: Spawn( void )
 {
-	pev->angles		= g_vecZero;
+	if ( !( pev->spawnflags & SF_WALL_KEEP_ANGLES ) )
+		pev->angles		= g_vecZero;
 	pev->movetype	= MOVETYPE_PUSH;  // so it doesn't get pushed by anything
 	pev->solid		= SOLID_BSP;
-	SET_MODEL( ENT(pev), STRING(pev->model) );
+	SetModel_Intercept( edict(), STRING(pev->model) );
 	
 	// If it can't move/go away, it's really part of the world
 	pev->flags |= FL_WORLDBRUSH;
+
+	if ( pev->spawnflags & SF_WALL_MOVING )
+	{
+		SetThink( &CFuncWall::MoveThink );
+		pev->nextthink = pev->ltime + 10;
+	}
+}
+
+void CFuncWall::MoveThink( void )
+{
+	SetThink( &CFuncWall::MoveThink );
+	pev->nextthink = pev->ltime + 10;
 }
 
 
@@ -82,16 +89,6 @@ void CFuncWall :: Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE u
 
 
 #define SF_WALL_START_OFF		0x0001
-
-class CFuncWallToggle : public CFuncWall
-{
-public:
-	void	Spawn( void );
-	void	Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
-	void	TurnOff( void );
-	void	TurnOn( void );
-	BOOL	IsOn( void );
-};
 
 LINK_ENTITY_TO_CLASS( func_wall_toggle, CFuncWallToggle );
 
@@ -147,6 +144,17 @@ void CFuncWallToggle :: Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_
 class CFuncConveyor : public CFuncWall
 {
 public:
+	void OnSetOriginByMap( void )
+	{
+		if ( pev->spawnflags & SF_CONVEYOR_NOTSOLID )
+			return;
+
+		Vector vecAngles = pev->angles;
+
+		SetMovedir( pev );
+		pev->angles = vecAngles;
+	}
+
 	void	Spawn( void );
 	void	Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
 	void	UpdateSpeed( float speed );
@@ -205,9 +213,17 @@ void CFuncConveyor :: Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TY
 /*QUAKED func_illusionary (0 .5 .8) ?
 A simple entity that looks solid but lets you walk through it.
 */
+#define SF_ILLUSIONARY_KEEP_ANGLES	2
+
 class CFuncIllusionary : public CBaseToggle 
 {
 public:
+	void Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
+	{
+		if ( ShouldToggle( useType, pev->frame != 0 ) )
+			pev->frame = 1 - pev->frame;
+	}
+
 	void Spawn( void );
 	void EXPORT SloshTouch( CBaseEntity *pOther );
 	void KeyValue( KeyValueData *pkvd );
@@ -229,7 +245,8 @@ void CFuncIllusionary :: KeyValue( KeyValueData *pkvd )
 
 void CFuncIllusionary :: Spawn( void )
 {
-	pev->angles = g_vecZero;
+	if ( !( pev->spawnflags & SF_ILLUSIONARY_KEEP_ANGLES ) )
+		pev->angles = g_vecZero;
 	pev->movetype = MOVETYPE_NONE;  
 	pev->solid = SOLID_NOT;// always solid_not 
 	SET_MODEL( ENT(pev), STRING(pev->model) );
@@ -238,35 +255,6 @@ void CFuncIllusionary :: Spawn( void )
 	// these entities after they have been moved to the client, or respawn them ala Quake
 	// Perhaps we can do this in deathmatch only.
 	//	MAKE_STATIC(ENT(pev));
-}
-
-
-// -------------------------------------------------------------------------------
-//
-// Monster only clip brush
-// 
-// This brush will be solid for any entity who has the FL_MONSTERCLIP flag set
-// in pev->flags
-//
-// otherwise it will be invisible and not solid.  This can be used to keep 
-// specific monsters out of certain areas
-//
-// -------------------------------------------------------------------------------
-class CFuncMonsterClip : public CFuncWall
-{
-public:
-	void	Spawn( void );
-	void	Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value ) {}		// Clear out func_wall's use function
-};
-
-LINK_ENTITY_TO_CLASS( func_monsterclip, CFuncMonsterClip );
-
-void CFuncMonsterClip::Spawn( void )
-{
-	CFuncWall::Spawn();
-	if ( CVAR_GET_FLOAT("showtriggers") == 0 )
-		pev->effects = EF_NODRAW;
-	pev->flags |= FL_MONSTERCLIP;
 }
 
 
@@ -285,6 +273,7 @@ public:
 	void EXPORT Rotate( void );
 	void RampPitchVol (int fUp );
 	void Blocked( CBaseEntity *pOther );
+	virtual void UpdateOnRemove( void );
 	virtual int	ObjectCaps( void ) { return CBaseEntity :: ObjectCaps() & ~FCAP_ACROSS_TRANSITION; }
 	virtual int		Save( CSave &save );
 	virtual int		Restore( CRestore &restore );
@@ -446,6 +435,8 @@ void CFuncRotating :: Spawn( )
 
 void CFuncRotating :: Precache( void )
 {
+	CBaseEntity::Precache();
+
 	char* szSoundFile = (char*) STRING(pev->message);
 
 	// set up fan sounds
@@ -550,13 +541,13 @@ void CFuncRotating :: RampPitchVol (int fUp)
 	
 	// get current angular velocity
 
-	vecCur = abs(vecAVel.x != 0 ? vecAVel.x : (vecAVel.y != 0 ? vecAVel.y : vecAVel.z));
+	vecCur = fabs(vecAVel.x != 0 ? vecAVel.x : (vecAVel.y != 0 ? vecAVel.y : vecAVel.z));
 	
 	// get target angular velocity
 
 	vecFinal = (pev->movedir.x != 0 ? pev->movedir.x : (pev->movedir.y != 0 ? pev->movedir.y : pev->movedir.z));
 	vecFinal *= pev->speed;
-	vecFinal = abs(vecFinal);
+	vecFinal = fabs(vecFinal);
 
 	// calc volume and pitch as % of final vol and pitch
 
@@ -592,9 +583,9 @@ void CFuncRotating :: SpinUp( void )
 	vecAVel = pev->avelocity;// cache entity's rotational velocity
 
 	// if we've met or exceeded target speed, set target speed and stop thinking
-	if (	abs(vecAVel.x) >= abs(pev->movedir.x * pev->speed)	&&
-			abs(vecAVel.y) >= abs(pev->movedir.y * pev->speed)	&&
-			abs(vecAVel.z) >= abs(pev->movedir.z * pev->speed) )
+	if (	fabs(vecAVel.x) >= fabs(pev->movedir.x * pev->speed)	&&
+			fabs(vecAVel.y) >= fabs(pev->movedir.y * pev->speed)	&&
+			fabs(vecAVel.z) >= fabs(pev->movedir.z * pev->speed) )
 	{
 		pev->avelocity = pev->movedir * pev->speed;// set speed in case we overshot
 		EMIT_SOUND_DYN(ENT(pev), CHAN_STATIC, (char *)STRING(pev->noiseRunning), 
@@ -714,6 +705,12 @@ void CFuncRotating :: Blocked( CBaseEntity *pOther )
 
 {
 	pOther->TakeDamage( pev, pev, pev->dmg, DMG_CRUSH);
+}
+
+void CFuncRotating::UpdateOnRemove( void )
+{
+	CBaseEntity::UpdateOnRemove();
+	STOP_SOUND( edict(), CHAN_STATIC, STRING( pev->noiseRunning ) );
 }
 
 

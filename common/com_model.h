@@ -16,7 +16,7 @@
 #define STUDIO_EVENTS 2
 
 #define MAX_CLIENTS			32
-#define	MAX_EDICTS			900
+#define	MAX_EDICTS			8192
 
 #define MAX_MODEL_NAME		64
 #define MAX_MAP_HULLS		4
@@ -54,7 +54,7 @@ typedef enum
 
 typedef enum
 {
-	ST_SYNC=0,
+	ST_SYNC = 0,
 	ST_RAND
 } synctype_t;
 
@@ -70,9 +70,9 @@ typedef struct
 } dmodel_t;
 
 // plane_t structure
-typedef struct mplane_s
+typedef struct
 {
-	vec3_t	normal;			// surface normal
+	float	normal[3];			// surface normal
 	float	dist;			// closest appoach to origin
 	byte	type;			// for texture axis selection and fast side tests
 	byte	signbits;		// signx + signy<<1 + signz<<1
@@ -81,7 +81,7 @@ typedef struct mplane_s
 
 typedef struct
 {
-	vec3_t		position;
+	float		position[3];
 } mvertex_t;
 
 typedef struct
@@ -94,6 +94,7 @@ typedef struct texture_s
 {
 	char		name[16];
 	unsigned	width, height;
+	int			gl_texturenum;
 	int			anim_total;				// total tenths in sequence ( 0 = no)
 	int			anim_min, anim_max;		// time for this frame min <=time< max
 	struct texture_s *anim_next;		// in the animation sequence
@@ -112,23 +113,23 @@ typedef struct
 	int			flags;			// sky or slime, no lightmap or 256 subdivision
 } mtexinfo_t;
 
-typedef struct mnode_s
+struct mnode_t
 {
 // common with leaf
 	int			contents;		// 0, to differentiate from leafs
 	int			visframe;		// node needs to be traversed if current
 	
-	short		minmaxs[6];		// for bounding box culling
+	float		minmaxs[6];		// for bounding box culling
 
-	struct mnode_s	*parent;
+	mnode_t*	parent;
 
 // node specific
-	mplane_t	*plane;
-	struct mnode_s	*children[2];	
+	mplane_t*	plane;
+	mnode_t*	children[2];
 
 	unsigned short		firstsurface;
 	unsigned short		numsurfaces;
-} mnode_t;
+};
 
 typedef struct msurface_s	msurface_t;
 typedef struct decal_s		decal_t;
@@ -153,13 +154,13 @@ typedef struct mleaf_s
 	int			contents;		// wil be a negative contents number
 	int			visframe;		// node needs to be traversed if current
 
-	short		minmaxs[6];		// for bounding box culling
+	float		minmaxs[6];		// for bounding box culling
 
-	struct mnode_s	*parent;
+	mnode_t	*parent;
 
 // leaf specific
 	byte		*compressed_vis;
-	struct efrag_s	*efrags;
+	struct efrag_s		*efrags;
 
 	msurface_t	**firstmarksurface;
 	int			nummarksurfaces;
@@ -167,34 +168,33 @@ typedef struct mleaf_s
 	byte		ambient_sound_level[NUM_AMBIENTS];
 } mleaf_t;
 
+struct glpoly_s;
+
 struct msurface_s
 {
 	int			visframe;		// should be drawn when node is crossed
 
-	int			dlightframe;	// last frame the surface was checked by an animated light
-	int			dlightbits;		// dynamically generated. Indicates if the surface illumination 
-								// is modified by an animated light.
-
-	mplane_t	*plane;			// pointer to shared plane			
+	mplane_t	*plane;			// pointer to shared plane
 	int			flags;			// see SURF_ #defines
 
 	int			firstedge;	// look up in model->surfedges[], negative numbers
 	int			numedges;	// are backwards edges
-	
-// surface generation data
-	struct surfcache_s	*cachespots[MIPLEVELS];
 
 	short		texturemins[2]; // smallest s/t position on the surface.
 	short		extents[2];		// ?? s/t texture size, 1..256 for all non-sky surfaces
 
-	mtexinfo_t	*texinfo;		
-	
-// lighting info
-	byte		styles[MAXLIGHTMAPS]; // index into d_lightstylevalue[] for animated lights 
-									  // no one surface can be effected by more than 4 
-									  // animated lights.
+	int			light_s, light_t;	// gl lightmap coordinates
+	glpoly_s	*polys;
+	msurface_t	*texturechain;
+	mtexinfo_t	*texinfo;
+
+	int			dlightframe;	// last frame the surface was checked by an animated light
+	int			dlightbits;		// dynamically modified surface illumination
+	int			lightmaptexturenum;
+	byte		styles[MAXLIGHTMAPS]; // indices into animated light styles
+	int			cached_light[MAXLIGHTMAPS];
+	qboolean	cached_dlight;
 	color24		*samples;
-	
 	decal_t		*pdecals;
 };
 
@@ -210,8 +210,8 @@ typedef struct hull_s
 	mplane_t	*planes;
 	int			firstclipnode;
 	int			lastclipnode;
-	vec3_t		clip_mins;
-	vec3_t		clip_maxs;
+	float		clip_mins[3];
+	float		clip_maxs[3];
 } hull_t;
 
 #if !defined( CACHE_USER ) && !defined( QUAKEDEF_H )
@@ -236,7 +236,7 @@ typedef struct model_s
 //
 // volume occupied by the model
 //		
-	vec3_t		mins, maxs;
+	float		mins[3], maxs[3];
 	float		radius;
 
 //
@@ -301,7 +301,7 @@ typedef struct alight_s
 {
 	int			ambientlight;	// clip at 128
 	int			shadelight;		// clip at 192 - ambientlight
-	vec3_t		color;
+	float		color[3];
 	float		*plightvec;
 } alight_t;
 
@@ -343,7 +343,7 @@ typedef struct player_info_s
 	int		gaitsequence;
 	float	gaitframe;
 	float	gaityaw;
-	vec3_t	prevgaitorigin;
+	float	prevgaitorigin[3];
 
 	customization_t customdata;
 } player_info_t;

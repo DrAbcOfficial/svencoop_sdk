@@ -21,6 +21,7 @@
 // For entityType below
 #define ENTITY_NORMAL		(1<<0)
 #define ENTITY_BEAM			(1<<1)
+#define ENTITY_UNINITIALIZED    (1<<30)
 
 // Entity state is used for the baseline and for delta compression of a packet of 
 //  entities that is sent to a client.
@@ -64,6 +65,7 @@ struct entity_state_s
 	int			body;
 	byte		controller[4];
 	byte		blending[4];
+
 	vec3_t		velocity;
 
 	// Send bbox down to client for use during prediction.
@@ -86,8 +88,10 @@ struct entity_state_s
 	qboolean	spectator;  
 	int         weaponmodel;
 	int			gaitsequence;
+
 	// If standing on conveyor, e.g.
-	vec3_t		basevelocity;   
+	vec3_t		basevelocity; 
+
 	// Use the crouched hull, or the regular player hull.
 	int			usehull;		
 	// Latched buttons last time state updated.
@@ -102,10 +106,11 @@ struct entity_state_s
 	int			weaponanim;
 
 	// Parametric movement overrides
-	vec3_t				startpos;
-	vec3_t				endpos;
-	float				impacttime;
-	float				starttime;
+	vec3_t		startpos;
+	vec3_t		endpos;
+
+	float		impacttime;
+	float		starttime;
 
 	// For mods
 	int			iuser1;
@@ -130,11 +135,15 @@ typedef struct clientdata_s
 	vec3_t				velocity;
 
 	int					viewmodel;
+
 	vec3_t				punchangle;
+
 	int					flags;
 	int					waterlevel;
 	int					watertype;
+
 	vec3_t				view_ofs;
+
 	float				health;
 
 	int					bInDuck;
@@ -187,7 +196,7 @@ typedef struct local_state_s
 {
 	entity_state_t playerstate;
 	clientdata_t   client;
-	weapon_data_t  weapondata[ 64 ];
+	weapon_data_t  weapondata[ 256 ];
 } local_state_t;
 
 #endif // !ENTITY_STATEH

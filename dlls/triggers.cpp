@@ -25,8 +25,24 @@
 #include "cbase.h"
 #include "player.h"
 #include "saverestore.h"
-#include "trains.h"			// trigger_camera has train functionality
 #include "gamerules.h"
+#include "game_persistent_inventory.h"
+#include "effects.h"
+#include "sprite_train.h"
+#include "InventoryRules.h"
+#include "EntityHandle.h"
+#include "user_messages.h"
+#include "teleportdestination.h"
+#include "trains.h"
+
+#define	SF_TRIG_PUSH_ALLOW_PUSHABLES	4
+#define	SF_TRIG_PUSH_NO_CLIENTS		8
+#define	SF_TRIG_PUSH_NO_MONSTERS	16
+#define	SF_TRIG_PUSH_LIMIT			64
+
+#define	TRIGGER_PUSH_MODE_BASEVELOCITY	0
+#define	TRIGGER_PUSH_MODE_LIMIT			1
+#define	TRIGGER_PUSH_MODE_SET			2
 
 #define	SF_TRIGGER_PUSH_START_OFF	2//spawnflag that makes trigger_push spawn turned OFF
 #define SF_TRIGGER_HURT_TARGETONCE	1// Only fire hurt target once
@@ -34,6 +50,11 @@
 #define	SF_TRIGGER_HURT_NO_CLIENTS	8//spawnflag that makes trigger_push spawn turned OFF
 #define SF_TRIGGER_HURT_CLIENTONLYFIRE	16// trigger hurt will only fire its target if it is hurting a client
 #define SF_TRIGGER_HURT_CLIENTONLYTOUCH 32// only clients may touch this trigger.
+#define SF_TRIGGER_HURT_NON_MOVING 64// also hurts monsters that stand still inside the trigger
+
+#define SF_TRIGGER_EVERYTHING_ELSE 8
+#define SF_TRIGGER_FIRE_ON_ENTER 16
+#define SF_TRIGGER_FIRE_ON_EXIT 32
 
 extern DLL_GLOBAL BOOL		g_fGameOver;
 
@@ -186,6 +207,7 @@ void CAutoTrigger::Think( void )
 
 
 #define SF_RELAY_FIREONCE		0x0001
+#define SF_RELAY_USE_ACTIVATOR	0x0040
 
 class CTriggerRelay : public CBaseDelay
 {
@@ -202,21 +224,28 @@ public:
 
 private:
 	USE_TYPE	triggerType;
+	float		m_flTriggerValue;
+	float		m_flDelayBeforeReset;
+	float		m_flNextFireTime;
 };
 LINK_ENTITY_TO_CLASS( trigger_relay, CTriggerRelay );
 
 TYPEDESCRIPTION	CTriggerRelay::m_SaveData[] = 
 {
 	DEFINE_FIELD( CTriggerRelay, triggerType, FIELD_INTEGER ),
+	DEFINE_FIELD( CTriggerRelay, m_flTriggerValue, FIELD_FLOAT ),
+	DEFINE_FIELD( CTriggerRelay, m_flDelayBeforeReset, FIELD_FLOAT ),
+	DEFINE_FIELD( CTriggerRelay, m_flNextFireTime, FIELD_TIME ),
 };
 
 IMPLEMENT_SAVERESTORE(CTriggerRelay,CBaseDelay);
 
 void CTriggerRelay::KeyValue( KeyValueData *pkvd )
 {
-	if (FStrEq(pkvd->szKeyName, "triggerstate"))
+	if (FStrEq(pkvd->szKeyName, "triggerstate") || FStrEq(pkvd->szKeyName, "value"))
 	{
 		int type = atoi( pkvd->szValue );
+
 		switch( type )
 		{
 		case 0:
@@ -225,10 +254,27 @@ void CTriggerRelay::KeyValue( KeyValueData *pkvd )
 		case 2:
 			triggerType = USE_TOGGLE;
 			break;
+		case 3:
+			triggerType = USE_SET;
+			break;
+		case 4:
+			triggerType = USE_KILL;
+			break;
 		default:
 			triggerType = USE_ON;
 			break;
 		}
+
+		pkvd->fHandled = TRUE;
+	}
+	else if ( !stricmp( pkvd->szKeyName, "triggervalue" ) )
+	{
+		m_flTriggerValue = atof( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if ( !stricmp( pkvd->szKeyName, "m_flDelayBeforeReset" ) )
+	{
+		m_flDelayBeforeReset = V_max( 0.0f, (float) atof( pkvd->szValue ) );
 		pkvd->fHandled = TRUE;
 	}
 	else
@@ -238,6 +284,11 @@ void CTriggerRelay::KeyValue( KeyValueData *pkvd )
 
 void CTriggerRelay::Spawn( void )
 {
+	if ( FStrEq( STRING( pev->target ), STRING( pev->targetname ) ) )
+	{
+		ALERT( at_error, "[trigger_relay] %s: target == targetname, clearing the target to avoid recursion.\n", STRING( pev->targetname ) );
+		pev->target = 0;
+	}
 }
 
 
@@ -245,9 +296,15 @@ void CTriggerRelay::Spawn( void )
 
 void CTriggerRelay::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
 {
-	SUB_UseTargets( this, triggerType, 0 );
+	if ( gpGlobals->time < m_flNextFireTime )
+		return;
+
+	SUB_UseTargets( ( pev->spawnflags & SF_RELAY_USE_ACTIVATOR ) ? pActivator : this, triggerType, m_flTriggerValue );
+
 	if ( pev->spawnflags & SF_RELAY_FIREONCE )
 		UTIL_Remove( this );
+	else
+		m_flNextFireTime = gpGlobals->time + m_flDelayBeforeReset;
 }
 
 
@@ -286,6 +343,7 @@ public:
 	float	m_startTime;// Time we started firing
 	int		m_iTargetName	[ MAX_MULTI_TARGETS ];// list if indexes into global string array
 	float	m_flTargetDelay [ MAX_MULTI_TARGETS ];// delay (in seconds) from time of manager fire to target fire
+	int		m_iTargetUseType [ MAX_MULTI_TARGETS ];// trigger state sent to each target
 private:
 	inline BOOL IsClone( void ) { return (pev->spawnflags & SF_MULTIMAN_CLONE) ? TRUE : FALSE; }
 	inline BOOL ShouldClone( void ) 
@@ -308,6 +366,7 @@ TYPEDESCRIPTION	CMultiManager::m_SaveData[] =
 	DEFINE_FIELD( CMultiManager, m_startTime, FIELD_TIME ),
 	DEFINE_ARRAY( CMultiManager, m_iTargetName, FIELD_STRING, MAX_MULTI_TARGETS ),
 	DEFINE_ARRAY( CMultiManager, m_flTargetDelay, FIELD_FLOAT, MAX_MULTI_TARGETS ),
+	DEFINE_ARRAY( CMultiManager, m_iTargetUseType, FIELD_INTEGER, MAX_MULTI_TARGETS ),
 };
 
 IMPLEMENT_SAVERESTORE(CMultiManager,CBaseToggle);
@@ -327,16 +386,54 @@ void CMultiManager :: KeyValue( KeyValueData *pkvd )
 	else // add this field to the target list
 	{
 		// this assumes that additional fields are targetnames and their values are delay values.
-		if ( m_cTargets < MAX_MULTI_TARGETS )
+		if ( m_cTargets >= MAX_MULTI_TARGETS )
 		{
-			char tmp[128];
-
-			UTIL_StripToken( pkvd->szKeyName, tmp );
-			m_iTargetName [ m_cTargets ] = ALLOC_STRING( tmp );
-			m_flTargetDelay [ m_cTargets ] = atof (pkvd->szValue);
-			m_cTargets++;
-			pkvd->fHandled = TRUE;
+			ALERT( at_console, "[Multi_manager] %s: Exceeded the maximum targets allowed (%d).\n", STRING( pev->targetname ), MAX_MULTI_TARGETS );
+			return;
 		}
+
+		char tmp[512];
+
+		UTIL_StripToken( pkvd->szKeyName, tmp, sizeof( tmp ) );
+		m_iTargetName [ m_cTargets ] = ALLOC_STRING( tmp );
+
+		const char *pszUseType = strchr( pkvd->szValue, '#' );
+
+		if ( pszUseType )
+		{
+			// "delay#state", the state is a single digit
+			char szUseType[2];
+
+			UTIL_StripToken( pkvd->szValue, tmp, sizeof( tmp ) );
+			m_flTargetDelay [ m_cTargets ] = atof( tmp );
+
+			szUseType[0] = pszUseType[1];
+			szUseType[1] = 0;
+
+			switch ( atoi( szUseType ) )
+			{
+			case 0:
+				m_iTargetUseType [ m_cTargets ] = USE_OFF;
+				break;
+			case 1:
+				m_iTargetUseType [ m_cTargets ] = USE_ON;
+				break;
+			case 2:
+				m_iTargetUseType [ m_cTargets ] = USE_KILL;
+				break;
+			default:
+				m_iTargetUseType [ m_cTargets ] = USE_TOGGLE;
+				break;
+			}
+		}
+		else
+		{
+			m_flTargetDelay [ m_cTargets ] = atof( pkvd->szValue );
+			m_iTargetUseType [ m_cTargets ] = USE_TOGGLE;
+		}
+
+		m_cTargets++;
+		pkvd->fHandled = TRUE;
 	}
 }
 
@@ -361,10 +458,13 @@ void CMultiManager :: Spawn( void )
 				// Swap out of order elements
 				int name = m_iTargetName[i];
 				float delay = m_flTargetDelay[i];
+				int useType = m_iTargetUseType[i];
 				m_iTargetName[i] = m_iTargetName[i-1];
 				m_flTargetDelay[i] = m_flTargetDelay[i-1];
+				m_iTargetUseType[i] = m_iTargetUseType[i-1];
 				m_iTargetName[i-1] = name;
 				m_flTargetDelay[i-1] = delay;
+				m_iTargetUseType[i-1] = useType;
 				swapped = 1;
 			}
 		}
@@ -391,7 +491,23 @@ void CMultiManager :: ManagerThink ( void )
 	time = gpGlobals->time - m_startTime;
 	while ( m_index < m_cTargets && m_flTargetDelay[ m_index ] <= time )
 	{
-		FireTargets( STRING( m_iTargetName[ m_index ] ), m_hActivator, this, USE_TOGGLE, 0 );
+		if ( m_iTargetUseType[ m_index ] == USE_KILL )
+		{
+			edict_t *pentTarget = NULL;
+
+			while ( !FNullEnt( pentTarget = FIND_ENTITY_BY_TARGETNAME( pentTarget, STRING( m_iTargetName[ m_index ] ) ) ) )
+			{
+				CBaseEntity *pTarget = CBaseEntity::Instance( pentTarget );
+
+				if ( pTarget && !FBitSet( pTarget->pev->flags, FL_KILLME ) )
+					UTIL_Remove( pTarget );
+			}
+		}
+		else
+		{
+			FireTargets( STRING( m_iTargetName[ m_index ] ), m_hActivator, this, (USE_TYPE) m_iTargetUseType[ m_index ], 0 );
+		}
+
 		m_index++;
 	}
 
@@ -421,6 +537,7 @@ CMultiManager *CMultiManager::Clone( void )
 	pMulti->m_cTargets = m_cTargets;
 	memcpy( pMulti->m_iTargetName, m_iTargetName, sizeof( m_iTargetName ) );
 	memcpy( pMulti->m_flTargetDelay, m_flTargetDelay, sizeof( m_flTargetDelay ) );
+	memcpy( pMulti->m_iTargetUseType, m_iTargetUseType, sizeof( m_iTargetUseType ) );
 
 	return pMulti;
 }
@@ -476,47 +593,110 @@ void CMultiManager :: ManagerReport ( void )
 #define SF_RENDER_MASKAMT	(1<<1)
 #define SF_RENDER_MASKMODE	(1<<2)
 #define SF_RENDER_MASKCOLOR	(1<<3)
+#define SF_RENDER_CONTINUOUS ( 1 << 4 )
 
 class CRenderFxManager : public CBaseEntity
 {
 public:
 	void Spawn( void );
 	void Use ( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
+	void SetRenderProperties( CBaseEntity *pTarget );
+	void EXPORT EffectThink( void );
 };
 
 LINK_ENTITY_TO_CLASS( env_render, CRenderFxManager );
 
-
 void CRenderFxManager :: Spawn ( void )
 {
 	pev->solid = SOLID_NOT;
+
+	if ( FBitSet( pev->spawnflags, SF_RENDER_CONTINUOUS ) )
+	{
+		SetThink( &CRenderFxManager::EffectThink );
+		pev->nextthink = gpGlobals->time + 0.1f;
+	}
+}
+
+void CRenderFxManager::EffectThink( void )
+{
+	Use( NULL, NULL, USE_TOGGLE, 1.0f );
+	pev->nextthink = gpGlobals->time + 0.1f;
 }
 
 void CRenderFxManager :: Use ( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
 {
-	if (!FStringNull(pev->target))
-	{
-		edict_t* pentTarget	= NULL;
-		while ( 1 )
-		{
-			pentTarget = FIND_ENTITY_BY_TARGETNAME(pentTarget, STRING(pev->target));
-			if (FNullEnt(pentTarget))
-				break;
+	if ( FStringNull(pev->target))
+		return;
 
-			entvars_t *pevTarget = VARS( pentTarget );
-			if ( !FBitSet( pev->spawnflags, SF_RENDER_MASKFX ) )
-				pevTarget->renderfx = pev->renderfx;
-			if ( !FBitSet( pev->spawnflags, SF_RENDER_MASKAMT ) )
-				pevTarget->renderamt = pev->renderamt;
-			if ( !FBitSet( pev->spawnflags, SF_RENDER_MASKMODE ) )
-				pevTarget->rendermode = pev->rendermode;
-			if ( !FBitSet( pev->spawnflags, SF_RENDER_MASKCOLOR ) )
-				pevTarget->rendercolor = pev->rendercolor;
+	if ( FStrEq( STRING( pev->target ), "!activator" ) )
+	{
+		SetRenderProperties( pActivator );
+		return;
+	}
+
+	if ( FStrEq( STRING( pev->target ), "!caller" ) )
+	{
+		SetRenderProperties( pCaller );
+		return;
+	}
+
+	CBaseEntity * pentTarget	= NULL;
+
+	for ( ;; )
+	{
+		if ( pev->frags <= 0 )
+			pentTarget = UTIL_FindEntityByTargetname(pentTarget, STRING(pev->target));
+		else
+			pentTarget = UTIL_FindEntityInSphere( pentTarget, pev->origin, pev->frags, STRING( pev->target ), "targetname" );
+			if ( !pentTarget )
+			return;
+			if ( !pentTarget->IsAlive() && pev->frags > 0 )
+			return;
+
+		SetRenderProperties( pentTarget );
 		}
+	}
+
+void CRenderFxManager::SetRenderProperties( CBaseEntity *pTarget )
+{
+	if ( !pTarget )
+		return;
+
+	if ( FClassnameIs( pTarget->pev, "env_spritetrain" ) )
+		pTarget = static_cast<CSpriteTrain *>( pTarget )->m_hSprite;
+
+	if ( !FBitSet( pev->spawnflags, SF_RENDER_MASKMODE ) )
+	{
+		pTarget->pev->rendermode = pev->rendermode;
+		pTarget->m_iOriginalRenderMode = pev->rendermode;
+	}
+
+	if ( !FBitSet( pev->spawnflags, SF_RENDER_MASKFX ) )
+	{
+		pTarget->pev->renderfx = pev->renderfx;
+		pTarget->m_iOriginalRenderFX = pev->renderfx;
+	}
+
+	if ( !FBitSet( pev->spawnflags, SF_RENDER_MASKAMT ) )
+	{
+		pTarget->pev->renderamt = pev->renderamt;
+		pTarget->m_flOriginalRenderAmount = pev->renderamt;
+	}
+
+	if ( !FBitSet( pev->spawnflags, SF_RENDER_MASKCOLOR ) )
+	{
+		pTarget->pev->rendercolor = pev->rendercolor;
+		pTarget->m_vecOriginalRenderColor = pev->rendercolor;
 	}
 }
 
+struct CTriggerActivator
+{
+	CTriggerActivator() : m_pNext( NULL ) {}
 
+	EntityHandle<CBaseEntity>	m_hEntity;
+	CTriggerActivator		   *m_pNext;
+};
 
 class CBaseTrigger : public CBaseToggle
 {
@@ -527,12 +707,17 @@ public:
 	void EXPORT HurtTouch ( CBaseEntity *pOther );
 	void EXPORT CDAudioTouch ( CBaseEntity *pOther );
 	void ActivateMultiTrigger( CBaseEntity *pActivator );
+	bool FireMultiTrigger( CBaseEntity *pActivator );
 	void EXPORT MultiWaitOver( void );
 	void EXPORT CounterUse( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
 	void EXPORT ToggleUse ( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
 	void InitTrigger( void );
 
 	virtual int	ObjectCaps( void ) { return CBaseToggle :: ObjectCaps() & ~FCAP_ACROSS_TRANSITION; }
+
+	float					m_flNextTriggerTime;
+	bool					m_fTinyMonsters;
+	CTriggerActivator	   *m_pActivators;
 };
 
 LINK_ENTITY_TO_CLASS( trigger, CBaseTrigger );
@@ -553,6 +738,8 @@ void CBaseTrigger::InitTrigger( )
 	SET_MODEL(ENT(pev), STRING(pev->model));    // set size and link into world
 	if ( CVAR_GET_FLOAT("showtriggers") == 0 )
 		SetBits( pev->effects, EF_NODRAW );
+
+	m_fTinyMonsters = false;
 }
 
 
@@ -577,6 +764,11 @@ void CBaseTrigger :: KeyValue( KeyValueData *pkvd )
 		m_bitsDamageInflict = atoi(pkvd->szValue);
 		pkvd->fHandled = TRUE;
 	}
+	else if ( FStrEq( pkvd->szKeyName, "tiny_monsters" ) )
+	{
+		m_fTinyMonsters = atoi( pkvd->szValue ) != 0;
+		pkvd->fHandled = TRUE;
+	}
 	else
 		CBaseToggle::KeyValue( pkvd );
 }
@@ -585,10 +777,35 @@ class CTriggerHurt : public CBaseTrigger
 {
 public:
 	void Spawn( void );
+	void Think( void );
 	void EXPORT RadiationThink( void );
+
+	float m_flNextRadiationThink;
 };
 
 LINK_ENTITY_TO_CLASS( trigger_hurt, CTriggerHurt );
+
+class CTriggerGeneWormHit : public CTriggerHurt
+{
+public:
+	void Spawn( void );
+	void Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
+	int ObjectCaps( void ) { return 0; }
+};
+
+LINK_ENTITY_TO_CLASS( trigger_geneworm_hit, CTriggerGeneWormHit );
+
+void CTriggerGeneWormHit::Spawn( void )
+{
+	pev->dmg = 20.0f;
+	CTriggerHurt::Spawn();
+}
+
+void CTriggerGeneWormHit::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
+{
+	if ( m_pfnUse )
+		( this->*m_pfnUse )( pActivator, pCaller, useType, value );
+}
 
 //
 // trigger_monsterjump
@@ -663,7 +880,7 @@ public:
 	void Spawn( void );
 
 	virtual void Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
-	void PlayTrack( void );
+	void Play( void );
 	void Touch ( CBaseEntity *pOther );
 };
 
@@ -680,7 +897,7 @@ void CTriggerCDAudio :: Touch ( CBaseEntity *pOther )
 		return;
 	}
 
-	PlayTrack();
+	Play();
 }
 
 void CTriggerCDAudio :: Spawn( void )
@@ -690,44 +907,31 @@ void CTriggerCDAudio :: Spawn( void )
 
 void CTriggerCDAudio::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
 {
-	PlayTrack();
+	Play();
 }
 
-void PlayCDTrack( int iTrack )
+void PlayCDTrack( int iTrack, CBaseEntity *pActivator )
 {
-	edict_t *pClient;
-	
-	// manually find the single player. 
-	pClient = g_engfuncs.pfnPEntityOfEntIndex( 1 );
-	
-	// Can't play if the client is not connected!
-	if ( !pClient )
-		return;
-
-	if ( iTrack < -1 || iTrack > 30 )
+	if ( iTrack == 0 || iTrack < -1 || iTrack > 30 )
 	{
-		ALERT ( at_console, "TriggerCDAudio - Track %d out of range\n" );
+		ALERT ( at_warning, "[CD Audio] Track %d out of range, must be 1-30 (or -1 to stop).\n", iTrack );
 		return;
 	}
 
-	if ( iTrack == -1 )
-	{
-		CLIENT_COMMAND ( pClient, "cd stop\n");
-	}
+	if ( pActivator && pActivator->IsPlayer() )
+		MESSAGE_BEGIN( MSG_ONE, gmsgCdAudio, pActivator->pev->origin, pActivator->edict() );
 	else
-	{
-		char string [ 64 ];
+		MESSAGE_BEGIN( MSG_ALL, gmsgCdAudio );
 
-		sprintf( string, "cd play %3d\n", iTrack );
-		CLIENT_COMMAND ( pClient, string);
+	WRITE_BYTE( iTrack > 0 ? iTrack : -1 );
+	MESSAGE_END();
 	}
-}
 
 
 // only plays for ONE client, so only use in single play!
-void CTriggerCDAudio :: PlayTrack( void )
+void CTriggerCDAudio :: Play( void )
 {
-	PlayCDTrack( (int)pev->health );
+	PlayCDTrack( (int)pev->health, NULL );
 	
 	SetTouch( NULL );
 	UTIL_Remove( this );
@@ -743,7 +947,9 @@ public:
 
 	virtual void	Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
 	void			Think( void );
-	void			Play( void );
+	void			Play( CBaseEntity *pActivator = NULL );
+
+	bool			m_bActive;
 };
 
 LINK_ENTITY_TO_CLASS( target_cdaudio, CTargetCDAudio );
@@ -764,38 +970,80 @@ void CTargetCDAudio :: Spawn( void )
 	pev->solid = SOLID_NOT;
 	pev->movetype = MOVETYPE_NONE;
 
-	if ( pev->scale > 0 )
-		pev->nextthink = gpGlobals->time + 1.0;
+	m_bActive = false;
 }
 
 void CTargetCDAudio::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
 {
-	Play();
+	switch ( useType )
+	{
+	case USE_OFF:
+		m_bActive = false;
+		break;
+
+	case USE_ON:
+		m_bActive = true;
+		break;
+
+	case USE_SET:
+		pev->health = (int) value;
+		m_bActive = true;
+		break;
+
+	case USE_TOGGLE:
+		m_bActive = !m_bActive;
+		break;
+
+	case USE_KILL:
+		SetThink( NULL );
+		UTIL_Remove( this );
+		break;
+
+	default:
+		break;
+	}
+
+	pev->nextthink = gpGlobals->time + 0.01;
 }
 
-// only plays for ONE client, so only use in single play!
 void CTargetCDAudio::Think( void )
 {
-	edict_t *pClient;
-	
-	// manually find the single player. 
-	pClient = g_engfuncs.pfnPEntityOfEntIndex( 1 );
-	
-	// Can't play if the client is not connected!
-	if ( !pClient )
+	if ( !m_bActive )
+	{
+		SetThink( NULL );
 		return;
-	
+	}
+
+	bool fPlayed = false;
+
+	for ( int i = 1; i <= gpGlobals->maxClients; ++i )
+	{
+		CBaseEntity *pPlayer = UTIL_PlayerByIndex( i );
+
+		if ( !pPlayer )
+			continue;
+
+		if ( pev->scale > 0 && pev->scale < ( pPlayer->pev->origin - pev->origin ).Length() )
+			continue;
+
+		PlayCDTrack( (int) pev->health, pPlayer );
+		fPlayed = true;
+	}
+
+	if ( fPlayed )
+	{
+		m_bActive = false;
+		SetThink( NULL );
+		UTIL_Remove( this );
+	}
+
 	pev->nextthink = gpGlobals->time + 0.5;
-
-	if ( (pClient->v.origin - pev->origin).Length() <= pev->scale )
-		Play();
-
 }
 
-void CTargetCDAudio::Play( void ) 
-{ 
-	PlayCDTrack( (int)pev->health );
-	UTIL_Remove(this); 
+void CTargetCDAudio::Play( CBaseEntity *pActivator )
+{
+	PlayCDTrack( (int)pev->health, pActivator );
+	UTIL_Remove(this);
 }
 
 //=====================================
@@ -809,26 +1057,44 @@ void CTriggerHurt :: Spawn( void )
 {
 	InitTrigger();
 	SetTouch ( &CTriggerHurt::HurtTouch );
-
-	if ( !FStringNull ( pev->targetname ) )
-	{
-		SetUse ( &CTriggerHurt::ToggleUse );
-	}
-	else
-	{
-		SetUse ( NULL );
-	}
-
-	if (m_bitsDamageInflict & DMG_RADIATION)
-	{
-		SetThink ( &CTriggerHurt::RadiationThink );
-		pev->nextthink = gpGlobals->time + RANDOM_FLOAT(0.0, 0.5); 
-	}
+	SetUse( pev->targetname ? &CTriggerHurt::ToggleUse : NULL );
+	SetThink( NULL );
+	m_flNextRadiationThink = gpGlobals->time + 0.1f;
+		pev->nextthink = m_flNextRadiationThink;
 
 	if ( FBitSet (pev->spawnflags, SF_TRIGGER_HURT_START_OFF) )// if flagged to Start Turned Off, make trigger nonsolid.
 		pev->solid = SOLID_NOT;
 
 	UTIL_SetOrigin( pev, pev->origin );		// Link into the list
+}
+
+void CTriggerHurt::Think( void )
+{
+	int count = 0;
+
+	if ( pev->solid == SOLID_TRIGGER && FBitSet( pev->spawnflags, SF_TRIGGER_HURT_NON_MOVING ) )
+	{
+		CBaseEntity *entities[256];
+
+		memset( entities, 0, sizeof( entities ) );
+		count = UTIL_EntitiesInBox( entities, ARRAYSIZE( entities ), pev->absmin, pev->absmax, FL_MONSTER );
+
+		for ( int i = 0; i < count; ++i )
+		{
+			CBaseEntity *entity = entities[i];
+
+			if ( entity && entity->pev->solid != SOLID_NOT && entity->IsAlive() )
+				HurtTouch( entity );
+		}
+	}
+
+	if ( ( m_bitsDamageInflict & DMG_RADIATION ) && gpGlobals->time >= m_flNextRadiationThink )
+	{
+		RadiationThink();
+		m_flNextRadiationThink = gpGlobals->time + RANDOM_FLOAT( 0.05f, 0.5f );
+	}
+
+	pev->nextthink = gpGlobals->time + ( count > 0 ? 0.01 : 0.05 );
 }
 
 // trigger hurt that causes radiation will do a radius
@@ -837,58 +1103,39 @@ void CTriggerHurt :: Spawn( void )
 
 void CTriggerHurt :: RadiationThink( void )
 {
+	m_flNextRadiationThink = gpGlobals->time + 0.25f;
 
-	edict_t *pentPlayer;
-	CBasePlayer *pPlayer = NULL;
-	float flRange;
-	entvars_t *pevTarget;
-	Vector vecSpot1;
-	Vector vecSpot2;
-	Vector vecRange;
-	Vector origin;
-	Vector view_ofs;
-
-	// check to see if a player is in pvs
-	// if not, continue	
-
-	// set origin to center of trigger so that this check works
-	origin = pev->origin;
-	view_ofs = pev->view_ofs;
+	Vector origin = pev->origin;
+	Vector viewOffset = pev->view_ofs;
 
 	pev->origin = (pev->absmin + pev->absmax) * 0.5;
 	pev->view_ofs = pev->view_ofs * 0.0;
 
-	pentPlayer = FIND_CLIENT_IN_PVS(edict());
+	edict_t *pentPlayer = FIND_CLIENT_IN_PVS(edict());
 
 	pev->origin = origin;
-	pev->view_ofs = view_ofs;
+	pev->view_ofs = viewOffset;
 
 	// reset origin
 
 	if (!FNullEnt(pentPlayer))
 	{
- 
-		pPlayer = GetClassPtr( (CBasePlayer *)VARS(pentPlayer));
+		CBasePlayer *pPlayer = GetClassPtr( (CBasePlayer *)VARS(pentPlayer));
 
-		pevTarget = VARS(pentPlayer);
-
-		// get range to player;
-
-		vecSpot1 = (pev->absmin + pev->absmax) * 0.5;
-		vecSpot2 = (pevTarget->absmin + pevTarget->absmax) * 0.5;
-		
-		vecRange = vecSpot1 - vecSpot2;
-		flRange = vecRange.Length();
+		if ( !pPlayer->IsObserver() )
+		{
+			Vector triggerCenter = (pev->absmin + pev->absmax) * 0.5;
+			Vector playerCenter = ( pentPlayer->v.absmin + pentPlayer->v.absmax) * 0.5;
+			float flRange = ( triggerCenter - playerCenter ).Length();
 
 		// if player's current geiger counter range is larger
 		// than range to this trigger hurt, reset player's
-		// geiger counter range 
+		// geiger counter range
 
 		if (pPlayer->m_flgeigerRange >= flRange)
 			pPlayer->m_flgeigerRange = flRange;
 	}
-
-	pev->nextthink = gpGlobals->time + 0.25;
+	}
 }
 
 //
@@ -927,6 +1174,9 @@ void CBaseTrigger :: HurtTouch ( CBaseEntity *pOther )
 	if ( (pev->spawnflags & SF_TRIGGER_HURT_NO_CLIENTS) && pOther->IsPlayer() )
 		return;
 
+	if ( m_pInventoryRules->CanUseTrigger( pOther, true ) )
+		return;
+
 	// HACKHACK -- In multiplayer, players touch this based on packet receipt.
 	// So the players who send packets later aren't always hurt.  Keep track of
 	// how much time has passed and whether or not you've touched that player
@@ -936,43 +1186,23 @@ void CBaseTrigger :: HurtTouch ( CBaseEntity *pOther )
 		{
 			if ( gpGlobals->time != pev->pain_finished )
 			{// too early to hurt again, and not same frame with a different entity
-				if ( pOther->IsPlayer() )
-				{
-					int playerMask = 1 << (pOther->entindex() - 1);
-
-					// If I've already touched this player (this time), then bail out
-					if ( pev->impulse & playerMask )
-						return;
-
-					// Mark this player as touched
-					// BUGBUG - There can be only 32 players!
-					pev->impulse |= playerMask;
-				}
-				else
-				{
+				if ( !pOther->IsPlayer() )
 					return;
-				}
-			}
-		}
-		else
-		{
-			// New clock, "un-touch" all players
-			pev->impulse = 0;
-			if ( pOther->IsPlayer() )
-			{
-				int playerMask = 1 << (pOther->entindex() - 1);
 
 				// Mark this player as touched
 				// BUGBUG - There can be only 32 players!
-				pev->impulse |= playerMask;
+				pev->impulse |= 1 << (pOther->entindex() - 1);
+				return;
 			}
+
+			// If I've already touched this entity (this time), then bail out
+			if ( pev->impulse & ( 1 << (pOther->entindex() - 1) ) )
+				return;
 		}
-	}
-	else	// Original code -- single player
-	{
-		if ( pev->dmgtime > gpGlobals->time && gpGlobals->time != pev->pain_finished )
-		{// too early to hurt again, and not same frame with a different entity
-			return;
+		else if ( gpGlobals->time > pev->pain_finished )
+		{
+			// New clock, "un-touch" all players
+			pev->impulse = 0;
 		}
 	}
 
@@ -1011,6 +1241,8 @@ void CBaseTrigger :: HurtTouch ( CBaseEntity *pOther )
 
 	// Apply damage every half second
 	pev->dmgtime = gpGlobals->time + 0.5;// half second delay until this trigger can hurt toucher again
+
+	pev->impulse |= 1 << (pOther->entindex() - 1);
 
   
 	
@@ -1056,34 +1288,11 @@ public:
 
 LINK_ENTITY_TO_CLASS( trigger_multiple, CTriggerMultiple );
 
-
 void CTriggerMultiple :: Spawn( void )
 {
-	if (m_flWait == 0)
-		m_flWait = 0.2;
-
 	InitTrigger();
-
-	ASSERTSZ(pev->health == 0, "trigger_multiple with health");
-//	UTIL_SetOrigin(pev, pev->origin);
-//	SET_MODEL( ENT(pev), STRING(pev->model) );
-//	if (pev->health > 0)
-//		{
-//		if (FBitSet(pev->spawnflags, SPAWNFLAG_NOTOUCH))
-//			ALERT(at_error, "trigger_multiple spawn: health and notouch don't make sense");
-//		pev->max_health = pev->health;
-//UNDONE: where to get pfnDie from?
-//		pev->pfnDie = multi_killed;
-//		pev->takedamage = DAMAGE_YES;
-//		pev->solid = SOLID_BBOX;
-//		UTIL_SetOrigin(pev, pev->origin);  // make sure it links into the world
-//		}
-//	else
-		{
-			SetTouch( &CTriggerMultiple::MultiTouch );
+	SetTouch( &CTriggerMultiple::MultiTouch );
 		}
-	}
-
 
 /*QUAKED trigger_once (.5 .5 .5) ? notouch
 Variable sized trigger. Triggers once, then removes itself.  You must set the key "target" to the name of another object in the level that has a matching
@@ -1111,33 +1320,46 @@ void CTriggerOnce::Spawn( void )
 	CTriggerMultiple :: Spawn();
 }
 
-
-
 void CBaseTrigger :: MultiTouch( CBaseEntity *pOther )
 {
-	entvars_t	*pevToucher;
-
-	pevToucher = pOther->pev;
+	int flags = pev->spawnflags;
+	entvars_t *pevToucher = pOther->pev;
 
 	// Only touch clients, monsters, or pushables (depending on flags)
-	if ( ((pevToucher->flags & FL_CLIENT) && !(pev->spawnflags & SF_TRIGGER_NOCLIENTS)) ||
-		 ((pevToucher->flags & FL_MONSTER) && (pev->spawnflags & SF_TRIGGER_ALLOWMONSTERS)) ||
-		 (pev->spawnflags & SF_TRIGGER_PUSHABLES) && FClassnameIs(pevToucher,"func_pushable") )
+	if ( ( flags & SF_TRIGGER_EVERYTHING_ELSE ) && !( pevToucher->flags & ( FL_CLIENT | FL_MONSTER ) ) &&
+	     !FClassnameIs( pevToucher, "func_pushable" ) )
 	{
+		ActivateMultiTrigger( pOther );
+		return;
+	}
 
-#if 0
-		// if the trigger has an angles field, check player's facing direction
-		if (pev->movedir != g_vecZero)
+	if ( !( flags & SF_TRIGGER_NOCLIENTS ) && (pevToucher->flags & FL_CLIENT) )
+	{
+		ActivateMultiTrigger( pOther );
+		return;
+	}
+
+	if ( ( flags & SF_TRIGGER_ALLOWMONSTERS ) && (pevToucher->flags & FL_MONSTER) )
+	{
+		if ( m_fTinyMonsters )
 		{
-			UTIL_MakeVectors( pevToucher->angles );
-			if ( DotProduct( gpGlobals->v_forward, pev->movedir ) < 0 )
-				return;         // not facing the right way
+			ActivateMultiTrigger( pOther );
+			return;
 		}
-#endif
-		
+
+		if ( pOther->Classify() != CLASS_INSECT &&
+		     pOther->Classify() != CLASS_ALIEN_BIOWEAPON &&
+		     pOther->Classify() != CLASS_PLAYER_BIOWEAPON &&
+		     pevToucher->movetype != MOVETYPE_BOUNCE && pevToucher->movetype != MOVETYPE_BOUNCEMISSILE )
+		{
+			ActivateMultiTrigger( pOther );
+			return;
+		}
+	}
+
+	if ( ( flags & SF_TRIGGER_PUSHABLES) && FClassnameIs(pevToucher,"func_pushable") )
 		ActivateMultiTrigger( pOther );
 	}
-}
 
 
 //
@@ -1147,38 +1369,42 @@ void CBaseTrigger :: MultiTouch( CBaseEntity *pOther )
 //
 void CBaseTrigger :: ActivateMultiTrigger( CBaseEntity *pActivator )
 {
+	if ( pev->spawnflags & ( SF_TRIGGER_FIRE_ON_ENTER | SF_TRIGGER_FIRE_ON_EXIT ) )
+	{
+		if ( m_flWait != -1.0f )
+			m_flWait = 0;
+
+		for ( CTriggerActivator *entry = m_pActivators; entry; entry = entry->m_pNext )
+		{
+			if ( (CBaseEntity *) entry->m_hEntity == pActivator )
+				return;
+		}
+
+		CTriggerActivator *entry = new CTriggerActivator;
+
+		entry->m_hEntity = pActivator;
+		entry->m_pNext = m_pActivators;
+		m_pActivators = entry;
+		SetThink( &CBaseTrigger::MultiWaitOver );
+		pev->nextthink = gpGlobals->time;
+
+		if ( !( pev->spawnflags & SF_TRIGGER_FIRE_ON_ENTER ) )
+			return;
+	}
+
 	if (pev->nextthink > gpGlobals->time)
 		return;         // still waiting for reset time
 
 	if (!UTIL_IsMasterTriggered(m_sMaster,pActivator))
 		return;
 
-	if (FClassnameIs(pev, "trigger_secret"))
-	{
-		if ( pev->enemy == NULL || !FClassnameIs(pev->enemy, "player"))
+	if ( !FireMultiTrigger( pActivator ))
 			return;
-		gpGlobals->found_secrets++;
-	}
 
-	if (!FStringNull(pev->noise))
-		EMIT_SOUND(ENT(pev), CHAN_VOICE, (char*)STRING(pev->noise), 1, ATTN_NORM);
-
-// don't trigger again until reset
-// pev->takedamage = DAMAGE_NO;
-
-	m_hActivator = pActivator;
-	SUB_UseTargets( m_hActivator, USE_TOGGLE, 0 );
-
-	if ( pev->message && pActivator->IsPlayer() )
-	{
-		UTIL_ShowMessage( STRING(pev->message), pActivator );
-//		CLIENT_PRINTF( ENT( pActivator->pev ), print_center, STRING(pev->message) );
-	}
-
-	if (m_flWait > 0)
+	if (m_flWait >= 0)
 	{
 		SetThink( &CBaseTrigger::MultiWaitOver );
-		pev->nextthink = gpGlobals->time + m_flWait;
+		pev->nextthink = m_flWait + gpGlobals->time;
 	}
 	else
 	{
@@ -1190,25 +1416,139 @@ void CBaseTrigger :: ActivateMultiTrigger( CBaseEntity *pActivator )
 	}
 }
 
+bool CBaseTrigger::FireMultiTrigger( CBaseEntity *pActivator )
+{
+	// AdamR: Inventory filtering rules
+	if ( !m_pInventoryRules->CanUseTrigger(pActivator))
+	{
+		pev->nextthink = m_flWait + gpGlobals->time;
+		return false;
+	}
+
+	if ( FClassnameIs( pev, "trigger_secret" ) )
+	{
+		if ( !pev->enemy || !FClassnameIs( pev->enemy, "player" ) )
+			return false;
+
+		gpGlobals->found_secrets++;
+	}
+
+	if ( !FStringNull( pev->noise ) )
+		EMIT_SOUND_DYN( edict(), CHAN_VOICE, STRING( pev->noise ), 1, ATTN_NORM,
+		                0, PITCH_NORM, 0, false, g_vecZero );
+
+	m_hActivator = NULL;
+
+	if ( pActivator && pActivator->pev )
+	{
+		edict_t *entity = pActivator->pev->pContainingEntity;
+
+		if ( entity && !entity->free )
+			m_hActivator.Set( entity );
+	}
+
+	edict_t *activatorEdict = m_hActivator.Get();
+	CBaseEntity *activator = NULL;
+
+	if ( activatorEdict && !activatorEdict->free )
+		activator = CBaseEntity::Instance( activatorEdict );
+
+	SUB_UseTargets( activator, USE_TOGGLE, 0 );
+
+	if ( pev->message && pActivator->IsPlayer() )
+		UTIL_ShowMessage( STRING( pev->message ), pActivator );
+
+	if ( FClassnameIs( pev, "trigger_once" ) )
+		UTIL_Remove( this );
+
+	return true;
+}
 
 // the wait time has passed, so set back up for another activation
 void CBaseTrigger :: MultiWaitOver( void )
 {
-//	if (pev->max_health)
-//		{
-//		pev->health		= pev->max_health;
-//		pev->takedamage	= DAMAGE_YES;
-//		pev->solid		= SOLID_BBOX;
-//		}
+	if ( pev->spawnflags & ( SF_TRIGGER_FIRE_ON_ENTER | SF_TRIGGER_FIRE_ON_EXIT ) )
+	{
+		CTriggerActivator *previous = m_pActivators;
+		bool removeHead = false;
+
+		if ( previous )
+		{
+			CBaseEntity *entity = previous->m_hEntity;
+
+			if ( !entity || ( !entity->Intersects( this ) && !Intersects( previous->m_hEntity ) ) )
+			{
+				if ( pev->spawnflags & SF_TRIGGER_FIRE_ON_EXIT )
+				{
+					CBaseEntity *activator = previous->m_hEntity;
+
+					FireMultiTrigger( activator ? activator : this );
+				}
+
+				removeHead = true;
+			}
+
+			CTriggerActivator *current = previous->m_pNext;
+
+			while ( current )
+			{
+				entity = current->m_hEntity;
+
+				if ( entity && ( entity->Intersects( this ) || Intersects( current->m_hEntity ) ) )
+				{
+					previous = current;
+					current = current->m_pNext;
+				}
+				else
+				{
+					if ( pev->spawnflags & SF_TRIGGER_FIRE_ON_EXIT )
+					{
+						CBaseEntity *activator = current->m_hEntity;
+
+						FireMultiTrigger( activator ? activator : this );
+					}
+
+					previous->m_pNext = current->m_pNext;
+					delete current;
+					current = previous->m_pNext;
+				}
+			}
+
+			if ( removeHead )
+			{
+				CTriggerActivator *head = m_pActivators;
+				CTriggerActivator *next = head->m_pNext;
+
+				delete head;
+				m_pActivators = next;
+			}
+		}
+
+		if ( m_pActivators )
+		{
+			pev->nextthink = m_flWait + gpGlobals->time;
+			return;
+		}
+	}
+
 	SetThink( NULL );
 }
-
 
 // ========================= COUNTING TRIGGER =====================================
 
 //
 // GLOBALS ASSUMED SET:  g_eoActivator
 //
+void CounterMessage( CBaseEntity *pActivator, const char *pszMessage )
+{
+	ALERT( at_console, "%s", pszMessage );
+
+	if ( pActivator->IsPlayer() && pActivator->IsNetClient() )
+		ClientPrint( pActivator->pev, HUD_PRINTNOTIFY, pszMessage );
+	else
+		UTIL_ClientPrintAll( HUD_PRINTNOTIFY, pszMessage );
+}
+
 void CBaseTrigger::CounterUse( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
 {
 	m_cTriggersLeft--;
@@ -1216,7 +1556,7 @@ void CBaseTrigger::CounterUse( CBaseEntity *pActivator, CBaseEntity *pCaller, US
 
 	if (m_cTriggersLeft < 0)
 		return;
-	
+
 	BOOL fTellActivator =
 		(m_hActivator != 0) &&
 		FClassnameIs(m_hActivator->pev, "player") &&
@@ -1225,22 +1565,30 @@ void CBaseTrigger::CounterUse( CBaseEntity *pActivator, CBaseEntity *pCaller, US
 	{
 		if (fTellActivator)
 		{
+			char szMessage[128];
+
 			// UNDONE: I don't think we want these Quakesque messages
 			switch (m_cTriggersLeft)
 			{
-			case 1:		ALERT(at_console, "Only 1 more to go...");		break;
-			case 2:		ALERT(at_console, "Only 2 more to go...");		break;
-			case 3:		ALERT(at_console, "Only 3 more to go...");		break;
-			default:	ALERT(at_console, "There are more to go...");	break;
+			case 1:
+			case 2:
+			case 3:
+				sprintf( szMessage, "Only %d more to go...\n", m_cTriggersLeft );
+				break;
+			default:
+				sprintf( szMessage, "There are %d to go...\n", m_cTriggersLeft );
+				break;
 			}
+
+			CounterMessage( pActivator, szMessage );
 		}
 		return;
 	}
 
 	// !!!UNDONE: I don't think we want these Quakesque messages
 	if (fTellActivator)
-		ALERT(at_console, "Sequence completed!");
-	
+		CounterMessage( pActivator, "Sequence completed!\n" );
+
 	ActivateMultiTrigger( m_hActivator );
 }
 
@@ -1285,7 +1633,7 @@ void CTriggerVolume :: Spawn( void )
 	pev->solid = SOLID_NOT;
 	pev->movetype = MOVETYPE_NONE;
 	SET_MODEL(ENT(pev), STRING(pev->model));    // set size and link into world
-	pev->model = NULL;
+	pev->model = iStringNull;
 	pev->modelindex = 0;
 }
 
@@ -1323,10 +1671,13 @@ void CFireAndDie::Think( void )
 
 
 #define SF_CHANGELEVEL_USEONLY		0x0002
+#define SF_CHANGELEVEL_IGNORE_NEXTMAP	0x0004
 class CChangeLevel : public CBaseTrigger
 {
 public:
+	bool IsEnabled( void ) { return pev->solid != SOLID_BSP; }
 	void Spawn( void );
+	void EXPORT PostInit( void );
 	void KeyValue( KeyValueData *pkvd );
 	void EXPORT UseChangeLevel ( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
 	void EXPORT TriggerChangeLevel( void );
@@ -1348,6 +1699,8 @@ public:
 	char m_szLandmarkName[cchMapNameMost];		// trigger_changelevel only:  landmark on next map
 	int		m_changeTarget;
 	float	m_changeTargetDelay;
+	bool	m_fKeepInventory;
+	float	m_flPercentOfPlayers;
 };
 LINK_ENTITY_TO_CLASS( trigger_changelevel, CChangeLevel );
 
@@ -1358,6 +1711,7 @@ TYPEDESCRIPTION	CChangeLevel::m_SaveData[] =
 	DEFINE_ARRAY( CChangeLevel, m_szLandmarkName, FIELD_CHARACTER, cchMapNameMost ),
 	DEFINE_FIELD( CChangeLevel, m_changeTarget, FIELD_STRING ),
 	DEFINE_FIELD( CChangeLevel, m_changeTargetDelay, FIELD_FLOAT ),
+	DEFINE_FIELD( CChangeLevel, m_flPercentOfPlayers, FIELD_FLOAT ),
 };
 
 IMPLEMENT_SAVERESTORE(CChangeLevel,CBaseTrigger);
@@ -1392,6 +1746,16 @@ void CChangeLevel :: KeyValue( KeyValueData *pkvd )
 		m_changeTargetDelay = atof( pkvd->szValue );
 		pkvd->fHandled = TRUE;
 	}
+	else if ( FStrEq( pkvd->szKeyName, "keep_inventory" ) )
+	{
+		m_fKeepInventory = atoi( pkvd->szValue ) != 0;
+		pkvd->fHandled = TRUE;
+	}
+	else if ( !stricmp( pkvd->szKeyName, "percent_of_players" ) )
+	{
+		m_flPercentOfPlayers = V_max( 0.0f, V_min( (float) atof( pkvd->szValue ), 1.0f ) );
+		pkvd->fHandled = TRUE;
+	}
 	else
 		CBaseTrigger::KeyValue( pkvd );
 }
@@ -1404,21 +1768,38 @@ When the player touches this, he gets sent to the map listed in the "map" variab
 void CChangeLevel :: Spawn( void )
 {
 	if ( FStrEq( m_szMapName, "" ) )
-		ALERT( at_console, "a trigger_changelevel doesn't have a map" );
-
-	if ( FStrEq( m_szLandmarkName, "" ) )
-		ALERT( at_console, "trigger_changelevel to %s doesn't have a landmark", m_szMapName );
+		ALERT( at_console, "A trigger_changelevel doesn't have a map (X%f Y%f Z%f)",
+		       pev->origin.x, pev->origin.y, pev->origin.z );
 
 	if (!FStringNull ( pev->targetname ) )
-	{
 		SetUse ( &CChangeLevel::UseChangeLevel );
-	}
+
+	if ( FStrEq( m_szMapName, CVAR_GET_STRING( "sv_notransition" ) ) )
+		pev->solid = SOLID_BSP;
+
 	InitTrigger();
 	if ( !(pev->spawnflags & SF_CHANGELEVEL_USEONLY) )
 		SetTouch( &CChangeLevel::TouchChangeLevel );
-//	ALERT( at_console, "TRANSITION: %s (%s)\n", m_szMapName, m_szLandmarkName );
+
+	SetThink( &CChangeLevel::PostInit );
+	pev->nextthink = gpGlobals->time + 0.1f;
 }
 
+void CChangeLevel::PostInit( void )
+{
+	// transports to illegal map, make intouchable
+	if ( FStrEq( m_szMapName, CVAR_GET_STRING( "sv_notransition" ) ) )
+	{
+		ALERT( at_console, "Map change to %s is illegal, ignoring\n", CVAR_GET_STRING( "sv_notransition" ) );
+
+		pev->solid = SOLID_BSP;
+		pev->movetype = MOVETYPE_PUSH;
+
+		SetTouch( NULL );
+		SetThink( NULL );
+		UTIL_SetOrigin( pev, pev->origin );
+	}
+}
 
 void CChangeLevel :: ExecuteChangeLevel( void )
 {
@@ -1465,13 +1846,9 @@ void CChangeLevel :: UseChangeLevel ( CBaseEntity *pActivator, CBaseEntity *pCal
 
 void CChangeLevel :: ChangeLevelNow( CBaseEntity *pActivator )
 {
-	edict_t	*pentLandmark;
-	LEVELLIST	levels[16];
-
 	ASSERT(!FStrEq(m_szMapName, ""));
 
-	// Don't work in deathmatch
-	if ( g_pGameRules->IsDeathmatch() )
+	if ( pev->solid == SOLID_BSP )
 		return;
 
 	// Some people are firing these multiple times in a frame, disable
@@ -1480,11 +1857,24 @@ void CChangeLevel :: ChangeLevelNow( CBaseEntity *pActivator )
 
 	pev->dmgtime = gpGlobals->time;
 
+	const char *pszNextMap = CVAR_GET_STRING( "mp_nextmap" );
 
-	CBaseEntity *pPlayer = CBaseEntity::Instance( g_engfuncs.pfnPEntityOfEntIndex( 1 ) );
-	if ( !InTransitionVolume( pPlayer, m_szLandmarkName ) )
+	if ( !( pev->spawnflags & SF_CHANGELEVEL_IGNORE_NEXTMAP ) && IS_MAP_VALID( (char *) pszNextMap )
+		&& *pszNextMap && strlen( pszNextMap ) <= cchMapNameMost )
+		strncpy( st_szNextMap, pszNextMap, sizeof( st_szNextMap ) - 1 );
+	else
+		strncpy( st_szNextMap, m_szMapName, sizeof( st_szNextMap ) - 1 );
+
+	if ( !IS_MAP_VALID( st_szNextMap ) )
 	{
-		ALERT( at_aiconsole, "Player isn't in the transition volume %s, aborting\n", m_szLandmarkName );
+		ALERT( at_console, "CHANGE LEVEL: Map %s not found! Aborting.\n", st_szNextMap );
+		UTIL_ClientPrintAll( HUD_PRINTCENTER, "Next map not found:\n%s\n", st_szNextMap );
+		return;
+	}
+
+	if ( pActivator && pActivator->IsPlayer() && !InTransitionVolume( pActivator, m_szLandmarkName ) )
+	{
+		ALERT( at_aiconsole, "Player '%s' isn't in the transition volume %s, aborting\n", STRING( pActivator->pev->netname ), m_szLandmarkName );
 		return;
 	}
 
@@ -1492,33 +1882,49 @@ void CChangeLevel :: ChangeLevelNow( CBaseEntity *pActivator )
 	if ( m_changeTarget )
 	{
 		CFireAndDie *pFireAndDie = GetClassPtr( (CFireAndDie *)NULL );
+
 		if ( pFireAndDie )
 		{
 			// Set target and delay
 			pFireAndDie->pev->target = m_changeTarget;
 			pFireAndDie->m_flDelay = m_changeTargetDelay;
-			pFireAndDie->pev->origin = pPlayer->pev->origin;
+
+			if ( pActivator && pActivator->IsPlayer() )
+				pFireAndDie->pev->origin = pActivator->pev->origin;
+
 			// Call spawn
 			DispatchSpawn( pFireAndDie->edict() );
 		}
 	}
-	// This object will get removed in the call to CHANGE_LEVEL, copy the params into "safe" memory
-	strcpy(st_szNextMap, m_szMapName);
 
 	m_hActivator = pActivator;
 	SUB_UseTargets( pActivator, USE_TOGGLE, 0 );
 	st_szNextSpot[0] = 0;	// Init landmark to NULL
 
-	// look for a landmark entity		
-	pentLandmark = FindLandmark( m_szLandmarkName );
-	if ( !FNullEnt( pentLandmark ) )
+	for ( int i = 1; i <= gpGlobals->maxClients; i++ )
 	{
-		strcpy(st_szNextSpot, m_szLandmarkName);
-		gpGlobals->vecLandmarkOffset = VARS(pentLandmark)->origin;
+		ALERT( at_console, "ChangeLevel: Set Landmark Offsets\n" );
+		UTIL_PlayerByIndex( i );
 	}
-//	ALERT( at_console, "Level touches %d levels\n", ChangeList( levels, 16 ) );
+
+	delete g_pGamePersistentInventory;
+	g_pGamePersistentInventory = NULL;
+
+	if ( m_fKeepInventory )
+	{
+		CGamePersistentInventory *inventory = new CGamePersistentInventory( st_szNextMap );
+
+		inventory->CapturePlayers();
+		g_pGamePersistentInventory = inventory;
+	}
+
+	CVAR_SET_FLOAT( "mp_keep_globalstate", 1 );
+
 	ALERT( at_console, "CHANGE LEVEL: %s %s\n", st_szNextMap, st_szNextSpot );
-	CHANGE_LEVEL( st_szNextMap, st_szNextSpot );
+	UTIL_LogPrintf( "map<%s> ended, going to new level: %s\n", STRING( gpGlobals->mapname ), st_szNextMap );
+	UTIL_ClientPrintAll( HUD_PRINTCENTER, "Now changing level to:\n%s\n", st_szNextMap );
+
+	CHANGE_LEVEL( st_szNextMap, NULL );
 }
 
 //
@@ -1526,8 +1932,39 @@ void CChangeLevel :: ChangeLevelNow( CBaseEntity *pActivator )
 //
 void CChangeLevel :: TouchChangeLevel( CBaseEntity *pOther )
 {
-	if (!FClassnameIs(pOther->pev, "player"))
+	if ( !pOther || !m_pInventoryRules->CanUseTrigger( pOther ) || !pOther->IsPlayer() )
 		return;
+
+	if ( m_flPercentOfPlayers > 0 )
+	{
+		int iInside = 0;
+		int iOutside = 0;
+
+		for ( int i = 1; i <= gpGlobals->maxClients; ++i )
+		{
+			CBasePlayer *pPlayer = (CBasePlayer *) UTIL_PlayerByIndex( i );
+
+			if ( !pPlayer || !pPlayer->IsInWorld() || !pPlayer->IsConnected() || !pPlayer->IsAlive() )
+				continue;
+
+			int iHull = human_hull;
+
+			if ( pPlayer->pev->flags & FL_DUCKING )
+				iHull = head_hull;
+
+			TraceResult tr;
+
+			TRACE_MODEL( pPlayer->pev->origin, pPlayer->pev->origin, iHull, edict(), &tr );
+
+			if ( tr.fStartSolid )
+				iInside++;
+			else
+				iOutside++;
+		}
+
+		if ( iInside + iOutside != 0 && m_flPercentOfPlayers > (float) iInside / (float) ( iInside + iOutside ) )
+			return;
+	}
 
 	ChangeLevelNow( pOther );
 }
@@ -1606,103 +2043,19 @@ int CChangeLevel::InTransitionVolume( CBaseEntity *pEntity, char *pVolumeName )
 // be moved across.
 int CChangeLevel::ChangeList( LEVELLIST *pLevelList, int maxList )
 {
-	edict_t	*pentChangelevel, *pentLandmark;
-	int			i, count;
+	edict_t	*pentChangelevel;
 
-	count = 0;
-
-	// Find all of the possible level changes on this BSP
+	// Entities never travel across a level change, but every changelevel still gets its private data
 	pentChangelevel = FIND_ENTITY_BY_STRING( NULL, "classname", "trigger_changelevel" );
-	if ( FNullEnt( pentChangelevel ) )
-		return 0;
+
 	while ( !FNullEnt( pentChangelevel ) )
 	{
-		CChangeLevel *pTrigger;
-		
-		pTrigger = GetClassPtr((CChangeLevel *)VARS(pentChangelevel));
-		if ( pTrigger )
-		{
-			// Find the corresponding landmark
-			pentLandmark = FindLandmark( pTrigger->m_szLandmarkName );
-			if ( pentLandmark )
-			{
-				// Build a list of unique transitions
-				if ( AddTransitionToList( pLevelList, count, pTrigger->m_szMapName, pTrigger->m_szLandmarkName, pentLandmark ) )
-				{
-					count++;
-					if ( count >= maxList )		// FULL!!
-						break;
-				}
-			}
-		}
+		GetClassPtr( (CChangeLevel *)VARS(pentChangelevel) );
+
 		pentChangelevel = FIND_ENTITY_BY_STRING( pentChangelevel, "classname", "trigger_changelevel" );
 	}
 
-	if ( gpGlobals->pSaveData && ((SAVERESTOREDATA *)gpGlobals->pSaveData)->pTable )
-	{
-		CSave saveHelper( (SAVERESTOREDATA *)gpGlobals->pSaveData );
-
-		for ( i = 0; i < count; i++ )
-		{
-			int j, entityCount = 0;
-			CBaseEntity *pEntList[ MAX_ENTITY ];
-			int			 entityFlags[ MAX_ENTITY ];
-
-			// Follow the linked list of entities in the PVS of the transition landmark
-			edict_t *pent = UTIL_EntitiesInPVS( pLevelList[i].pentLandmark );
-
-			// Build a list of valid entities in this linked list (we're going to use pent->v.chain again)
-			while ( !FNullEnt( pent ) )
-			{
-				CBaseEntity *pEntity = CBaseEntity::Instance(pent);
-				if ( pEntity )
-				{
-//					ALERT( at_console, "Trying %s\n", STRING(pEntity->pev->classname) );
-					int caps = pEntity->ObjectCaps();
-					if ( !(caps & FCAP_DONT_SAVE) )
-					{
-						int flags = 0;
-
-						// If this entity can be moved or is global, mark it
-						if ( caps & FCAP_ACROSS_TRANSITION )
-							flags |= FENTTABLE_MOVEABLE;
-						if ( pEntity->pev->globalname && !pEntity->IsDormant() )
-							flags |= FENTTABLE_GLOBAL;
-						if ( flags )
-						{
-							pEntList[ entityCount ] = pEntity;
-							entityFlags[ entityCount ] = flags;
-							entityCount++;
-							if ( entityCount > MAX_ENTITY )
-								ALERT( at_error, "Too many entities across a transition!" );
-						}
-//						else
-//							ALERT( at_console, "Failed %s\n", STRING(pEntity->pev->classname) );
-					}
-//					else
-//						ALERT( at_console, "DON'T SAVE %s\n", STRING(pEntity->pev->classname) );
-				}
-				pent = pent->v.chain;
-			}
-
-			for ( j = 0; j < entityCount; j++ )
-			{
-				// Check to make sure the entity isn't screened out by a trigger_transition
-				if ( entityFlags[j] && InTransitionVolume( pEntList[j], pLevelList[i].landmarkName ) )
-				{
-					// Mark entity table with 1<<i
-					int index = saveHelper.EntityIndex( pEntList[j] );
-					// Flag it with the level number
-					saveHelper.EntityFlagsSet( index, entityFlags[j] | (1<<i) );
-				}
-//				else
-//					ALERT( at_console, "Screened out %s\n", STRING(pEntList[j]->pev->classname) );
-
-			}
-		}
-	}
-
-	return count;
+	return 0;
 }
 
 /*
@@ -1746,6 +2099,9 @@ public:
 	void KeyValue( KeyValueData *pkvd );
 	void Spawn( void );
 	void Precache( void );
+	void EXPORT ToggleUse( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
+
+	bool m_fActive;
 };
 LINK_ENTITY_TO_CLASS( func_ladder, CLadder );
 
@@ -1779,6 +2135,19 @@ void CLadder :: Spawn( void )
 
 	SET_MODEL(ENT(pev), STRING(pev->model));    // set size and link into world
 	pev->movetype = MOVETYPE_PUSH;
+	SetUse( &CLadder::ToggleUse );
+}
+
+// The contents only change for the engine when the model is set again
+void CLadder::ToggleUse( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
+{
+	if ( !ShouldToggle( useType, m_fActive ) )
+		return;
+
+	m_fActive = !m_fActive;
+	pev->skin = m_fActive ? CONTENTS_LADDER : CONTENTS_EMPTY;
+
+	SET_MODEL( edict(), STRING( pev->model ) );
 }
 
 
@@ -1787,6 +2156,16 @@ void CLadder :: Spawn( void )
 class CTriggerPush : public CBaseTrigger
 {
 public:
+	void OnSetOriginByMap( void )
+	{
+		m_vecSavedAngles = pev->angles;
+		SetMovedir( pev );
+		pev->angles = m_vecSavedAngles;
+	}
+
+	Vector m_vecSavedAngles;
+	int m_iPushMode;
+
 	void Spawn( void );
 	void KeyValue( KeyValueData *pkvd );
 	void Touch( CBaseEntity *pOther );
@@ -1796,7 +2175,13 @@ LINK_ENTITY_TO_CLASS( trigger_push, CTriggerPush );
 
 void CTriggerPush :: KeyValue( KeyValueData *pkvd )
 {
-	CBaseTrigger::KeyValue( pkvd );
+	if ( !stricmp( pkvd->szKeyName, "pushmode" ) )
+	{
+		m_iPushMode = V_max( 0, V_min( atoi( pkvd->szValue ), TRIGGER_PUSH_MODE_SET ) );
+		pkvd->fHandled = TRUE;
+	}
+	else
+		CBaseTrigger::KeyValue( pkvd );
 }
 
 
@@ -1808,13 +2193,19 @@ void CTriggerPush :: Spawn( )
 {
 	if ( pev->angles == g_vecZero )
 		pev->angles.y = 360;
+
+	m_vecSavedAngles = pev->angles;
 	InitTrigger();
+	pev->angles = m_vecSavedAngles;
 
 	if (pev->speed == 0)
 		pev->speed = 100;
 
 	if ( FBitSet (pev->spawnflags, SF_TRIGGER_PUSH_START_OFF) )// if flagged to Start Turned Off, make trigger nonsolid.
 		pev->solid = SOLID_NOT;
+
+	if ( FBitSet( pev->spawnflags, SF_TRIG_PUSH_LIMIT ) && m_iPushMode == TRIGGER_PUSH_MODE_BASEVELOCITY )
+		m_iPushMode = TRIGGER_PUSH_MODE_LIMIT;
 
 	SetUse( &CTriggerPush::ToggleUse );
 
@@ -1826,6 +2217,9 @@ void CTriggerPush :: Touch( CBaseEntity *pOther )
 {
 	entvars_t* pevToucher = pOther->pev;
 
+	if ( pevToucher->solid == SOLID_NOT || ( pevToucher->solid == SOLID_BSP && pevToucher->movetype != MOVETYPE_PUSHSTEP ) )
+		return;
+
 	// UNDONE: Is there a better way than health to detect things that have physics? (clients/monsters)
 	switch( pevToucher->movetype )
 	{
@@ -1836,27 +2230,56 @@ void CTriggerPush :: Touch( CBaseEntity *pOther )
 		return;
 	}
 
-	if ( pevToucher->solid != SOLID_NOT && pevToucher->solid != SOLID_BSP )
+	if ( FBitSet( pev->spawnflags, SF_TRIG_PUSH_NO_MONSTERS ) && ( pevToucher->flags & FL_MONSTER ) )
+		return;
+
+	if ( FBitSet( pev->spawnflags, SF_TRIG_PUSH_NO_CLIENTS ) && ( pevToucher->flags & FL_CLIENT ) )
+		return;
+
+	if ( !FBitSet( pev->spawnflags, SF_TRIG_PUSH_ALLOW_PUSHABLES )
+		&& ( FClassnameIs( pevToucher, "func_pushable" ) || FClassnameIs( pevToucher, "func_breakable" ) ) )
+		return;
+
+	if ( FClassnameIs( pevToucher, "grappletongue" ) || m_pInventoryRules->CanUseTrigger( pOther, true ) )
+		return;
+
+	Vector vecPush = ( pev->speed * pev->movedir );
+	float flMissingSpeed = fabs( pev->speed ) - DotProduct( vecPush.Normalize(), pevToucher->velocity );
+
+	if ( vecPush.z > 0 && ( pevToucher->flags & FL_ONGROUND ) )
 	{
-		// Instant trigger, just transfer velocity and remove
-		if (FBitSet(pev->spawnflags, SF_TRIG_PUSH_ONCE))
-		{
-			pevToucher->velocity = pevToucher->velocity + (pev->speed * pev->movedir);
-			if ( pevToucher->velocity.z > 0 )
-				pevToucher->flags &= ~FL_ONGROUND;
-			UTIL_Remove( this );
-		}
+		pevToucher->origin.z += 0.1;
+		SET_ORIGIN( ENT( pevToucher ), pevToucher->origin );
+		pevToucher->flags &= ~FL_ONGROUND;
+	}
+
+	// Instant trigger, just transfer velocity and remove
+	if (FBitSet(pev->spawnflags, SF_TRIG_PUSH_ONCE))
+	{
+		if ( m_iPushMode != TRIGGER_PUSH_MODE_BASEVELOCITY )
+			pevToucher->velocity = vecPush;
 		else
-		{	// Push field, transfer to base velocity
-			Vector vecPush = (pev->speed * pev->movedir);
-			if ( pevToucher->flags & FL_BASEVELOCITY )
-				vecPush = vecPush +  pevToucher->basevelocity;
+			pevToucher->velocity = pevToucher->velocity + vecPush;
 
-			pevToucher->basevelocity = vecPush;
+		UTIL_Remove( this );
+	}
+	else if ( m_iPushMode == TRIGGER_PUSH_MODE_LIMIT )
+	{
+		if ( flMissingSpeed > 0 )
+			pevToucher->velocity = pevToucher->velocity + vecPush.Normalize() * flMissingSpeed;
+	}
+	else if ( m_iPushMode == TRIGGER_PUSH_MODE_SET )
+	{
+		pevToucher->velocity = vecPush;
+	}
+	else
+	{	// Push field, transfer to base velocity
+		if ( pevToucher->flags & FL_BASEVELOCITY )
+			vecPush = vecPush + pevToucher->basevelocity;
 
-			pevToucher->flags |= FL_BASEVELOCITY;
-//			ALERT( at_console, "Vel %f, base %f\n", pevToucher->velocity.z, pevToucher->basevelocity.z );
-		}
+		pevToucher->basevelocity = vecPush;
+		pevToucher->flags |= FL_BASEVELOCITY;
+//		ALERT( at_console, "Vel %f, base %f\n", pevToucher->velocity.z, pevToucher->basevelocity.z );
 	}
 }
 
@@ -1927,20 +2350,154 @@ class CTriggerTeleport : public CBaseTrigger
 {
 public:
 	void Spawn( void );
+	void KeyValue( KeyValueData *pkvd );
+	void Touch( CBaseEntity *pOther );
+	void Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
+
+	float	m_flTeleportCooldown;
+	bool	m_fCustomCooldown;
+	bool	m_fActive;
+	bool	m_fTeleportIfBlocked;
 };
+
 LINK_ENTITY_TO_CLASS( trigger_teleport, CTriggerTeleport );
+
+void CTriggerTeleport::KeyValue( KeyValueData *pkvd )
+{
+	if ( FStrEq( pkvd->szKeyName, "teleport_cooldown" ) )
+	{
+		m_flTeleportCooldown = atof( pkvd->szValue );
+		m_fCustomCooldown = true;
+	}
+	else if ( FStrEq( pkvd->szKeyName, "teleport_start_inactive" ) )
+	{
+		if ( atoi( pkvd->szValue ) > 0 )
+			m_iExtraSpawnFlags |= SF_TELEPORT_START_OFF;
+	}
+	else if ( FStrEq( pkvd->szKeyName, "teleport_ignore_delay" ) )
+	{
+		if ( atoi( pkvd->szValue ) > 0 )
+			m_iExtraSpawnFlags |= SF_TELEPORT_IGNORE_DELAYS;
+	}
+	else if ( FStrEq( pkvd->szKeyName, "teleport_if_blocked" ) )
+	{
+		if ( atoi( pkvd->szValue ) > 0 )
+			m_fTeleportIfBlocked = true;
+	}
+	else
+	{
+		CBaseTrigger::KeyValue( pkvd );
+		return;
+	}
+
+	pkvd->fHandled = TRUE;
+}
 
 void CTriggerTeleport :: Spawn( void )
 {
 	InitTrigger();
-
-	SetTouch( &CTriggerTeleport::TeleportTouch );
+	m_fActive = !( pev->spawnflags & SF_TELEPORT_START_OFF );
+	SetTouch( NULL );
+	SetUse( NULL );
 }
 
+void CTriggerTeleport::Touch( CBaseEntity *pOther )
+{
+	if ( !UTIL_IsMasterTriggered( m_sMaster, pOther ) )
+		return;
 
-LINK_ENTITY_TO_CLASS( info_teleport_destination, CPointEntity );
+	if ( !m_fActive )
+		return;
 
+	if ( !( pev->spawnflags & SF_TELEPORT_IGNORE_DELAYS ) && m_flNextTriggerTime > gpGlobals->time )
+		return;
 
+	entvars_t *other = pOther->pev;
+
+	// AdamR: Inventory filtering rules
+	if ( !m_pInventoryRules->CanUseTrigger(pOther))
+		return;
+
+	int flags = pev->spawnflags;
+	int otherFlags = other->flags;
+
+	if ( !( flags & SF_TRIGGER_EVERYTHING_ELSE ) || ( otherFlags & ( FL_CLIENT | FL_MONSTER ) ) ||
+	     FClassnameIs( other, "func_pushable" ) )
+	{
+		if ( ( ( flags & SF_TRIGGER_NOCLIENTS ) || !( otherFlags & FL_CLIENT ) ) &&
+		     ( !( flags & SF_TRIGGER_ALLOWMONSTERS ) || !( otherFlags & FL_MONSTER ) ) )
+		{
+			if ( !( flags & SF_TRIGGER_PUSHABLES ) || !FClassnameIs( other, "func_pushable" ) )
+				return;
+		}
+	}
+
+	CBaseEntity *destination = NULL;
+
+	if ( flags & SF_TELEPORT_RANDOM_DESTINATION )
+	{
+		CBaseEntity *destinations[32];
+		int count = 0;
+
+		while ( count < ARRAYSIZE( destinations ) )
+		{
+			destination = UTIL_FindEntityByTargetname( destination, STRING( pev->target ) );
+
+			if ( !destination )
+				break;
+
+			destinations[count++] = destination;
+		}
+
+		if ( !count )
+			return;
+
+		destination = destinations[RANDOM_LONG( 0, count - 1 )];
+	}
+	else
+	{
+		destination = UTIL_FindEntityByTargetname( NULL, STRING( pev->target ) );
+
+		if ( !destination || !destination->pev )
+			return;
+
+		edict_t *entity = destination->pev->pContainingEntity;
+
+		if ( !entity || entity->free || !OFFSET( entity ) )
+			return;
+	}
+
+	int teleportFlags = pev->spawnflags | ( m_fTeleportIfBlocked ? SF_TELEPORT_CHECK_BLOCKED : 0 );
+
+	if ( UTIL_TeleportEntity( pOther, destination, teleportFlags, pev->origin ) )
+		m_flNextTriggerTime = gpGlobals->time + ( m_fCustomCooldown ? m_flTeleportCooldown : 1.0f );
+}
+
+void CTriggerTeleport::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
+{
+	switch ( useType )
+	{
+		case USE_OFF:
+			m_fActive = false;
+			break;
+
+		case USE_ON:
+			m_fActive = true;
+			break;
+
+		case USE_SET:
+			m_fActive = value >= 1.0f;
+			break;
+
+		case USE_KILL:
+			UTIL_Remove( this );
+			break;
+
+		default:
+			m_fActive = !m_fActive;
+			break;
+	}
+}
 
 class CTriggerSave : public CBaseTrigger
 {
@@ -2122,309 +2679,20 @@ void CTriggerChangeTarget::Spawn( void )
 
 void CTriggerChangeTarget::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
 {
-	CBaseEntity *pTarget = UTIL_FindEntityByString( NULL, "targetname", STRING( pev->target ) );
+	CBaseEntity *pTarget = NULL;
 
-	if (pTarget)
+	while ( ( pTarget = UTIL_FindEntityByString( pTarget, "targetname", STRING( pev->target ) ) ) != NULL )
 	{
 		pTarget->pev->target = m_iszNewTarget;
+
 		CBaseMonster *pMonster = pTarget->MyMonsterPointer( );
+
 		if (pMonster)
 		{
 			pMonster->m_pGoalEnt = NULL;
 		}
+
+		if ( FClassnameIs( pTarget->pev, "path_track" ) )
+			( (CPathTrack *) pTarget )->Link();
 	}
-}
-
-
-
-
-#define SF_CAMERA_PLAYER_POSITION	1
-#define SF_CAMERA_PLAYER_TARGET		2
-#define SF_CAMERA_PLAYER_TAKECONTROL 4
-
-class CTriggerCamera : public CBaseDelay
-{
-public:
-	void Spawn( void );
-	void KeyValue( KeyValueData *pkvd );
-	void Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
-	void EXPORT FollowTarget( void );
-	void Move(void);
-
-	virtual int		Save( CSave &save );
-	virtual int		Restore( CRestore &restore );
-	virtual int	ObjectCaps( void ) { return CBaseEntity :: ObjectCaps() & ~FCAP_ACROSS_TRANSITION; }
-	static	TYPEDESCRIPTION m_SaveData[];
-
-	EHANDLE m_hPlayer;
-	EHANDLE m_hTarget;
-	CBaseEntity *m_pentPath;
-	int	  m_sPath;
-	float m_flWait;
-	float m_flReturnTime;
-	float m_flStopTime;
-	float m_moveDistance;
-	float m_targetSpeed;
-	float m_initialSpeed;
-	float m_acceleration;
-	float m_deceleration;
-	int	  m_state;
-	
-};
-LINK_ENTITY_TO_CLASS( trigger_camera, CTriggerCamera );
-
-// Global Savedata for changelevel friction modifier
-TYPEDESCRIPTION	CTriggerCamera::m_SaveData[] = 
-{
-	DEFINE_FIELD( CTriggerCamera, m_hPlayer, FIELD_EHANDLE ),
-	DEFINE_FIELD( CTriggerCamera, m_hTarget, FIELD_EHANDLE ),
-	DEFINE_FIELD( CTriggerCamera, m_pentPath, FIELD_CLASSPTR ),
-	DEFINE_FIELD( CTriggerCamera, m_sPath, FIELD_STRING ),
-	DEFINE_FIELD( CTriggerCamera, m_flWait, FIELD_FLOAT ),
-	DEFINE_FIELD( CTriggerCamera, m_flReturnTime, FIELD_TIME ),
-	DEFINE_FIELD( CTriggerCamera, m_flStopTime, FIELD_TIME ),
-	DEFINE_FIELD( CTriggerCamera, m_moveDistance, FIELD_FLOAT ),
-	DEFINE_FIELD( CTriggerCamera, m_targetSpeed, FIELD_FLOAT ),
-	DEFINE_FIELD( CTriggerCamera, m_initialSpeed, FIELD_FLOAT ),
-	DEFINE_FIELD( CTriggerCamera, m_acceleration, FIELD_FLOAT ),
-	DEFINE_FIELD( CTriggerCamera, m_deceleration, FIELD_FLOAT ),
-	DEFINE_FIELD( CTriggerCamera, m_state, FIELD_INTEGER ),
-};
-
-IMPLEMENT_SAVERESTORE(CTriggerCamera,CBaseDelay);
-
-void CTriggerCamera::Spawn( void )
-{
-	pev->movetype = MOVETYPE_NOCLIP;
-	pev->solid = SOLID_NOT;							// Remove model & collisions
-	pev->renderamt = 0;								// The engine won't draw this model if this is set to 0 and blending is on
-	pev->rendermode = kRenderTransTexture;
-
-	m_initialSpeed = pev->speed;
-	if ( m_acceleration == 0 )
-		m_acceleration = 500;
-	if ( m_deceleration == 0 )
-		m_deceleration = 500;
-}
-
-
-void CTriggerCamera :: KeyValue( KeyValueData *pkvd )
-{
-	if (FStrEq(pkvd->szKeyName, "wait"))
-	{
-		m_flWait = atof(pkvd->szValue);
-		pkvd->fHandled = TRUE;
-	}
-	else if (FStrEq(pkvd->szKeyName, "moveto"))
-	{
-		m_sPath = ALLOC_STRING( pkvd->szValue );
-		pkvd->fHandled = TRUE;
-	}
-	else if (FStrEq(pkvd->szKeyName, "acceleration"))
-	{
-		m_acceleration = atof( pkvd->szValue );
-		pkvd->fHandled = TRUE;
-	}
-	else if (FStrEq(pkvd->szKeyName, "deceleration"))
-	{
-		m_deceleration = atof( pkvd->szValue );
-		pkvd->fHandled = TRUE;
-	}
-	else
-		CBaseDelay::KeyValue( pkvd );
-}
-
-
-
-void CTriggerCamera::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
-{
-	if ( !ShouldToggle( useType, m_state ) )
-		return;
-
-	// Toggle state
-	m_state = !m_state;
-	if (m_state == 0)
-	{
-		m_flReturnTime = gpGlobals->time;
-		return;
-	}
-	if ( !pActivator || !pActivator->IsPlayer() )
-	{
-		pActivator = CBaseEntity::Instance(g_engfuncs.pfnPEntityOfEntIndex( 1 ));
-	}
-		
-	m_hPlayer = pActivator;
-
-	m_flReturnTime = gpGlobals->time + m_flWait;
-	pev->speed = m_initialSpeed;
-	m_targetSpeed = m_initialSpeed;
-
-	if (FBitSet (pev->spawnflags, SF_CAMERA_PLAYER_TARGET ) )
-	{
-		m_hTarget = m_hPlayer;
-	}
-	else
-	{
-		m_hTarget = GetNextTarget();
-	}
-
-	// Nothing to look at!
-	if ( m_hTarget == NULL )
-	{
-		return;
-	}
-
-
-	if (FBitSet (pev->spawnflags, SF_CAMERA_PLAYER_TAKECONTROL ) )
-	{
-		((CBasePlayer *)pActivator)->EnableControl(FALSE);
-	}
-
-	if ( m_sPath )
-	{
-		m_pentPath = Instance( FIND_ENTITY_BY_TARGETNAME ( NULL, STRING(m_sPath)) );
-	}
-	else
-	{
-		m_pentPath = NULL;
-	}
-
-	m_flStopTime = gpGlobals->time;
-	if ( m_pentPath )
-	{
-		if ( m_pentPath->pev->speed != 0 )
-			m_targetSpeed = m_pentPath->pev->speed;
-		
-		m_flStopTime += m_pentPath->GetDelay();
-	}
-
-	// copy over player information
-	if (FBitSet (pev->spawnflags, SF_CAMERA_PLAYER_POSITION ) )
-	{
-		UTIL_SetOrigin( pev, pActivator->pev->origin + pActivator->pev->view_ofs );
-		pev->angles.x = -pActivator->pev->angles.x;
-		pev->angles.y = pActivator->pev->angles.y;
-		pev->angles.z = 0;
-		pev->velocity = pActivator->pev->velocity;
-	}
-	else
-	{
-		pev->velocity = Vector( 0, 0, 0 );
-	}
-
-	SET_VIEW( pActivator->edict(), edict() );
-
-	SET_MODEL(ENT(pev), STRING(pActivator->pev->model) );
-
-	// follow the player down
-	SetThink( &CTriggerCamera::FollowTarget );
-	pev->nextthink = gpGlobals->time;
-
-	m_moveDistance = 0;
-	Move();
-}
-
-
-void CTriggerCamera::FollowTarget( )
-{
-	if (m_hPlayer == NULL)
-		return;
-
-	if (m_hTarget == NULL || m_flReturnTime < gpGlobals->time)
-	{
-		if (m_hPlayer->IsAlive( ))
-		{
-			SET_VIEW( m_hPlayer->edict(), m_hPlayer->edict() );
-			((CBasePlayer *)((CBaseEntity *)m_hPlayer))->EnableControl(TRUE);
-		}
-		SUB_UseTargets( this, USE_TOGGLE, 0 );
-		pev->avelocity = Vector( 0, 0, 0 );
-		m_state = 0;
-		return;
-	}
-
-	Vector vecGoal = UTIL_VecToAngles( m_hTarget->pev->origin - pev->origin );
-	vecGoal.x = -vecGoal.x;
-
-	if (pev->angles.y > 360)
-		pev->angles.y -= 360;
-
-	if (pev->angles.y < 0)
-		pev->angles.y += 360;
-
-	float dx = vecGoal.x - pev->angles.x;
-	float dy = vecGoal.y - pev->angles.y;
-
-	if (dx < -180) 
-		dx += 360;
-	if (dx > 180) 
-		dx = dx - 360;
-	
-	if (dy < -180) 
-		dy += 360;
-	if (dy > 180) 
-		dy = dy - 360;
-
-	pev->avelocity.x = dx * 40 * gpGlobals->frametime;
-	pev->avelocity.y = dy * 40 * gpGlobals->frametime;
-
-
-	if (!(FBitSet (pev->spawnflags, SF_CAMERA_PLAYER_TAKECONTROL)))	
-	{
-		pev->velocity = pev->velocity * 0.8;
-		if (pev->velocity.Length( ) < 10.0)
-			pev->velocity = g_vecZero;
-	}
-
-	pev->nextthink = gpGlobals->time;
-
-	Move();
-}
-
-void CTriggerCamera::Move()
-{
-	// Not moving on a path, return
-	if (!m_pentPath)
-		return;
-
-	// Subtract movement from the previous frame
-	m_moveDistance -= pev->speed * gpGlobals->frametime;
-
-	// Have we moved enough to reach the target?
-	if ( m_moveDistance <= 0 )
-	{
-		// Fire the passtarget if there is one
-		if ( m_pentPath->pev->message )
-		{
-			FireTargets( STRING(m_pentPath->pev->message), this, this, USE_TOGGLE, 0 );
-			if ( FBitSet( m_pentPath->pev->spawnflags, SF_CORNER_FIREONCE ) )
-				m_pentPath->pev->message = 0;
-		}
-		// Time to go to the next target
-		m_pentPath = m_pentPath->GetNextTarget();
-
-		// Set up next corner
-		if ( !m_pentPath )
-		{
-			pev->velocity = g_vecZero;
-		}
-		else 
-		{
-			if ( m_pentPath->pev->speed != 0 )
-				m_targetSpeed = m_pentPath->pev->speed;
-
-			Vector delta = m_pentPath->pev->origin - pev->origin;
-			m_moveDistance = delta.Length();
-			pev->movedir = delta.Normalize();
-			m_flStopTime = gpGlobals->time + m_pentPath->GetDelay();
-		}
-	}
-
-	if ( m_flStopTime > gpGlobals->time )
-		pev->speed = UTIL_Approach( 0, pev->speed, m_deceleration * gpGlobals->frametime );
-	else
-		pev->speed = UTIL_Approach( m_targetSpeed, pev->speed, m_acceleration * gpGlobals->frametime );
-
-	float fraction = 2 * gpGlobals->frametime;
-	pev->velocity = ((pev->movedir * pev->speed) * fraction) + (pev->velocity * (1-fraction));
 }

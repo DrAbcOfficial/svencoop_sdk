@@ -48,8 +48,9 @@ public:
 	// Force it to update the cursor state.
 	virtual void			UpdateCursorState() = 0;
 
-	// Return the height above the bottom that the voice ack icons should be drawn at.
-	virtual int				GetAckIconHeight() = 0;
+	// Return the screen position the voice ack icon's bottom right corner is drawn at
+	virtual int				GetAckIconXOffset() = 0;
+	virtual int				GetAckIconYOffset() = 0;
 
 	// Return true if the voice manager is allowed to show speaker labels
 	// (mods usually return false when the scoreboard is up).
@@ -172,7 +173,7 @@ public:
 	// It is checked periodically, and the server is told to squelch or unsquelch the appropriate players.
 	CPlayerBitVec	m_ServerBannedPlayers;
 
-	cl_entity_s		m_VoiceHeadModels[VOICE_MAX_PLAYERS];			// These aren't necessarily in the order of players. They are just
+	cl_entity_t		m_VoiceHeadModels[VOICE_MAX_PLAYERS];			// These aren't necessarily in the order of players. They are just
 																	// a place for it to put data in during CreateEntities.
 
 	IVoiceStatusHelper	*m_pHelper;		// Each mod provides an implementation of this.

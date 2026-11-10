@@ -22,7 +22,13 @@
 #include	"util.h"
 #include	"cbase.h"
 #include	"monsters.h"
+#include "game.h"
 #include	"schedule.h"
+#include "CClassicMode.h"
+
+extern cvar_t sk_zombie_dmg_both_slash;
+extern cvar_t sk_zombie_dmg_one_slash;
+extern cvar_t sk_zombie_health;
 
 
 //=========================================================
@@ -37,6 +43,29 @@
 class CZombie : public CBaseMonster
 {
 public:
+	// the sequence decides the box, standing on the entity's origin
+	void SetObjectCollisionBox( void )
+	{
+		if ( ( pev->spawnflags & SF_MONSTER_NO_MODEL_BOX ) || !m_fCustomModel )
+		{
+			CBaseEntity::SetObjectCollisionBox();
+			return;
+		}
+
+		Vector mins = g_vecZero;
+		Vector maxs = g_vecZero;
+
+		ExtractBbox( 1, mins, maxs );
+		mins.z = 0;
+		pev->absmin = pev->origin + mins;
+		pev->absmax = pev->origin + maxs;
+	}
+
+	float GetPointsForDamage( float flDamage );
+	int ObjectCaps( void );
+	void UseSound( void );
+	void UnUseSound( void );
+
 	void Spawn( void );
 	void Precache( void );
 	void SetYawSpeed( void );
@@ -45,6 +74,7 @@ public:
 	int IgnoreConditions ( void );
 
 	float m_flNextFlinch;
+	float m_flDamageBudget;
 
 	void PainSound( void );
 	void AlertSound( void );
@@ -62,6 +92,7 @@ public:
 	BOOL CheckRangeAttack1 ( float flDot, float flDist ) { return FALSE; }
 	BOOL CheckRangeAttack2 ( float flDot, float flDist ) { return FALSE; }
 	int TakeDamage( entvars_t *pevInflictor, entvars_t *pevAttacker, float flDamage, int bitsDamageType );
+	void TraceAttack( entvars_t *pevAttacker, float flDamage, Vector vecDir, TraceResult *ptr, int bitsDamageType );
 };
 
 LINK_ENTITY_TO_CLASS( monster_zombie, CZombie );
@@ -112,7 +143,7 @@ const char *CZombie::pPainSounds[] =
 //=========================================================
 int	CZombie :: Classify ( void )
 {
-	return	CLASS_ALIEN_MONSTER;
+	return GetClassification( CLASS_ALIEN_MONSTER );
 }
 
 //=========================================================
@@ -136,20 +167,18 @@ void CZombie :: SetYawSpeed ( void )
 
 int CZombie :: TakeDamage( entvars_t *pevInflictor, entvars_t *pevAttacker, float flDamage, int bitsDamageType )
 {
-	// Take 30% damage from bullets
-	if ( bitsDamageType == DMG_BULLET )
-	{
-		Vector vecDir = pev->origin - (pevInflictor->absmin + pevInflictor->absmax) * 0.5;
-		vecDir = vecDir.Normalize();
-		float flForce = DamageForce( flDamage );
-		pev->velocity = pev->velocity + vecDir * flForce;
-		flDamage *= 0.3;
-	}
+	int damage = CBaseMonster::TakeDamage( pevInflictor, pevAttacker, flDamage, bitsDamageType );
 
-	// HACK HACK -- until we fix this.
-	if ( IsAlive() )
-		PainSound();
-	return CBaseMonster::TakeDamage( pevInflictor, pevAttacker, flDamage, bitsDamageType );
+	m_flDamageBudget -= damage;
+	return damage;
+}
+
+void CZombie::TraceAttack( entvars_t *pevAttacker, float flDamage, Vector vecDir, TraceResult *ptr, int bitsDamageType )
+{
+	if ( ptr->iHitgroup != HITGROUP_HEAD && ( bitsDamageType & DMG_BULLET ) )
+		flDamage *= 0.3;
+
+	CBaseMonster::TraceAttack( pevAttacker, flDamage, vecDir, ptr, bitsDamageType );
 }
 
 void CZombie :: PainSound( void )
@@ -196,7 +225,7 @@ void CZombie :: HandleAnimEvent( MonsterEvent_t *pEvent )
 		{
 			// do stuff for this event.
 	//		ALERT( at_console, "Slash right!\n" );
-			CBaseEntity *pHurt = CheckTraceHullAttack( 70, gSkillData.zombieDmgOneSlash, DMG_SLASH );
+			CBaseEntity *pHurt = CheckTraceHullAttack( 70, sk_zombie_dmg_one_slash.value, DMG_SLASH );
 			if ( pHurt )
 			{
 				if ( pHurt->pev->flags & (FL_MONSTER|FL_CLIENT) )
@@ -220,7 +249,7 @@ void CZombie :: HandleAnimEvent( MonsterEvent_t *pEvent )
 		{
 			// do stuff for this event.
 	//		ALERT( at_console, "Slash left!\n" );
-			CBaseEntity *pHurt = CheckTraceHullAttack( 70, gSkillData.zombieDmgOneSlash, DMG_SLASH );
+			CBaseEntity *pHurt = CheckTraceHullAttack( 70, sk_zombie_dmg_one_slash.value, DMG_SLASH );
 			if ( pHurt )
 			{
 				if ( pHurt->pev->flags & (FL_MONSTER|FL_CLIENT) )
@@ -242,7 +271,7 @@ void CZombie :: HandleAnimEvent( MonsterEvent_t *pEvent )
 		case ZOMBIE_AE_ATTACK_BOTH:
 		{
 			// do stuff for this event.
-			CBaseEntity *pHurt = CheckTraceHullAttack( 70, gSkillData.zombieDmgBothSlash, DMG_SLASH );
+			CBaseEntity *pHurt = CheckTraceHullAttack( 70, sk_zombie_dmg_both_slash.value, DMG_SLASH );
 			if ( pHurt )
 			{
 				if ( pHurt->pev->flags & (FL_MONSTER|FL_CLIENT) )
@@ -273,19 +302,38 @@ void CZombie :: Spawn()
 {
 	Precache( );
 
-	SET_MODEL(ENT(pev), "models/zombie.mdl");
+	if ( !SetupModel() )
+	{
+		if ( CClassicMode::GetInstance()->IsEnabled() )
+			SET_MODEL( ENT(pev), "models/hlclassic/zombie.mdl" );
+		else
+			SET_MODEL(ENT(pev), "models/zombie.mdl");
+	}
 	UTIL_SetSize( pev, VEC_HUMAN_HULL_MIN, VEC_HUMAN_HULL_MAX );
 
 	pev->solid			= SOLID_SLIDEBOX;
 	pev->movetype		= MOVETYPE_STEP;
 	m_bloodColor		= BLOOD_COLOR_GREEN;
-	pev->health			= gSkillData.zombieHealth;
+	if ( pev->health == 0.0f )
+		pev->health			= sk_zombie_health.value;
+
+	m_flDamageBudget = sk_zombie_health.value * 10.0f;
 	pev->view_ofs		= VEC_VIEW;// position of the eyes relative to monster's origin.
 	m_flFieldOfView		= 0.5;// indicates the width of this monster's forward view cone ( as a dotproduct result )
 	m_MonsterState		= MONSTERSTATE_NONE;
 	m_afCapability		= bits_CAP_DOORS_GROUP;
+	m_afMoveShootCap	= 0;
+
+	if ( !m_FormattedName )
+		m_FormattedName = MAKE_STRING( "Zombie" );
 
 	MonsterInit();
+
+	if ( m_fPlayerAlly && !( pev->spawnflags & SF_MONSTER_PREDISASTER ) )
+	{
+		SetUse( &CBaseMonster::CallFollowerPlayerUse );
+		m_fCanPlayerFollow = true;
+	}
 }
 
 //=========================================================
@@ -293,9 +341,14 @@ void CZombie :: Spawn()
 //=========================================================
 void CZombie :: Precache()
 {
+	CBaseEntity::Precache();
+
 	int i;
 
-	PRECACHE_MODEL("models/zombie.mdl");
+	if ( CClassicMode::GetInstance()->IsEnabled() )
+		PRECACHE_MODEL( "models/hlclassic/zombie.mdl" );
+	else
+		PRECACHE_MODEL( "models/zombie.mdl" );
 
 	for ( i = 0; i < ARRAYSIZE( pAttackHitSounds ); i++ )
 		PRECACHE_SOUND((char *)pAttackHitSounds[i]);
@@ -326,7 +379,7 @@ int CZombie::IgnoreConditions ( void )
 {
 	int iIgnore = CBaseMonster::IgnoreConditions();
 
-	if ((m_Activity == ACT_MELEE_ATTACK1) || (m_Activity == ACT_MELEE_ATTACK1))
+	if ((m_Activity == ACT_MELEE_ATTACK1) || (m_Activity == ACT_MELEE_ATTACK2))
 	{
 #if 0
 		if (pev->health < 20)
@@ -345,4 +398,28 @@ int CZombie::IgnoreConditions ( void )
 
 	return iIgnore;
 	
+}
+
+int CZombie::ObjectCaps( void )
+{
+	return IsPlayerAlly() ? FCAP_IMPULSE_USE : FCAP_ACROSS_TRANSITION;
+}
+
+float CZombie::GetPointsForDamage( float flDamage )
+{
+	float points = pev->max_health / sk_zombie_health.value;
+
+	points *= 2.0f;
+
+	return points * ( flDamage / pev->max_health );
+}
+
+void CZombie::UseSound( void )
+{
+	AlertSound();
+}
+
+void CZombie::UnUseSound( void )
+{
+	PainSound();
 }

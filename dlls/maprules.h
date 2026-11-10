@@ -16,7 +16,10 @@
 #ifndef MAPRULES_H
 #define MAPRULES_H
 
+class CBaseEntity;
+class CBasePlayer;
 
+bool GamePlayerEquipOnSpawn( CBaseEntity *entity, CBasePlayer *player );
 
 #endif		// MAPRULES_H
 

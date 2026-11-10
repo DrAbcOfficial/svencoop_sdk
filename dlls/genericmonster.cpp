@@ -19,10 +19,13 @@
 #include	"util.h"
 #include	"cbase.h"
 #include	"monsters.h"
+#include	"scriptevent.h"
 #include	"schedule.h"
+#include "soundent.h"
 
 // For holograms, make them not solid so the player can walk through them
-#define	SF_GENERICMONSTER_NOTSOLID					4 
+#define	SF_GENERICMONSTER_NOTSOLID					4
+#define	SF_GENERICMONSTER_HEADCONTROLLER			8
 
 //=========================================================
 // Monster's Anim Events Go Here
@@ -37,8 +40,25 @@ public:
 	int  Classify ( void );
 	void HandleAnimEvent( MonsterEvent_t *pEvent );
 	int ISoundMask ( void );
+	void KeyValue( KeyValueData *data );
+
+private:
+	bool m_fDisableAI;
 };
 LINK_ENTITY_TO_CLASS( monster_generic, CGenericMonster );
+LINK_ENTITY_TO_CLASS( monster_op4loader, CGenericMonster );
+
+void CGenericMonster::KeyValue( KeyValueData *data )
+{
+	if ( FStrEq( data->szKeyName, "disableai" ) )
+	{
+		m_fDisableAI = atoi( data->szValue ) != 0;
+		data->fHandled = TRUE;
+	}
+	else
+		CBaseMonster::KeyValue( data );
+}
+
 
 //=========================================================
 // Classify - indicates this monster's place in the 
@@ -46,7 +66,10 @@ LINK_ENTITY_TO_CLASS( monster_generic, CGenericMonster );
 //=========================================================
 int	CGenericMonster :: Classify ( void )
 {
-	return	CLASS_PLAYER_ALLY;
+	if ( FClassnameIs( pev, "monster_op4loader" ) )
+		return GetClassification( CLASS_NONE );
+
+	return GetClassification( CLASS_PLAYER_ALLY );
 }
 
 //=========================================================
@@ -73,13 +96,13 @@ void CGenericMonster :: SetYawSpeed ( void )
 //=========================================================
 void CGenericMonster :: HandleAnimEvent( MonsterEvent_t *pEvent )
 {
-	switch( pEvent->event )
+	if ( pEvent->event == SCRIPT_EVENT_SOUND_VOICE && FClassnameIs( pev, "monster_op4loader" ) )
 	{
-	case 0:
-	default:
-		CBaseMonster::HandleAnimEvent( pEvent );
-		break;
+		EMIT_SOUND( ENT(pev), CHAN_BODY, pEvent->options, 1, 1.25 );
+		return;
 	}
+
+	CBaseMonster::HandleAnimEvent( pEvent );
 }
 
 //=========================================================
@@ -87,7 +110,7 @@ void CGenericMonster :: HandleAnimEvent( MonsterEvent_t *pEvent )
 //=========================================================
 int CGenericMonster :: ISoundMask ( void )
 {
-	return	NULL;
+	return	bits_SOUND_NONE;
 }
 
 //=========================================================
@@ -97,7 +120,29 @@ void CGenericMonster :: Spawn()
 {
 	Precache();
 
-	SET_MODEL( ENT(pev), STRING(pev->model) );
+	pev->solid			= SOLID_SLIDEBOX;
+	pev->movetype		= MOVETYPE_STEP;
+	m_bloodColor		= BLOOD_COLOR_RED;
+
+	if ( !pev->health )
+		pev->health			= 8;
+
+	m_flFieldOfView		= 0.5;// indicates the width of this monster's forward view cone ( as a dotproduct result )
+	m_MonsterState		= MONSTERSTATE_NONE;
+
+	if ( FClassnameIs( pev, "monster_op4loader" ) && !SetupModel() )
+	{
+		if ( !pev->health )
+			pev->health = 50000;
+
+		pev->takedamage = DAMAGE_NO;
+		m_bloodColor = DONT_BLEED;
+		SET_MODEL( ENT(pev), "models/loader.mdl" );
+	}
+	else
+	{
+		SET_MODEL( ENT(pev), STRING(pev->model) );
+	}
 
 /*
 	if ( FStrEq( STRING(pev->model), "models/player.mdl" ) )
@@ -111,19 +156,25 @@ void CGenericMonster :: Spawn()
 	else
 		UTIL_SetSize(pev, VEC_HUMAN_HULL_MIN, VEC_HUMAN_HULL_MAX);
 
-	pev->solid			= SOLID_SLIDEBOX;
-	pev->movetype		= MOVETYPE_STEP;
-	m_bloodColor		= BLOOD_COLOR_RED;
-	pev->health			= 8;
-	m_flFieldOfView		= 0.5;// indicates the width of this monster's forward view cone ( as a dotproduct result )
-	m_MonsterState		= MONSTERSTATE_NONE;
+	if ( !m_FormattedName )
+		m_FormattedName = MAKE_STRING( "Monster" );
 
-	MonsterInit();
+	if ( !m_fDisableAI )
+		MonsterInit();
 
 	if ( pev->spawnflags & SF_GENERICMONSTER_NOTSOLID )
 	{
 		pev->solid = SOLID_NOT;
 		pev->takedamage = DAMAGE_NO;
+	}
+
+	if ( pev->spawnflags & SF_GENERICMONSTER_HEADCONTROLLER )
+		m_afCapability |= bits_CAP_TURN_HEAD;
+
+	if ( m_fPlayerAlly && !( pev->spawnflags & SF_MONSTER_PREDISASTER ) )
+	{
+		SetUse( &CBaseMonster::CallFollowerPlayerUse );
+		m_fCanPlayerFollow = true;
 	}
 }
 
@@ -132,6 +183,12 @@ void CGenericMonster :: Spawn()
 //=========================================================
 void CGenericMonster :: Precache()
 {
+	if ( FClassnameIs( pev, "monster_op4loader" ) && !SetupModel() )
+	{
+		PRECACHE_MODEL( "models/loader.mdl" );
+		return;
+	}
+
 	PRECACHE_MODEL( (char *)STRING(pev->model) );
 }	
 

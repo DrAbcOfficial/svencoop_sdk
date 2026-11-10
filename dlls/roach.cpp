@@ -23,6 +23,7 @@
 #include	"schedule.h"
 #include	"soundent.h"
 #include	"decals.h"
+#include "CClassicMode.h"
 
 #define		ROACH_IDLE				0
 #define		ROACH_BORED				1
@@ -37,6 +38,8 @@
 class CRoach : public CBaseMonster
 {
 public:
+	float GetPointsForDamage( float flDamage );
+
 	void Spawn( void );
 	void Precache( void );
 	void SetYawSpeed( void );
@@ -75,7 +78,7 @@ int CRoach :: ISoundMask ( void )
 //=========================================================
 int	CRoach :: Classify ( void )
 {
-	return CLASS_INSECT;
+	return GetClassification( CLASS_INSECT );
 }
 
 //=========================================================
@@ -120,7 +123,13 @@ void CRoach :: Spawn()
 {
 	Precache( );
 
-	SET_MODEL(ENT(pev), "models/roach.mdl");
+	if ( !SetupModel() )
+	{
+		if ( CClassicMode::GetInstance()->IsEnabled() )
+			SET_MODEL( ENT(pev), "models/hlclassic/roach.mdl" );
+		else
+			SET_MODEL(ENT(pev), "models/roach.mdl");
+	}
 	UTIL_SetSize( pev, Vector( -1, -1, 0 ), Vector( 1, 1, 2 ) );
 
 	pev->solid			= SOLID_SLIDEBOX;
@@ -130,6 +139,9 @@ void CRoach :: Spawn()
 	pev->health			= 1;
 	m_flFieldOfView		= 0.5;// indicates the width of this monster's forward view cone ( as a dotproduct result )
 	m_MonsterState		= MONSTERSTATE_NONE;
+
+	if ( !m_FormattedName )
+		m_FormattedName = MAKE_STRING( "Roach" );
 
 	MonsterInit();
 	SetActivity ( ACT_IDLE );
@@ -147,7 +159,10 @@ void CRoach :: Spawn()
 //=========================================================
 void CRoach :: Precache()
 {
-	PRECACHE_MODEL("models/roach.mdl");
+	if ( CClassicMode::GetInstance()->IsEnabled() )
+		PRECACHE_MODEL( "models/hlclassic/roach.mdl" );
+	else
+		PRECACHE_MODEL( "models/roach.mdl" );
 
 	PRECACHE_SOUND("roach/rch_die.wav");
 	PRECACHE_SOUND("roach/rch_walk.wav");
@@ -262,7 +277,7 @@ void CRoach :: MonsterThink( void  )
 					pSound = CSoundEnt::SoundPointerForIndex( m_iAudibleList );
 
 					// roach smells food and is just standing around. Go to food unless food isn't on same z-plane.
-					if ( pSound && abs( pSound->m_vecOrigin.z - pev->origin.z ) <= 3 )
+					if ( pSound && fabs( pSound->m_vecOrigin.z - pev->origin.z ) <= 3 )
 					{
 						PickNewDest( ROACH_SMELL_FOOD );
 						SetActivity ( ACT_WALK );
@@ -445,7 +460,7 @@ void CRoach :: Look ( int iDistance )
 				case	R_NO:
 					break;
 				default:
-					ALERT ( at_console, "%s can't asses %s\n", STRING(pev->classname), STRING(pSightEnt->pev->classname ) );
+					ALERT ( at_console, "%s can't assess %s\n", STRING(pev->classname), STRING(pSightEnt->pev->classname ) );
 					break;
 				}
 			}
@@ -458,3 +473,7 @@ void CRoach :: Look ( int iDistance )
 // AI Schedules Specific to this monster
 //=========================================================
 
+float CRoach::GetPointsForDamage( float flDamage )
+{
+	return 0.1f;
+}

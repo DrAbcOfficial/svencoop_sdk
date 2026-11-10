@@ -15,11 +15,14 @@
 #ifndef TRAINS_H
 #define TRAINS_H
 
+#include "TypedEntityHandle.h"
+
 // Tracktrain spawn flags
 #define SF_TRACKTRAIN_NOPITCH		0x0001
 #define SF_TRACKTRAIN_NOCONTROL		0x0002
 #define SF_TRACKTRAIN_FORWARDONLY	0x0004
 #define SF_TRACKTRAIN_PASSABLE		0x0008
+#define SF_TRACKTRAIN_NOYAW			0x0010
 
 // Spawnflag for CPathTrack
 #define SF_PATH_DISABLED		0x00000001
@@ -32,11 +35,15 @@
 #define SF_CORNER_WAITFORTRIG	0x001
 #define SF_CORNER_TELEPORT		0x002
 #define SF_CORNER_FIREONCE		0x004
+#define SF_CORNER_RANDOM_TARGET	0x008
 
 //#define PATH_SPARKLE_DEBUG		1	// This makes a particle effect around path_track entities for debugging
 class CPathTrack : public CPointEntity
 {
 public:
+	CPathTrack() : m_hNext(), m_hPrevious(), m_hAltpath() {}
+
+	void OnCreate() override;
 	void		Spawn( void );
 	void		Activate( void );
 	void		KeyValue( KeyValueData* pkvd);
@@ -55,6 +62,7 @@ public:
 
 	CPathTrack	*GetNext( void );
 	CPathTrack	*GetPrevious( void );
+	int GetGoalDirection( int goalName, CBaseEntity *train );
 
 	virtual int		Save( CSave &save );
 	virtual int		Restore( CRestore &restore );
@@ -66,15 +74,23 @@ public:
 
 	float		m_length;
 	string_t	m_altName;
-	CPathTrack	*m_pnext;
-	CPathTrack	*m_pprevious;
-	CPathTrack	*m_paltpath;
+
+	float	m_flNewSpeed;
+	float	m_flMaxSpeed;
+
+	CEntityHandle<CPathTrack>	m_hNext;
+	CEntityHandle<CPathTrack>	m_hPrevious;
+	CEntityHandle<CPathTrack>	m_hAltpath;
+
+	bool m_bVisited;
 };
 
 
 class CFuncTrackTrain : public CBaseEntity
 {
 public:
+	CFuncTrackTrain() : m_hPath(), m_Unresolved150( 0 ), m_Unresolved154( 0 ), m_hDeadEndPath() {}
+
 	void Spawn( void );
 	void Precache( void );
 
@@ -86,12 +102,15 @@ public:
 	void EXPORT Find( void );
 	void EXPORT NearestPath( void );
 	void EXPORT DeadEnd( void );
+	CPathTrack *FindDeadEnd();
+	void SetMaxSpeed( float speed );
 
 	void		NextThink( float thinkTime, BOOL alwaysThink );
 
-	void SetTrack( CPathTrack *track ) { m_ppath = track->Nearest(pev->origin); }
+	void SetTrack( CPathTrack *track ) { m_hPath = track->Nearest( pev->origin ); }
 	void SetControls( entvars_t *pevControls );
 	BOOL OnControls( entvars_t *pev );
+	virtual bool ShouldDisablePlayerCollisions( void ) const;
 
 	void StopSound ( void );
 	void UpdateSound ( void );
@@ -106,10 +125,17 @@ public:
 
 	virtual void	OverrideReset( void );
 
-	CPathTrack	*m_ppath;
+	string_t					m_iszGoal;
+	CEntityHandle<CPathTrack>	m_hPath;
+
+	unsigned int	m_Unresolved150;
+	unsigned int	m_Unresolved154;
+
+	CEntityHandle<CPathTrack> m_hDeadEndPath;
+
 	float		m_length;
 	float		m_height;
-	float		m_speed;
+	float		m_flMaxSpeed;
 	float		m_dir;
 	float		m_startSpeed;
 	Vector		m_controlMins;
@@ -121,7 +147,8 @@ public:
 	float		m_oldSpeed;
 
 private:
-	unsigned short m_usAdjustPitch;
+	float			m_flLastSoundSpeed;
+	unsigned short	m_usAdjustPitch;
 };
 
 #endif

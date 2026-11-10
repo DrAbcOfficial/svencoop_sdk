@@ -5,129 +5,305 @@
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
       <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
-    <Filter Include="Header Files">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hpp;hxx;hm;inl;inc;xsd</Extensions>
-    </Filter>
-    <Filter Include="Resource Files">
-      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
-      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
-    </Filter>
     <Filter Include="Source Files\cl_dll">
       <UniqueIdentifier>{01b8d565-8fa1-4999-8cb6-01da5dd1e555}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\cl_dll\Effects">
+      <UniqueIdentifier>{8F2E32A5-6005-54A4-8BA7-17818251BBD0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\cl_dll\Effects\Particles">
+      <UniqueIdentifier>{1C371624-9E59-5A49-A6ED-F48AC11C1A97}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\cl_dll\Effects\Portals">
+      <UniqueIdentifier>{E62865E4-2B30-5B52-B08B-67588F187C40}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\cl_dll\Events">
+      <UniqueIdentifier>{D9777C96-CBD1-58C4-B550-1AEB9421B9ED}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\cl_dll\hl">
+      <UniqueIdentifier>{A6F64875-E16C-5356-BA75-E3D1978866EA}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\cl_dll\HUD">
+      <UniqueIdentifier>{88FA21F1-FD5C-51E6-B6DC-6FDE7959AC40}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\cl_dll\Input">
+      <UniqueIdentifier>{F5FB1640-1C15-53BE-91BE-2D101792F6D8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\cl_dll\Media">
+      <UniqueIdentifier>{9ED35D8B-6412-5F80-AAB4-F608C992864E}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\cl_dll\Rendering">
+      <UniqueIdentifier>{06B38FE4-B866-5FBD-A153-E8D0781D53DA}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\cl_dll\Sound">
+      <UniqueIdentifier>{ACBE60E3-4B08-5A37-89C1-45E12CD28BC9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\cl_dll\VGUI">
+      <UniqueIdentifier>{4EFEAF4F-1DB1-53BA-913B-12C042D84624}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\cl_dll\View">
+      <UniqueIdentifier>{CEB19988-9235-5DA7-B257-63284101DE7F}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\cl_dll\VR">
+      <UniqueIdentifier>{D7D9FB99-936D-5124-8288-586B5B4C982C}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files\common">
       <UniqueIdentifier>{6887a889-19a5-42f7-8af9-2af4b64cbf2b}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\pm_shared">
-      <UniqueIdentifier>{7d8ce8c9-fed8-42ee-9ba0-73d0fee6006a}</UniqueIdentifier>
+    <Filter Include="Source Files\dlls">
+      <UniqueIdentifier>{B87A74B7-73FA-5233-A8D9-C2CD695F92CB}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\dlls\Utilities">
+      <UniqueIdentifier>{14177BBC-E293-559B-9EFE-75DC137C4967}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\dlls\Weapons">
+      <UniqueIdentifier>{FC2B9CAA-6EE6-5576-8DC9-035B0284CBD4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\dlls\wpn_shared">
+      <UniqueIdentifier>{FE715CB8-B39B-5BA5-B1FD-4F659C4D41D6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\external">
+      <UniqueIdentifier>{C4CA8071-2AED-5EEC-B074-07F8CA9F139A}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\external\cryptopp">
+      <UniqueIdentifier>{50642E1E-A5E7-5F43-82C8-998267E7E438}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files\game_shared">
       <UniqueIdentifier>{83318ea3-5019-4d8a-a9f9-4922cdb1c9bb}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\cl_dll">
-      <UniqueIdentifier>{95dcdae3-b427-4517-a477-bfa2583b2e1f}</UniqueIdentifier>
+    <Filter Include="Source Files\game_shared\Utilities">
+      <UniqueIdentifier>{6465FD4F-AA77-5C04-8716-CADE82E2A1BE}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\common">
-      <UniqueIdentifier>{54679c20-fece-4cb1-bef2-017d30f31af0}</UniqueIdentifier>
+    <Filter Include="Source Files\game_shared\VGUI">
+      <UniqueIdentifier>{66BB09D5-3243-5834-95ED-A93BBE108D5C}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\pm_shared">
-      <UniqueIdentifier>{fb64b597-8c31-4391-b259-6121f67bbccb}</UniqueIdentifier>
+    <Filter Include="Source Files\game_shared\Voice">
+      <UniqueIdentifier>{E91A7DE1-E567-5F89-9594-F8F5DBC93052}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\game_shared">
-      <UniqueIdentifier>{dfaa6b94-3821-41ff-a9c2-ef94fbb0d7d1}</UniqueIdentifier>
+    <Filter Include="Source Files\pm_shared">
+      <UniqueIdentifier>{7d8ce8c9-fed8-42ee-9ba0-73d0fee6006a}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files\public">
       <UniqueIdentifier>{c053705f-05f3-4d16-ab13-80bfa84cbe75}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\_hl">
-      <UniqueIdentifier>{f033f23a-ab54-411c-bebf-72d10839418e}</UniqueIdentifier>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hpp;hxx;hm;inl;inc;xsd</Extensions>
     </Filter>
-    <Filter Include="Source Files\_hl\dlls">
-      <UniqueIdentifier>{a2469e54-cb56-4161-b6b1-55c9d93676c1}</UniqueIdentifier>
+    <Filter Include="Header Files\cl_dll">
+      <UniqueIdentifier>{95dcdae3-b427-4517-a477-bfa2583b2e1f}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\_hl\dlls\wpn_shared">
-      <UniqueIdentifier>{a46a0ff1-e7ad-43c4-afb8-6c93e71803a1}</UniqueIdentifier>
+    <Filter Include="Header Files\cl_dll\Effects">
+      <UniqueIdentifier>{0288E3D0-CB49-5B18-AA34-A4BB16F1EBAF}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\_hl\cl_dll">
-      <UniqueIdentifier>{5bff06ec-c232-4dd2-8642-4e2ce64f31ef}</UniqueIdentifier>
+    <Filter Include="Header Files\cl_dll\Effects\Particles">
+      <UniqueIdentifier>{6D7BFC66-C1D6-5155-BEA3-141C5B5D4DE1}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\_hl\cl_dll\hl">
-      <UniqueIdentifier>{bd9d5958-4e67-4bff-bbd8-6ba6dfcdb720}</UniqueIdentifier>
+    <Filter Include="Header Files\cl_dll\Effects\Portals">
+      <UniqueIdentifier>{9C396234-3AC6-5797-A308-7147A3903ED6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\cl_dll\Events">
+      <UniqueIdentifier>{17CC07B5-988B-5BCE-991D-3AEF44DDC17D}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\cl_dll\hl">
+      <UniqueIdentifier>{29231D7C-0AE5-5971-827D-D2AA0B6EBEB5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\cl_dll\HUD">
+      <UniqueIdentifier>{4515A56F-BC0B-59DC-B194-780484DDE049}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\cl_dll\Media">
+      <UniqueIdentifier>{0D1A4E49-EA93-5D1E-B8B9-19C5AE79A8C8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\cl_dll\Rendering">
+      <UniqueIdentifier>{773DC901-BB90-52C2-8F1F-F0425E82A8CD}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\cl_dll\Sound">
+      <UniqueIdentifier>{AD42D228-C533-5FD5-B2F7-EF616EC782D4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\cl_dll\VGUI">
+      <UniqueIdentifier>{0EFF9FAA-188A-5094-BC53-974C471FB8C2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\cl_dll\View">
+      <UniqueIdentifier>{ED0AAD8F-BC01-5C87-90ED-31DC76C1CE91}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\cl_dll\VR">
+      <UniqueIdentifier>{E81E6D17-8813-5E80-99B0-A1F00E6BD878}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\common">
+      <UniqueIdentifier>{54679c20-fece-4cb1-bef2-017d30f31af0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\dlls">
+      <UniqueIdentifier>{1E3FE6A0-B465-54C4-9DC2-76D1BF310FFA}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\dlls\Utilities">
+      <UniqueIdentifier>{49CA2FA8-431F-583B-8FAB-966428E16FBE}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\dlls\Weapons">
+      <UniqueIdentifier>{F8CC4786-2603-569E-9EA0-47CA0406872D}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\external">
+      <UniqueIdentifier>{5C0CD37D-5380-52BF-89CB-9FEBC199A22C}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\external\cryptopp">
+      <UniqueIdentifier>{77C5CC05-3EC6-53C0-BF23-993C6F2995E5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\external\fmodex">
+      <UniqueIdentifier>{CB9C15E6-C6CC-50F6-AA9D-496B3B597673}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\external\fmodex\include">
+      <UniqueIdentifier>{A5B3D5BE-6B0A-5A23-BD16-93D720664895}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\game_shared">
+      <UniqueIdentifier>{dfaa6b94-3821-41ff-a9c2-ef94fbb0d7d1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\game_shared\Utilities">
+      <UniqueIdentifier>{E985D0E1-897F-5F5B-8D29-832DB3ECC2CD}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\game_shared\VGUI">
+      <UniqueIdentifier>{4A107422-DDA0-5C36-8330-26059BC99D66}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\game_shared\Voice">
+      <UniqueIdentifier>{1013488C-FF10-5973-800B-7D2CD8697AC5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\pm_shared">
+      <UniqueIdentifier>{fb64b597-8c31-4391-b259-6121f67bbccb}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\dlls\crossbow.cpp">
-      <Filter>Source Files\_hl\dlls</Filter>
+    <ClCompile Include="..\..\cl_dll\ev_beams.cpp">
+      <Filter>Source Files\cl_dll\Events</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\dlls\crowbar.cpp">
-      <Filter>Source Files\_hl\dlls</Filter>
+    <ClCompile Include="..\..\cl_dll\ev_sven_weapons.cpp">
+      <Filter>Source Files\cl_dll\Events</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\dlls\egon.cpp">
-      <Filter>Source Files\_hl\dlls</Filter>
+    <ClCompile Include="..\..\cl_dll\ev_hldm_effects.cpp">
+      <Filter>Source Files\cl_dll\Events</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\cl_dll\ev_hldm.cpp">
-      <Filter>Source Files\_hl\cl_dll</Filter>
+    <ClCompile Include="..\..\cl_dll\ClientDLL.cpp">
+      <Filter>Source Files\cl_dll</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\dlls\gauss.cpp">
-      <Filter>Source Files\_hl\dlls</Filter>
+    <ClCompile Include="..\..\cl_dll\Discord.cpp">
+      <Filter>Source Files\cl_dll</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\dlls\handgrenade.cpp">
-      <Filter>Source Files\_hl\dlls</Filter>
+    <ClCompile Include="..\..\cl_dll\client_fmod.cpp">
+      <Filter>Source Files\cl_dll\Sound</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\cl_dll\hl\hl_weapons.cpp">
-      <Filter>Source Files\_hl\cl_dll\hl</Filter>
+    <ClCompile Include="..\..\cl_dll\client_media.cpp">
+      <Filter>Source Files\cl_dll\Media</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\cl_dll\hl\hl_baseentity.cpp">
-      <Filter>Source Files\_hl\cl_dll\hl</Filter>
+    <ClCompile Include="..\..\cl_dll\client_sound.cpp">
+      <Filter>Source Files\cl_dll\Sound</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\cl_dll\hl\hl_events.cpp">
-      <Filter>Source Files\_hl\cl_dll\hl</Filter>
+    <ClCompile Include="..\..\cl_dll\client_sound_cache.cpp">
+      <Filter>Source Files\cl_dll\Sound</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\cl_dll\hl\hl_objects.cpp">
-      <Filter>Source Files\_hl\cl_dll\hl</Filter>
+    <ClCompile Include="..\..\cl_dll\client_sound_channels.cpp">
+      <Filter>Source Files\cl_dll\Sound</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\dlls\wpn_shared\hl_wpn_glock.cpp">
-      <Filter>Source Files\_hl\dlls\wpn_shared</Filter>
+    <ClCompile Include="..\..\cl_dll\client_sound_list.cpp">
+      <Filter>Source Files\cl_dll\Sound</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\dlls\squeakgrenade.cpp">
-      <Filter>Source Files\_hl\dlls</Filter>
+    <ClCompile Include="..\..\cl_dll\client_sound_messages.cpp">
+      <Filter>Source Files\cl_dll\Sound</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\dlls\hornetgun.cpp">
-      <Filter>Source Files\_hl\dlls</Filter>
+    <ClCompile Include="..\..\cl_dll\client_sound_playback.cpp">
+      <Filter>Source Files\cl_dll\Sound</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\dlls\mp5.cpp">
-      <Filter>Source Files\_hl\dlls</Filter>
+    <ClCompile Include="..\..\cl_dll\client_sound_reverb.cpp">
+      <Filter>Source Files\cl_dll\Sound</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\dlls\python.cpp">
-      <Filter>Source Files\_hl\dlls</Filter>
+    <ClCompile Include="..\..\cl_dll\client_sound_sentences.cpp">
+      <Filter>Source Files\cl_dll\Sound</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\dlls\rpg.cpp">
-      <Filter>Source Files\_hl\dlls</Filter>
+    <ClCompile Include="..\..\cl_dll\particle_effects.cpp">
+      <Filter>Source Files\cl_dll\Effects\Particles</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\dlls\satchel.cpp">
-      <Filter>Source Files\_hl\dlls</Filter>
+    <ClCompile Include="..\..\cl_dll\particle_engine.cpp">
+      <Filter>Source Files\cl_dll\Effects\Particles</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\dlls\shotgun.cpp">
-      <Filter>Source Files\_hl\dlls</Filter>
+    <ClCompile Include="..\..\cl_dll\particle_script.cpp">
+      <Filter>Source Files\cl_dll\Effects\Particles</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\dlls\tripmine.cpp">
-      <Filter>Source Files\_hl\dlls</Filter>
+    <ClCompile Include="..\..\cl_dll\particle_startup.cpp">
+      <Filter>Source Files\cl_dll\Effects\Particles</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\cl_dll\death.cpp">
+    <ClCompile Include="..\..\cl_dll\particle_system.cpp">
+      <Filter>Source Files\cl_dll\Effects\Particles</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\portal_gl.cpp">
+      <Filter>Source Files\cl_dll\Effects\Portals</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\portal_manager.cpp">
+      <Filter>Source Files\cl_dll\Effects\Portals</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\portal_surface.cpp">
+      <Filter>Source Files\cl_dll\Effects\Portals</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\portal_trace.cpp">
+      <Filter>Source Files\cl_dll\Effects\Portals</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\sven_math.cpp">
+      <Filter>Source Files\cl_dll</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\vr_manager.cpp">
+      <Filter>Source Files\cl_dll\VR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\game_shared\CString.cpp">
+      <Filter>Source Files\game_shared\Utilities</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dlls\CStringServer.cpp">
+      <Filter>Source Files\dlls\Utilities</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dlls\CEscapeSequences.cpp">
+      <Filter>Source Files\dlls\Utilities</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dlls\CLinkedStringPool.cpp">
+      <Filter>Source Files\dlls\Utilities</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dlls\CStringMap.cpp">
+      <Filter>Source Files\dlls\Utilities</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dlls\CKeyvalues.cpp">
+      <Filter>Source Files\dlls\Utilities</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dlls\CKeyvaluesLexer.cpp">
+      <Filter>Source Files\dlls\Utilities</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dlls\CKeyvaluesParser.cpp">
+      <Filter>Source Files\dlls\Utilities</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dlls\CKeyvaluesWriter.cpp">
+      <Filter>Source Files\dlls\Utilities</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dlls\CLog.cpp">
+      <Filter>Source Files\dlls\Utilities</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dlls\CReplacementMap.cpp">
+      <Filter>Source Files\dlls\Utilities</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\vgui_MediaSelect.cpp">
+      <Filter>Source Files\cl_dll\VGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\vgui_CameraPanel.cpp">
+      <Filter>Source Files\cl_dll\VGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\client_filesystem.cpp">
+      <Filter>Source Files\cl_dll</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\game_shared\materials.cpp">
+      <Filter>Source Files\game_shared</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\client_support.cpp">
       <Filter>Source Files\cl_dll</Filter>
     </ClCompile>
     <ClCompile Include="..\..\cl_dll\ammo.cpp">
-      <Filter>Source Files\cl_dll</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\cl_dll\ammo_secondary.cpp">
-      <Filter>Source Files\cl_dll</Filter>
+      <Filter>Source Files\cl_dll\HUD</Filter>
     </ClCompile>
     <ClCompile Include="..\..\cl_dll\ammohistory.cpp">
-      <Filter>Source Files\cl_dll</Filter>
+      <Filter>Source Files\cl_dll\HUD</Filter>
     </ClCompile>
     <ClCompile Include="..\..\cl_dll\battery.cpp">
-      <Filter>Source Files\cl_dll</Filter>
+      <Filter>Source Files\cl_dll\HUD</Filter>
     </ClCompile>
     <ClCompile Include="..\..\cl_dll\cdll_int.cpp">
       <Filter>Source Files\cl_dll</Filter>
@@ -135,8 +311,11 @@
     <ClCompile Include="..\..\cl_dll\com_weapons.cpp">
       <Filter>Source Files\cl_dll</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\cl_dll\message.cpp">
-      <Filter>Source Files\cl_dll</Filter>
+    <ClCompile Include="..\..\cl_dll\crosshair.cpp">
+      <Filter>Source Files\cl_dll\HUD</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\death.cpp">
+      <Filter>Source Files\cl_dll\HUD</Filter>
     </ClCompile>
     <ClCompile Include="..\..\cl_dll\demo.cpp">
       <Filter>Source Files\cl_dll</Filter>
@@ -144,181 +323,523 @@
     <ClCompile Include="..\..\cl_dll\entity.cpp">
       <Filter>Source Files\cl_dll</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\cl_dll\ev_common.cpp">
-      <Filter>Source Files\cl_dll</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\cl_dll\events.cpp">
-      <Filter>Source Files\cl_dll</Filter>
+      <Filter>Source Files\cl_dll\Events</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\ev_common.cpp">
+      <Filter>Source Files\cl_dll\Events</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\ev_hldm.cpp">
+      <Filter>Source Files\cl_dll\Events</Filter>
     </ClCompile>
     <ClCompile Include="..\..\cl_dll\flashlight.cpp">
-      <Filter>Source Files\cl_dll</Filter>
+      <Filter>Source Files\cl_dll\HUD</Filter>
     </ClCompile>
     <ClCompile Include="..\..\cl_dll\GameStudioModelRenderer.cpp">
-      <Filter>Source Files\cl_dll</Filter>
+      <Filter>Source Files\cl_dll\Rendering</Filter>
     </ClCompile>
     <ClCompile Include="..\..\cl_dll\geiger.cpp">
-      <Filter>Source Files\cl_dll</Filter>
+      <Filter>Source Files\cl_dll\HUD</Filter>
     </ClCompile>
     <ClCompile Include="..\..\cl_dll\health.cpp">
-      <Filter>Source Files\cl_dll</Filter>
+      <Filter>Source Files\cl_dll\HUD</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\hl\hl_baseentity.cpp">
+      <Filter>Source Files\cl_dll\hl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\hl\hl_events.cpp">
+      <Filter>Source Files\cl_dll\hl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\hl\hl_objects.cpp">
+      <Filter>Source Files\cl_dll\hl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\hl\hl_weapons.cpp">
+      <Filter>Source Files\cl_dll\hl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dlls\handgrenade.cpp">
+      <Filter>Source Files\dlls\Weapons</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\hl\satchel.cpp">
+      <Filter>Source Files\cl_dll\hl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dlls\hornetgun.cpp">
+      <Filter>Source Files\dlls\Weapons</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dlls\gauss.cpp">
+      <Filter>Source Files\dlls\Weapons</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\hl\rpg.cpp">
+      <Filter>Source Files\cl_dll\hl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\hl\ehandle.cpp">
+      <Filter>Source Files\cl_dll\hl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dlls\shotgun.cpp">
+      <Filter>Source Files\dlls\Weapons</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\hl\crossbow.cpp">
+      <Filter>Source Files\cl_dll\hl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\hl\mp5.cpp">
+      <Filter>Source Files\cl_dll\hl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\hl\python.cpp">
+      <Filter>Source Files\cl_dll\hl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dlls\wpn_shared\hl_wpn_glock.cpp">
+      <Filter>Source Files\dlls\wpn_shared</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\hl\CWeaponFlamethrower.cpp">
+      <Filter>Source Files\cl_dll\hl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dlls\displacer.cpp">
+      <Filter>Source Files\dlls\Weapons</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dlls\sporelauncher.cpp">
+      <Filter>Source Files\dlls\Weapons</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\hl\shockrifleweapon.cpp">
+      <Filter>Source Files\cl_dll\hl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dlls\minigun.cpp">
+      <Filter>Source Files\dlls\Weapons</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\hl\sniper_rifle.cpp">
+      <Filter>Source Files\cl_dll\hl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\hl\m249.cpp">
+      <Filter>Source Files\cl_dll\hl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dlls\m16.cpp">
+      <Filter>Source Files\dlls\Weapons</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dlls\uzi.cpp">
+      <Filter>Source Files\dlls\Weapons</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\hl\CClassicModeWrapper.cpp">
+      <Filter>Source Files\cl_dll\hl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dlls\desert_eagle.cpp">
+      <Filter>Source Files\dlls\Weapons</Filter>
     </ClCompile>
     <ClCompile Include="..\..\cl_dll\hud.cpp">
+      <Filter>Source Files\cl_dll\HUD</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\hud_inventory.cpp">
+      <Filter>Source Files\cl_dll\HUD</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\hud_custom.cpp">
+      <Filter>Source Files\cl_dll\HUD</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\hud_customsprite.cpp">
+      <Filter>Source Files\cl_dll\HUD</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\hud_numericdisplay.cpp">
+      <Filter>Source Files\cl_dll\HUD</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\clientobject.cpp">
+      <Filter>Source Files\cl_dll\Effects</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\clientsprite.cpp">
+      <Filter>Source Files\cl_dll\Effects</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\client_sporetrail.cpp">
+      <Filter>Source Files\cl_dll\Effects</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\client_effects.cpp">
+      <Filter>Source Files\cl_dll\Effects</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\client_xenportal.cpp">
+      <Filter>Source Files\cl_dll\Effects</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\client_hwfire.cpp">
+      <Filter>Source Files\cl_dll\Effects</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\client_weather.cpp">
+      <Filter>Source Files\cl_dll\Effects</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\client_surface.cpp">
       <Filter>Source Files\cl_dll</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\cl_dll\hud_bench.cpp">
+    <ClCompile Include="..\..\cl_dll\te_custom.cpp">
       <Filter>Source Files\cl_dll</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\cl_dll\hud_benchtrace.cpp">
+    <ClCompile Include="..\..\cl_dll\client_crypto.cpp">
       <Filter>Source Files\cl_dll</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\client_messagebox.cpp">
+      <Filter>Source Files\cl_dll</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\vgui_Inventory.cpp">
+      <Filter>Source Files\cl_dll\VGUI</Filter>
     </ClCompile>
     <ClCompile Include="..\..\cl_dll\hud_msg.cpp">
-      <Filter>Source Files\cl_dll</Filter>
+      <Filter>Source Files\cl_dll\HUD</Filter>
     </ClCompile>
     <ClCompile Include="..\..\cl_dll\hud_redraw.cpp">
-      <Filter>Source Files\cl_dll</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\cl_dll\hud_servers.cpp">
-      <Filter>Source Files\cl_dll</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\cl_dll\hud_spectator.cpp">
-      <Filter>Source Files\cl_dll</Filter>
+      <Filter>Source Files\cl_dll\HUD</Filter>
     </ClCompile>
     <ClCompile Include="..\..\cl_dll\hud_update.cpp">
-      <Filter>Source Files\cl_dll</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\cl_dll\in_camera.cpp">
-      <Filter>Source Files\cl_dll</Filter>
+      <Filter>Source Files\cl_dll\HUD</Filter>
     </ClCompile>
     <ClCompile Include="..\..\cl_dll\input.cpp">
-      <Filter>Source Files\cl_dll</Filter>
+      <Filter>Source Files\cl_dll\Input</Filter>
     </ClCompile>
     <ClCompile Include="..\..\cl_dll\inputw32.cpp">
-      <Filter>Source Files\cl_dll</Filter>
+      <Filter>Source Files\cl_dll\Input</Filter>
     </ClCompile>
     <ClCompile Include="..\..\cl_dll\interpolation.cpp">
       <Filter>Source Files\cl_dll</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\cl_dll\in_camera.cpp">
+      <Filter>Source Files\cl_dll\Input</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\cl_dll\menu.cpp">
+      <Filter>Source Files\cl_dll\HUD</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\message.cpp">
+      <Filter>Source Files\cl_dll\HUD</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\saytext.cpp">
+      <Filter>Source Files\cl_dll\HUD</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\StudioModelRenderer.cpp">
+      <Filter>Source Files\cl_dll\Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\studio_util.cpp">
+      <Filter>Source Files\cl_dll</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\text_message.cpp">
+      <Filter>Source Files\cl_dll\HUD</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\train.cpp">
+      <Filter>Source Files\cl_dll\HUD</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\tri.cpp">
+      <Filter>Source Files\cl_dll\View</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\util.cpp">
+      <Filter>Source Files\cl_dll</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\vgui_ConsolePanel.cpp">
+      <Filter>Source Files\cl_dll\VGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\vgui_ControlConfigPanel.cpp">
+      <Filter>Source Files\cl_dll\VGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\vgui_CustomObjects.cpp">
+      <Filter>Source Files\cl_dll\VGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\vgui_int.cpp">
+      <Filter>Source Files\cl_dll\VGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\vgui_MOTDWindow.cpp">
+      <Filter>Source Files\cl_dll\VGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\vgui_SchemeManager.cpp">
+      <Filter>Source Files\cl_dll\VGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\vgui_ScorePanel.cpp">
+      <Filter>Source Files\cl_dll\VGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\vgui_SpectatorPanel.cpp">
+      <Filter>Source Files\cl_dll\VGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\vgui_TeamFortressViewport.cpp">
+      <Filter>Source Files\cl_dll\VGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\view.cpp">
+      <Filter>Source Files\cl_dll\View</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\voice_status.cpp">
       <Filter>Source Files\cl_dll</Filter>
     </ClCompile>
     <ClCompile Include="..\..\common\parsemsg.cpp">
       <Filter>Source Files\common</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\pm_shared\pm_shared.c">
-      <Filter>Source Files\pm_shared</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\pm_shared\pm_debug.c">
-      <Filter>Source Files\pm_shared</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\pm_shared\pm_math.c">
-      <Filter>Source Files\pm_shared</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\cl_dll\util.cpp">
-      <Filter>Source Files\cl_dll</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\cl_dll\saytext.cpp">
-      <Filter>Source Files\cl_dll</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\cl_dll\status_icons.cpp">
-      <Filter>Source Files\cl_dll</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\cl_dll\statusbar.cpp">
-      <Filter>Source Files\cl_dll</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\cl_dll\studio_util.cpp">
-      <Filter>Source Files\cl_dll</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\cl_dll\StudioModelRenderer.cpp">
-      <Filter>Source Files\cl_dll</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\cl_dll\text_message.cpp">
-      <Filter>Source Files\cl_dll</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\cl_dll\train.cpp">
-      <Filter>Source Files\cl_dll</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\cl_dll\tri.cpp">
-      <Filter>Source Files\cl_dll</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\game_shared\vgui_checkbutton2.cpp">
-      <Filter>Source Files\game_shared</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\cl_dll\vgui_CustomObjects.cpp">
-      <Filter>Source Files\cl_dll</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\cl_dll\vgui_ClassMenu.cpp">
-      <Filter>Source Files\cl_dll</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\cl_dll\vgui_ControlConfigPanel.cpp">
-      <Filter>Source Files\cl_dll</Filter>
+      <Filter>Source Files\game_shared\VGUI</Filter>
     </ClCompile>
     <ClCompile Include="..\..\game_shared\vgui_grid.cpp">
-      <Filter>Source Files\game_shared</Filter>
+      <Filter>Source Files\game_shared\VGUI</Filter>
     </ClCompile>
     <ClCompile Include="..\..\game_shared\vgui_helpers.cpp">
-      <Filter>Source Files\game_shared</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\cl_dll\vgui_int.cpp">
-      <Filter>Source Files\cl_dll</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\game_shared\vgui_loadtga.cpp">
-      <Filter>Source Files\game_shared</Filter>
+      <Filter>Source Files\game_shared\VGUI</Filter>
     </ClCompile>
     <ClCompile Include="..\..\game_shared\vgui_listbox.cpp">
-      <Filter>Source Files\game_shared</Filter>
+      <Filter>Source Files\game_shared\VGUI</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\cl_dll\vgui_MOTDWindow.cpp">
-      <Filter>Source Files\cl_dll</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\cl_dll\vgui_SchemeManager.cpp">
-      <Filter>Source Files\cl_dll</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\cl_dll\vgui_ScorePanel.cpp">
-      <Filter>Source Files\cl_dll</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\game_shared\voice_banmgr.cpp">
-      <Filter>Source Files\game_shared</Filter>
+    <ClCompile Include="..\..\game_shared\vgui_loadtga.cpp">
+      <Filter>Source Files\game_shared\VGUI</Filter>
     </ClCompile>
     <ClCompile Include="..\..\game_shared\vgui_scrollbar2.cpp">
-      <Filter>Source Files\game_shared</Filter>
+      <Filter>Source Files\game_shared\VGUI</Filter>
     </ClCompile>
     <ClCompile Include="..\..\game_shared\vgui_slider2.cpp">
-      <Filter>Source Files\game_shared</Filter>
+      <Filter>Source Files\game_shared\VGUI</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\cl_dll\view.cpp">
-      <Filter>Source Files\cl_dll</Filter>
+    <ClCompile Include="..\..\game_shared\voice_banmgr.cpp">
+      <Filter>Source Files\game_shared\Voice</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\cl_dll\vgui_ServerBrowser.cpp">
-      <Filter>Source Files\cl_dll</Filter>
+    <ClCompile Include="..\..\game_shared\voice_vgui_tweakdlg.cpp">
+      <Filter>Source Files\game_shared\Voice</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\cl_dll\vgui_SpectatorPanel.cpp">
-      <Filter>Source Files\cl_dll</Filter>
+    <ClCompile Include="..\..\pm_shared\pm_debug.cpp">
+      <Filter>Source Files\pm_shared</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\cl_dll\vgui_TeamFortressViewport.cpp">
-      <Filter>Source Files\cl_dll</Filter>
+    <ClCompile Include="..\..\pm_shared\pm_math.cpp">
+      <Filter>Source Files\pm_shared</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\cl_dll\vgui_teammenu.cpp">
-      <Filter>Source Files\cl_dll</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\cl_dll\voice_status.cpp">
-      <Filter>Source Files\cl_dll</Filter>
+    <ClCompile Include="..\..\pm_shared\pm_shared.cpp">
+      <Filter>Source Files\pm_shared</Filter>
     </ClCompile>
     <ClCompile Include="..\..\public\interface.cpp">
       <Filter>Source Files\public</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\algebra.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\algparam.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\allocate.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\asn.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\authenc.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\basecode.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\client_templates.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\cpu.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\cryptlib.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\des.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\dessp.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\eprecomp.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\filters.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\fips140.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\gcm.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\gcm_simd.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\hex.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\hrtimer.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\integer.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\iterhash.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\misc.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\modes.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\mqueue.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\nbtheory.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\osrng.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\primetab.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\pubkey.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\queue.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\randpool.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\rdtables.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\rijndael.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\rijndael_simd.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\sha.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\sha_simd.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\sse_simd.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\external\cryptopp\strciphr.cpp">
+      <Filter>Source Files\external\cryptopp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\client_electro.cpp">
+      <Filter>Source Files\cl_dll\Effects</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cl_dll\vgui_VotePanel.cpp">
+      <Filter>Source Files\cl_dll\VGUI</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\cl_dll\kbutton.h">
+    <ClInclude Include="..\..\common\weapon_animations.h">
+      <Filter>Header Files\common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dlls\desert_eagle.h">
+      <Filter>Header Files\dlls\Weapons</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dlls\m16.h">
+      <Filter>Header Files\dlls\Weapons</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dlls\minigun.h">
+      <Filter>Header Files\dlls\Weapons</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dlls\uzi.h">
+      <Filter>Header Files\dlls\Weapons</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dlls\displacer.h">
+      <Filter>Header Files\dlls\Weapons</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dlls\shotgun.h">
+      <Filter>Header Files\dlls\Weapons</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dlls\hornetgun.h">
+      <Filter>Header Files\dlls\Weapons</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dlls\gauss.h">
+      <Filter>Header Files\dlls\Weapons</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dlls\sporelauncher.h">
+      <Filter>Header Files\dlls\Weapons</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\Discord.h">
+      <Filter>Header Files\cl_dll</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\ev_sven_events.h">
+      <Filter>Header Files\cl_dll\Events</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\particle_effects.h">
+      <Filter>Header Files\cl_dll\Effects\Particles</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\ClientDLL.h">
+      <Filter>Header Files\cl_dll</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\fmodex\include\client_fmod.h">
+      <Filter>Header Files\external\fmodex\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\client_media.h">
+      <Filter>Header Files\cl_dll\Media</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\client_sound.h">
+      <Filter>Header Files\cl_dll\Sound</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\particle_engine.h">
+      <Filter>Header Files\cl_dll\Effects\Particles</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\particle_system.h">
+      <Filter>Header Files\cl_dll\Effects\Particles</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\portal_gl.h">
+      <Filter>Header Files\cl_dll\Effects\Portals</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\portal_manager.h">
+      <Filter>Header Files\cl_dll\Effects\Portals</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\portal_surface.h">
+      <Filter>Header Files\cl_dll\Effects\Portals</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\sven_math.h">
+      <Filter>Header Files\cl_dll</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\vr_manager.h">
+      <Filter>Header Files\cl_dll\VR</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\game_shared\CString.h">
+      <Filter>Header Files\game_shared\Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dlls\CEscapeSequences.h">
+      <Filter>Header Files\dlls\Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dlls\CLinkedStringPool.h">
+      <Filter>Header Files\dlls\Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dlls\CStringMap.h">
+      <Filter>Header Files\dlls\Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dlls\CKeyvalues.h">
+      <Filter>Header Files\dlls\Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dlls\CKeyvaluesLexer.h">
+      <Filter>Header Files\dlls\Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dlls\CKeyvaluesParser.h">
+      <Filter>Header Files\dlls\Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dlls\CKeyvaluesWriter.h">
+      <Filter>Header Files\dlls\Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dlls\CLog.h">
+      <Filter>Header Files\dlls\Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dlls\CReplacementMap.h">
+      <Filter>Header Files\dlls\Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\vgui_MediaSelect.h">
+      <Filter>Header Files\cl_dll\VGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\vgui_CameraPanel.h">
+      <Filter>Header Files\cl_dll\VGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\client_filesystem.h">
+      <Filter>Header Files\cl_dll</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\game_shared\materials.h">
+      <Filter>Header Files\game_shared</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\client_support.h">
       <Filter>Header Files\cl_dll</Filter>
     </ClInclude>
     <ClInclude Include="..\..\cl_dll\ammo.h">
-      <Filter>Header Files\cl_dll</Filter>
+      <Filter>Header Files\cl_dll\HUD</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\crosshair.h">
+      <Filter>Header Files\cl_dll\HUD</Filter>
     </ClInclude>
     <ClInclude Include="..\..\cl_dll\ammohistory.h">
-      <Filter>Header Files\cl_dll</Filter>
+      <Filter>Header Files\cl_dll\HUD</Filter>
     </ClInclude>
     <ClInclude Include="..\..\cl_dll\camera.h">
-      <Filter>Header Files\cl_dll</Filter>
+      <Filter>Header Files\cl_dll\View</Filter>
     </ClInclude>
     <ClInclude Include="..\..\cl_dll\cl_dll.h">
       <Filter>Header Files\cl_dll</Filter>
@@ -329,44 +850,155 @@
     <ClInclude Include="..\..\cl_dll\com_weapons.h">
       <Filter>Header Files\cl_dll</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\cl_dll\demo.h">
-      <Filter>Header Files\cl_dll</Filter>
+    <ClInclude Include="..\..\cl_dll\hl\hl_weapons.h">
+      <Filter>Header Files\cl_dll\hl</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\cl_dll\ev_hldm.h">
+    <ClInclude Include="..\..\dlls\weapon_iteminfo.h">
+      <Filter>Header Files\dlls\Weapons</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\hl\CClassicModeWrapper.h">
+      <Filter>Header Files\cl_dll\hl</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\demo.h">
       <Filter>Header Files\cl_dll</Filter>
     </ClInclude>
     <ClInclude Include="..\..\cl_dll\eventscripts.h">
       <Filter>Header Files\cl_dll</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\cl_dll\ev_hldm.h">
+      <Filter>Header Files\cl_dll\Events</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\cl_dll\GameStudioModelRenderer.h">
-      <Filter>Header Files\cl_dll</Filter>
+      <Filter>Header Files\cl_dll\Rendering</Filter>
     </ClInclude>
     <ClInclude Include="..\..\cl_dll\health.h">
-      <Filter>Header Files\cl_dll</Filter>
+      <Filter>Header Files\cl_dll\HUD</Filter>
     </ClInclude>
     <ClInclude Include="..\..\cl_dll\hud.h">
+      <Filter>Header Files\cl_dll\HUD</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\hud_inventory.h">
+      <Filter>Header Files\cl_dll\HUD</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\hud_custom.h">
+      <Filter>Header Files\cl_dll\HUD</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\clientobject.h">
+      <Filter>Header Files\cl_dll\Effects</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\clientsprite.h">
+      <Filter>Header Files\cl_dll\Effects</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\client_sporetrail.h">
+      <Filter>Header Files\cl_dll\Effects</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\client_effects.h">
+      <Filter>Header Files\cl_dll\Effects</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\client_xenportal.h">
+      <Filter>Header Files\cl_dll\Effects</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\client_hwfire.h">
+      <Filter>Header Files\cl_dll\Effects</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\client_weather.h">
+      <Filter>Header Files\cl_dll\Effects</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\client_surface.h">
       <Filter>Header Files\cl_dll</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\te_custom.h">
+      <Filter>Header Files\cl_dll</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\client_crypto.h">
+      <Filter>Header Files\cl_dll</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\client_messagebox.h">
+      <Filter>Header Files\cl_dll</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\vgui_Inventory.h">
+      <Filter>Header Files\cl_dll\VGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\vgui_MOTDWindow.h">
+      <Filter>Header Files\cl_dll\VGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\saytext.h">
+      <Filter>Header Files\cl_dll\HUD</Filter>
     </ClInclude>
     <ClInclude Include="..\..\cl_dll\hud_servers.h">
-      <Filter>Header Files\cl_dll</Filter>
+      <Filter>Header Files\cl_dll\HUD</Filter>
     </ClInclude>
     <ClInclude Include="..\..\cl_dll\hud_servers_priv.h">
-      <Filter>Header Files\cl_dll</Filter>
+      <Filter>Header Files\cl_dll\HUD</Filter>
     </ClInclude>
     <ClInclude Include="..\..\cl_dll\hud_spectator.h">
+      <Filter>Header Files\cl_dll\HUD</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\interpolation.h">
       <Filter>Header Files\cl_dll</Filter>
     </ClInclude>
     <ClInclude Include="..\..\cl_dll\in_defs.h">
       <Filter>Header Files\cl_dll</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\cl_dll\interpolation.h">
+    <ClInclude Include="..\..\cl_dll\kbutton.h">
+      <Filter>Header Files\cl_dll</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\StudioModelRenderer.h">
+      <Filter>Header Files\cl_dll\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\tri.h">
+      <Filter>Header Files\cl_dll\View</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\util_vector.h">
+      <Filter>Header Files\cl_dll</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\vgui_ConsolePanel.h">
+      <Filter>Header Files\cl_dll\VGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\vgui_ControlConfigPanel.h">
+      <Filter>Header Files\cl_dll\VGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\vgui_int.h">
+      <Filter>Header Files\cl_dll\VGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\vgui_SchemeManager.h">
+      <Filter>Header Files\cl_dll\VGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\vgui_ScorePanel.h">
+      <Filter>Header Files\cl_dll\VGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\vgui_ServerBrowser.h">
+      <Filter>Header Files\cl_dll\VGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\vgui_SpectatorPanel.h">
+      <Filter>Header Files\cl_dll\VGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\view.h">
+      <Filter>Header Files\cl_dll\View</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\wrect.h">
       <Filter>Header Files\cl_dll</Filter>
     </ClInclude>
     <ClInclude Include="..\..\common\parsemsg.h">
       <Filter>Header Files\common</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\pm_shared\pm_shared.h">
-      <Filter>Header Files\pm_shared</Filter>
+    <ClInclude Include="..\..\common\Platform.h">
+      <Filter>Header Files\common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\game_shared\vgui_scrollbar2.h">
+      <Filter>Header Files\game_shared\VGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\game_shared\vgui_slider2.h">
+      <Filter>Header Files\game_shared\VGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\game_shared\voice_banmgr.h">
+      <Filter>Header Files\game_shared\Voice</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\game_shared\voice_status.h">
+      <Filter>Header Files\game_shared\Voice</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\game_shared\voice_vgui_tweakdlg.h">
+      <Filter>Header Files\game_shared\Voice</Filter>
     </ClInclude>
     <ClInclude Include="..\..\pm_shared\pm_debug.h">
       <Filter>Header Files\pm_shared</Filter>
@@ -383,53 +1015,203 @@
     <ClInclude Include="..\..\pm_shared\pm_movevars.h">
       <Filter>Header Files\pm_shared</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\cl_dll\vgui_ScorePanel.h">
-      <Filter>Header Files\cl_dll</Filter>
+    <ClInclude Include="..\..\pm_shared\pm_shared.h">
+      <Filter>Header Files\pm_shared</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\cl_dll\StudioModelRenderer.h">
-      <Filter>Header Files\cl_dll</Filter>
+    <ClInclude Include="..\..\external\cryptopp\adv_simd.h">
+      <Filter>Header Files\external\cryptopp</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\cl_dll\tri.h">
-      <Filter>Header Files\cl_dll</Filter>
+    <ClInclude Include="..\..\external\cryptopp\aes.h">
+      <Filter>Header Files\external\cryptopp</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\cl_dll\util_vector.h">
-      <Filter>Header Files\cl_dll</Filter>
+    <ClInclude Include="..\..\external\cryptopp\algebra.h">
+      <Filter>Header Files\external\cryptopp</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\cl_dll\vgui_ControlConfigPanel.h">
-      <Filter>Header Files\cl_dll</Filter>
+    <ClInclude Include="..\..\external\cryptopp\algparam.h">
+      <Filter>Header Files\external\cryptopp</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\cl_dll\vgui_int.h">
-      <Filter>Header Files\cl_dll</Filter>
+    <ClInclude Include="..\..\external\cryptopp\allocate.h">
+      <Filter>Header Files\external\cryptopp</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\cl_dll\vgui_SchemeManager.h">
-      <Filter>Header Files\cl_dll</Filter>
+    <ClInclude Include="..\..\external\cryptopp\argnames.h">
+      <Filter>Header Files\external\cryptopp</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\game_shared\vgui_slider2.h">
+    <ClInclude Include="..\..\external\cryptopp\arm_simd.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\asn.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\authenc.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\basecode.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\config.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\config_align.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\config_asm.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\config_cpu.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\config_cxx.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\config_dll.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\config_int.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\config_misc.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\config_ns.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\config_os.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\config_ver.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\cpu.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\cryptlib.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\des.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\eprecomp.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\filters.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\fips140.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\fltrimpl.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\gcm.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\hex.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\hkdf.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\hmac.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\hrtimer.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\integer.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\iterhash.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\md5.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\mdc.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\misc.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\modarith.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\modes.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\mqueue.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\nbtheory.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\oids.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\osrng.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\ossig.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\pch.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\ppc_simd.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\pubkey.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\queue.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\randpool.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\rijndael.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\rng.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\secblock.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\secblockfwd.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\seckey.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\sha.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\simple.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\smartptr.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\stdcpp.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\strciphr.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\trap.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\external\cryptopp\words.h">
+      <Filter>Header Files\external\cryptopp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\client_electro.h">
+      <Filter>Header Files\cl_dll\Effects</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cl_dll\vgui_VotePanel.h">
+      <Filter>Header Files\cl_dll\VGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\game_shared\sound_message.h">
       <Filter>Header Files\game_shared</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\game_shared\voice_status.h">
-      <Filter>Header Files\game_shared</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\game_shared\vgui_scrollbar2.h">
-      <Filter>Header Files\game_shared</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\game_shared\voice_banmgr.h">
-      <Filter>Header Files\game_shared</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\cl_dll\wrect.h">
-      <Filter>Header Files\cl_dll</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\cl_dll\vgui_ServerBrowser.h">
-      <Filter>Header Files\cl_dll</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\cl_dll\vgui_SpectatorPanel.h">
-      <Filter>Header Files\cl_dll</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\cl_dll\view.h">
-      <Filter>Header Files\cl_dll</Filter>
-    </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <Library Include="..\..\lib\public\game_controls.lib" />
   </ItemGroup>
 </Project>

@@ -21,6 +21,7 @@
 #include	"cbase.h"
 #include	"monsters.h"
 #include	"squadmonster.h"
+#include "scripted.h"
 
 #define		AFLOCK_MAX_RECRUIT_RADIUS	1024
 #define		AFLOCK_FLY_SPEED			125
@@ -64,6 +65,7 @@ IMPLEMENT_SAVERESTORE( CFlockingFlyerFlock, CBaseMonster );
 class CFlockingFlyer : public CBaseMonster
 {
 public:
+	float GetPointsForDamage( float flDamage ) { return 0.01f * flDamage; }
 	void Spawn( void );
 	void Precache( void );
 	void SpawnCommonCode( void );

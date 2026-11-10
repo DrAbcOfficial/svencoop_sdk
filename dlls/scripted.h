@@ -69,6 +69,7 @@ public:
 
 	void ReleaseEntity( CBaseMonster *pEntity );
 	void CancelScript( void );
+	void UpdateOnRemove( void );
 	virtual BOOL StartSequence( CBaseMonster *pTarget, int iszSeq, BOOL completeOnEmpty );
 	virtual BOOL FCanOverrideState ( void );
 	void SequenceDone ( CBaseMonster *pMonster );
@@ -83,6 +84,7 @@ public:
 	int m_fMoveTo;
 	int m_iFinishSchedule;
 	float m_flRadius;		// range to search
+	float m_flMoveToRadius;	// the move ends within this of the sequence ("moveto_radius")
 	float m_flRepeat;	// repeat rate
 
 	int m_iDelay;

@@ -22,6 +22,7 @@
 #include	"util.h"
 #include	"cbase.h"
 #include	"monsters.h"
+#include "game.h"
 #include	"schedule.h"
 #include    "flyingmonster.h"
 #include	"nodes.h"
@@ -29,6 +30,9 @@
 #include	"animation.h"
 #include	"effects.h"
 #include	"weapons.h"
+
+extern cvar_t sk_ichthyosaur_health;
+extern cvar_t sk_ichthyosaur_shake;
 
 #define SEARCH_RETRY	16
 
@@ -52,6 +56,27 @@ extern CGraph WorldGraph;
 class CIchthyosaur : public CFlyingMonster
 {
 public:
+	// the sequence decides the box, standing on the entity's origin
+	void SetObjectCollisionBox( void )
+	{
+		if ( ( pev->spawnflags & SF_MONSTER_NO_MODEL_BOX ) || !m_fCustomModel )
+		{
+			CBaseEntity::SetObjectCollisionBox();
+			return;
+		}
+
+		Vector mins = g_vecZero;
+		Vector maxs = g_vecZero;
+
+		ExtractBbox( 1, mins, maxs );
+		mins.z = 0;
+		pev->absmin = pev->origin + mins;
+		pev->absmax = pev->origin + maxs;
+	}
+
+	float GetPointsForDamage( float flDamage );
+	int ObjectCaps( void );
+
 	void  Spawn( void );
 	void  Precache( void );
 	void  SetYawSpeed( void );
@@ -67,7 +92,7 @@ public:
 	Schedule_t *GetScheduleOfType ( int Type );
 
 	void Killed( entvars_t *pevAttacker, int iGib );
-	void BecomeDead( void );
+	void BecomeDead( float flSavedHealth );
 
 	void EXPORT CombatUse( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
 	void EXPORT BiteTouch( CBaseEntity *pOther );
@@ -84,6 +109,7 @@ public:
 	void  Move( float flInterval );
 	void  MoveExecute( CBaseEntity *pTargetEnt, const Vector &vecDir, float flInterval );
 	void  MonsterThink( void );
+	void  RunAI( void );
 	void  Stop( void );
 	void  Swim( void );
 	Vector DoProbe(const Vector &Probe);
@@ -230,7 +256,6 @@ enum
 
 static Task_t	tlSwimAround[] =
 {
-	{ TASK_SET_ACTIVITY,			(float)ACT_WALK },
 	{ TASK_ICHTHYOSAUR_SWIM,		0.0 },
 };
 
@@ -255,6 +280,7 @@ static Task_t	tlSwimAgitated[] =
 	{ TASK_STOP_MOVING,				(float) 0 },
 	{ TASK_SET_ACTIVITY,			(float)ACT_RUN },
 	{ TASK_WAIT,					(float)2.0 },
+	{ TASK_SET_SCHEDULE,			(float)SCHED_IDLE_WALK },
 };
 
 static Schedule_t	slSwimAgitated[] =
@@ -326,7 +352,7 @@ IMPLEMENT_CUSTOM_SCHEDULES(CIchthyosaur, CFlyingMonster);
 //=========================================================
 int	CIchthyosaur :: Classify ( void )
 {
-	return	CLASS_ALIEN_MONSTER;
+	return GetClassification( CLASS_ALIEN_MONSTER );
 }
 
 
@@ -335,7 +361,8 @@ int	CIchthyosaur :: Classify ( void )
 //=========================================================
 BOOL CIchthyosaur :: CheckMeleeAttack1 ( float flDot, float flDist )
 {
-	if ( flDot >= 0.7 && m_flEnemyTouched > gpGlobals->time - 0.2 )
+	if ( flDot >= 0.15
+	     && ( flDist <= 256.0f || m_flEnemyTouched >= gpGlobals->time - 0.2 ) )
 	{
 		return TRUE;
 	}
@@ -345,7 +372,7 @@ BOOL CIchthyosaur :: CheckMeleeAttack1 ( float flDot, float flDist )
 void CIchthyosaur::BiteTouch( CBaseEntity *pOther )
 {
 	// bite if we hit who we want to eat
-	if ( pOther == m_hEnemy ) 
+	if ( pOther && ( pOther->pev->flags & ( FL_CLIENT | FL_MONSTER ) ) && IRelationship( pOther ) > 0 )
 	{
 		m_flEnemyTouched = gpGlobals->time;
 		m_bOnAttack = TRUE;
@@ -373,7 +400,7 @@ void CIchthyosaur::CombatUse( CBaseEntity *pActivator, CBaseEntity *pCaller, USE
 //=========================================================
 BOOL CIchthyosaur :: CheckRangeAttack1 ( float flDot, float flDist )
 {
-	if ( flDot > -0.7 && (m_bOnAttack || ( flDist <= 192 && m_idealDist <= 192)))
+	if ( flDot > -0.7 && flDist <= 192.0f && m_idealDist <= 192.0f )
 	{
 		return TRUE;
 	}
@@ -401,7 +428,7 @@ void CIchthyosaur :: Killed( entvars_t *pevAttacker, int iGib )
 	pev->velocity = Vector( 0, 0, 0 );
 }
 
-void CIchthyosaur::BecomeDead( void )
+void CIchthyosaur::BecomeDead( float flSavedHealth )
 {
 	pev->takedamage = DAMAGE_YES;// don't let autoaim aim at corpses.
 
@@ -449,7 +476,7 @@ void CIchthyosaur :: HandleAnimEvent( MonsterEvent_t *pEvent )
 						pHurt->pev->angles.z = 0;
 						pHurt->pev->fixangle = TRUE;
 					}
-					pHurt->TakeDamage( pev, pev, gSkillData.ichthyosaurDmgShake, DMG_SLASH );
+					pHurt->TakeDamage( pev, pev, sk_ichthyosaur_shake.value, DMG_SLASH );
 				}
 			}
 			BiteSound();
@@ -476,14 +503,17 @@ void CIchthyosaur :: Spawn()
 {
 	Precache( );
 
-	SET_MODEL(ENT(pev), "models/icky.mdl");
+	if ( !SetupModel() )
+		SET_MODEL(ENT(pev), "models/icky.mdl");
 	UTIL_SetSize( pev, Vector( -32, -32, -32 ), Vector( 32, 32, 32 ) );
 
 	pev->solid			= SOLID_BBOX;
-	pev->movetype		= MOVETYPE_FLY;
+	pev->movetype		= MOVETYPE_BOUNCE;
 	m_bloodColor		= BLOOD_COLOR_GREEN;
-	pev->health			= gSkillData.ichthyosaurHealth;
+	if ( !pev->health )
+		pev->health			= sk_ichthyosaur_health.value;
 	pev->view_ofs		= Vector ( 0, 0, 16 );
+	pev->friction		= 0;
 	m_flFieldOfView		= VIEW_FIELD_WIDE;
 	m_MonsterState		= MONSTERSTATE_NONE;
 	SetBits(pev->flags, FL_SWIM);
@@ -492,15 +522,32 @@ void CIchthyosaur :: Spawn()
 
 	m_afCapability		= bits_CAP_RANGE_ATTACK1 | bits_CAP_SWIM;
 
+	if ( !m_FormattedName )
+		m_FormattedName = MAKE_STRING( "Ichthyosaur" );
+
 	MonsterInit();
 
+	// out of the water it rests on the ground
+	if ( pev->waterlevel == 0 )
+		pev->flags |= FL_ONGROUND;
+
 	SetTouch( &CIchthyosaur::BiteTouch );
-	SetUse( &CIchthyosaur::CombatUse );
+
+	if ( m_fPlayerAlly && !( pev->spawnflags & SF_MONSTER_PREDISASTER ) )
+	{
+		SetUse( &CBaseMonster::CallFollowerPlayerUse );
+		m_fCanPlayerFollow = true;
+	}
+	else
+	{
+		SetUse( &CIchthyosaur::CombatUse );
+	}
 
 	m_idealDist = 384;
 	m_flMinSpeed = 80;
 	m_flMaxSpeed = 300;
 	m_flMaxDist = 384;
+	m_flNextAlert = gpGlobals->time;
 
 	Vector Forward;
 	UTIL_MakeVectorsPrivate(pev->angles, Forward, 0, 0);
@@ -513,6 +560,8 @@ void CIchthyosaur :: Spawn()
 //=========================================================
 void CIchthyosaur :: Precache()
 {
+	CBaseEntity::Precache();
+
 	PRECACHE_MODEL("models/icky.mdl");
 
 	PRECACHE_SOUND_ARRAY( pIdleSounds );
@@ -532,14 +581,15 @@ Schedule_t* CIchthyosaur::GetSchedule()
 	switch(m_MonsterState)
 	{
 	case MONSTERSTATE_IDLE:
-		m_flightSpeed = 80;
+		m_flMaxSpeed = 80;
 		return GetScheduleOfType( SCHED_IDLE_WALK );
 
 	case MONSTERSTATE_ALERT:
-		m_flightSpeed = 150;
+		m_flMaxSpeed = 150;
 		return GetScheduleOfType( SCHED_IDLE_WALK );
 
 	case MONSTERSTATE_COMBAT:
+		m_flNextAlert = gpGlobals->time + 15;
 		m_flMaxSpeed = 400;
 		// eat them
 		if ( HasConditions( bits_COND_CAN_MELEE_ATTACK1 ) )
@@ -547,17 +597,39 @@ Schedule_t* CIchthyosaur::GetSchedule()
 			return GetScheduleOfType( SCHED_MELEE_ATTACK1 );
 		}
 		// chase them down and eat them
-		if ( HasConditions( bits_COND_CAN_RANGE_ATTACK1 ) )
+		if ( m_hEnemy != NULL && m_hEnemy->IsAlive() )
+		{
+			Vector delta = m_hEnemy->Center() - Center();
+			float distance = delta.Length();
+
+			if ( IsMoving() )
+				UTIL_MakeVectors( UTIL_VecToAngles( m_hEnemy->Center() - pev->origin ) );
+			else
+				UTIL_MakeVectors( pev->angles );
+
+			Vector2D direction = ( m_hEnemy->Center() - pev->origin ).Make2D().Normalize();
+
+			if ( DotProduct( direction, gpGlobals->v_forward.Make2D() ) > -0.1f
+			     && ( m_bOnAttack || ( distance <= 192 && m_idealDist <= 192 ) ) )
 		{
 			return GetScheduleOfType( SCHED_CHASE_ENEMY );
 		}
-		if ( HasConditions( bits_COND_HEAVY_DAMAGE ) )
+		}
+
+		if ( HasConditions( bits_COND_HEAVY_DAMAGE ) || pev->health < pev->max_health - 20 )
 		{
 			m_bOnAttack = TRUE;
 		}
-		if ( pev->health < pev->max_health - 20 )
+
+		if ( HasConditions( bits_COND_ENEMY_DEAD ) )
 		{
-			m_bOnAttack = TRUE;
+			SetState( MONSTERSTATE_ALERT );
+			m_flNextAlert = gpGlobals->time + RANDOM_LONG( 4, 6 );
+
+			if ( m_hEnemy == NULL )
+				m_bOnAttack = FALSE;
+
+			return CFlyingMonster::GetSchedule();
 		}
 
 		return GetScheduleOfType( SCHED_STANDOFF );
@@ -583,6 +655,7 @@ Schedule_t* CIchthyosaur :: GetScheduleOfType ( int Type )
 	case SCHED_DIE:
 		return slTwitchDie;
 	case SCHED_CHASE_ENEMY:
+		m_IdealActivity = ACT_RUN;
 		AttackSound( );
 	}
 
@@ -600,9 +673,60 @@ void CIchthyosaur::StartTask(Task_t *pTask)
 {
 	switch (pTask->iTask)
 	{
+	case TASK_GET_PATH_TO_ENEMY:
+		{
+			CBaseEntity *enemy = m_hEnemy;
+
+			if ( !enemy )
+			{
+				TaskFail();
+				break;
+			}
+
+			if ( BuildRoute( enemy->Center(), bits_MF_TO_ENEMY, enemy ) )
+			{
+				TaskComplete();
+				break;
+			}
+
+			float distance = ( enemy->pev->origin - pev->origin ).Length();
+
+			if ( BuildNearestRoute( enemy->Center(), enemy->pev->view_ofs, 0, distance ) )
+			{
+				TaskComplete();
+				break;
+			}
+
+			ALERT( at_aiconsole, "GetPathToEnemy failed!!\n" );
+			TaskFail();
+		}
+		break;
+
+	case TASK_FACE_ENEMY:
+		TaskComplete();
+		break;
+
+	case TASK_WAIT_FOR_MOVEMENT:
+	case TASK_WAIT_FOR_MOVEMENT_AP:
+		FRefreshRoute();
+
+		if ( m_hEnemy == NULL )
+			TaskComplete();
+		break;
+
 	case TASK_ICHTHYOSAUR_CIRCLE_ENEMY:
 		break;
+
 	case TASK_ICHTHYOSAUR_SWIM:
+		if ( m_flightSpeed >= 180 )
+		{
+			if ( m_Activity != ACT_RUN )
+				SetActivity( ACT_RUN );
+		}
+		else if ( m_Activity != ACT_WALK )
+		{
+			SetActivity( ACT_WALK );
+		}
 		break;
 	case TASK_SMALL_FLINCH:
 		if (m_idealDist > 128)
@@ -733,9 +857,40 @@ void CIchthyosaur :: RunTask ( Task_t *pTask )
 		{
 			pev->velocity.z += 8;
 		}
-		else 
+		else
 		{
 			pev->velocity.z -= 8;
+		}
+
+		pev->avelocity = g_vecZero;
+
+		if ( pev->waterlevel >= 2 )
+		{
+			pev->movetype = MOVETYPE_FLY;
+			pev->velocity = pev->velocity * 0.7f;
+			pev->velocity.z += 8;
+		}
+		else if ( pev->waterlevel )
+		{
+			pev->velocity.z -= 8;
+		}
+		else
+		{
+			pev->movetype = MOVETYPE_TOSS;
+		}
+
+		// A corpse that came to rest out of the water fades away
+		if ( ( pev->flags & FL_ONGROUND ) && pev->velocity == g_vecZero && pev->waterlevel <= 1 )
+		{
+			if ( pev->rendermode == kRenderNormal )
+			{
+				pev->renderamt = 255;
+				pev->rendermode = kRenderTransTexture;
+			}
+
+			pev->solid = SOLID_NOT;
+			pev->nextthink = gpGlobals->time + 0.1f;
+			SetThink( &CBaseEntity::SUB_FadeOut );
 		}
 		// ALERT( at_console, "%f\n", pev->velocity.z );
 		break;
@@ -765,7 +920,132 @@ float CIchthyosaur::VectorToPitch( const Vector &vec )
 //=========================================================
 void CIchthyosaur::Move(float flInterval)
 {
-	CFlyingMonster::Move( flInterval );
+	if ( FRouteClear() )
+	{
+		ALERT( at_aiconsole, "Tried to move with no route!\n" );
+		TaskFail();
+		return;
+	}
+
+	if ( m_flMoveWaitFinished > gpGlobals->time )
+		return;
+
+	Vector delta = m_Route[m_iRouteIndex].vecLocation - pev->origin;
+	Vector direction = delta.Normalize();
+	float distance = delta.Length();
+	float checkDistance = min( distance, 200.0f );
+	int routeType = m_Route[m_iRouteIndex].iType & ~bits_MF_NOT_TO_MASK;
+	CBaseEntity *target = NULL;
+
+	if ( routeType == bits_MF_TO_ENEMY )
+		target = m_hEnemy;
+	else if ( routeType == bits_MF_TO_TARGETENT )
+		target = m_hTargetEnt;
+
+	float travelled = 0;
+
+	if ( CheckLocalMove( pev->origin, pev->origin + direction * checkDistance, target, &travelled ) != LOCALMOVE_VALID )
+	{
+		Stop();
+
+		CBaseEntity *blocker = CBaseEntity::Instance( gpGlobals->trace_ent );
+
+		if ( blocker )
+			DispatchBlocked( edict(), blocker->edict() );
+
+		if ( blocker && m_moveWaitTime > 0 && blocker->IsMoving() && !blocker->IsPlayer()
+			&& gpGlobals->time - m_flMoveWaitFinished > 3 )
+		{
+			if ( m_flightSpeed > travelled )
+			{
+				m_flMoveWaitFinished = gpGlobals->time + m_moveWaitTime;
+				return;
+			}
+		}
+		else
+		{
+			Vector apex = g_vecZero;
+			Vector apex2 = g_vecZero;
+			BOOL triangulated = FALSE;
+
+			for ( int i = m_iRouteIndex; i < ROUTE_SIZE; i++ )
+			{
+				if ( FTriangulate( pev->origin, m_Route[i].vecLocation, distance, target, &apex, &apex2 ) )
+				{
+					triangulated = TRUE;
+					break;
+				}
+			}
+
+			if ( triangulated )
+			{
+				if ( apex2 != g_vecZero )
+					InsertWaypoint( apex2, bits_MF_TO_DETOUR );
+
+				InsertWaypoint( apex, bits_MF_TO_DETOUR );
+				RouteSimplify( target );
+			}
+			else if ( !blocker || blocker->IsBSPModel() || gpGlobals->time - 1 <= m_flMoveWaitFinished
+				|| HasMemory( bits_MEMORY_MOVE_FAILED ) )
+			{
+				if ( m_moveWaitTime <= 0 || HasMemory( bits_MEMORY_MOVE_FAILED ) )
+				{
+					Stop();
+					TaskFail();
+					m_flMoveWaitFinished = gpGlobals->time + 0.5;
+					ALERT( at_aiconsole, "%s Faile\td to move (%d)!\n", STRING( pev->classname ),
+						HasMemory( bits_MEMORY_MOVE_FAILED ) != FALSE );
+				}
+				else
+				{
+					int radius = (int) m_moveradius;
+
+					if ( FRefreshRoute() )
+					{
+						if ( gpGlobals->time - m_flMoveWaitFinished < 0.2 )
+							Remember( bits_MEMORY_MOVE_FAILED );
+
+						m_flMoveWaitFinished = gpGlobals->time + 0.1;
+						Stop();
+					}
+					else
+					{
+						TaskFail();
+					}
+
+					m_moveradius = radius;
+				}
+
+				return;
+			}
+			else
+			{
+				m_flMoveWaitFinished = gpGlobals->time;
+			}
+		}
+	}
+
+	m_flGroundSpeed = m_flightSpeed;
+
+	if ( ShouldAdvanceRoute( distance ) )
+		AdvanceRoute( distance );
+
+	MoveExecute( target, direction, flInterval );
+
+	if ( MovementIsComplete() )
+	{
+		Stop();
+		RouteClear();
+		return;
+	}
+
+	if ( distance < 256 )
+	{
+		if ( m_movementGoal == MOVEGOAL_ENEMY )
+			RouteSimplify( m_hEnemy );
+		else
+			RouteSimplify( m_hTargetEnt );
+	}
 }
 
 float CIchthyosaur::FlPitchDiff( void )
@@ -797,7 +1077,7 @@ float CIchthyosaur::FlPitchDiff( void )
 
 float CIchthyosaur :: ChangePitch( int speed )
 {
-	if ( pev->movetype == MOVETYPE_FLY )
+	if ( pev->movetype == MOVETYPE_BOUNCE )
 	{
 		float diff = FlPitchDiff();
 		float target = 0;
@@ -815,7 +1095,7 @@ float CIchthyosaur :: ChangePitch( int speed )
 
 float CIchthyosaur::ChangeYaw( int speed )
 {
-	if ( pev->movetype == MOVETYPE_FLY )
+	if ( pev->movetype == MOVETYPE_BOUNCE )
 	{
 		float diff = FlYawDiff();
 		float target = 0;
@@ -827,7 +1107,7 @@ float CIchthyosaur::ChangeYaw( int speed )
 			else if ( diff > 20 )
 				target = -20;
 		}
-		pev->angles.z = UTIL_Approach( target, pev->angles.z, 220.0 * 0.1 );
+		pev->angles.z = UTIL_Approach( target, pev->angles.z, 220.0 * m_flFrameTime );
 	}
 	return CFlyingMonster::ChangeYaw( speed );
 }
@@ -835,7 +1115,7 @@ float CIchthyosaur::ChangeYaw( int speed )
 
 Activity CIchthyosaur:: GetStoppedActivity( void )
 { 
-	if ( pev->movetype != MOVETYPE_FLY )		// UNDONE: Ground idle here, IDLE may be something else
+	if ( pev->movetype != MOVETYPE_BOUNCE )		// UNDONE: Ground idle here, IDLE may be something else
 		return ACT_IDLE;
 	return ACT_WALK;
 }
@@ -845,6 +1125,28 @@ void CIchthyosaur::MoveExecute( CBaseEntity *pTargetEnt, const Vector &vecDir, f
 	m_SaveVelocity = vecDir * m_flightSpeed;
 }
 
+
+void CIchthyosaur::RunAI( void )
+{
+	if ( m_bOnAttack && ( m_hEnemy == NULL || !HasConditions( bits_COND_SEE_ENEMY ) ) && gpGlobals->time >= m_flNextAlert )
+	{
+		SetState( MONSTERSTATE_IDLE );
+		m_bOnAttack = FALSE;
+	}
+
+	if ( pev->waterlevel )
+	{
+		pev->gravity = 0.01f;
+		pev->movetype = MOVETYPE_BOUNCE;
+	}
+	else
+	{
+		pev->gravity = 1;
+		pev->movetype = MOVETYPE_TOSS;
+	}
+
+	CBaseMonster::RunAI();
+}
 
 void CIchthyosaur::MonsterThink ( void )
 {
@@ -875,8 +1177,13 @@ void CIchthyosaur::MonsterThink ( void )
 
 void CIchthyosaur :: Stop( void ) 
 {
-	if (!m_bOnAttack)
-		m_flightSpeed = 80.0;
+	if ( m_bOnAttack )
+		return;
+
+	if ( m_hEnemy == NULL )
+		GetIdealState();
+
+	m_flMaxSpeed = 80.0;
 }
 
 void CIchthyosaur::Swim( )
@@ -888,7 +1195,7 @@ void CIchthyosaur::Swim( )
 	Vector Angles;
 	Vector Forward, Right, Up;
 
-	if (FBitSet( pev->flags, FL_ONGROUND))
+	if ( FBitSet( pev->flags, FL_ONGROUND ) && pev->waterlevel == 0 )
 	{
 		pev->angles.x = 0;
 		pev->angles.y += RANDOM_FLOAT( -45, 45 );
@@ -902,10 +1209,16 @@ void CIchthyosaur::Swim( )
 		return;
 	}
 
-	if (m_bOnAttack && m_flightSpeed < m_flMaxSpeed)
+	if ( m_bOnAttack )
 	{
-		m_flightSpeed += 40;
+		if ( m_flightSpeed < m_flMaxSpeed )
+			m_flightSpeed += 40;
 	}
+	else if ( m_flightSpeed > m_flMaxSpeed )
+	{
+		m_flightSpeed -= 4;
+	}
+
 	if (m_flightSpeed < 180)
 	{
 		if (m_IdealActivity == ACT_RUN)
@@ -978,7 +1291,7 @@ void CIchthyosaur::Swim( )
 	//
 	if (Angles.x > 180)
 		Angles.x = Angles.x - 360;
-	pev->angles.x = UTIL_Approach(Angles.x, pev->angles.x, 50 * 0.1 );
+	pev->angles.x = UTIL_Approach( Angles.x, pev->angles.x, 50 * m_flFrameTime );
 	if (pev->angles.x < -80) pev->angles.x = -80;
 	if (pev->angles.x >  80) pev->angles.x =  80;
 
@@ -1106,3 +1419,17 @@ Vector CIchthyosaur::DoProbe(const Vector &Probe)
 }
 
 #endif
+
+int CIchthyosaur::ObjectCaps( void )
+{
+	return IsPlayerAlly() ? FCAP_IMPULSE_USE : FCAP_ACROSS_TRANSITION;
+}
+
+float CIchthyosaur::GetPointsForDamage( float flDamage )
+{
+	float points = pev->max_health / sk_ichthyosaur_health.value;
+
+	points *= 12.0f;
+
+	return points * ( flDamage / pev->max_health );
+}

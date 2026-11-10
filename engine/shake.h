@@ -28,10 +28,10 @@ typedef struct
 	unsigned short	frequency;		// FIXED 8.8 noise frequency (low frequency is a jerk,high frequency is a rumble)
 } ScreenShake;
 
-extern void V_ApplyShake( float *origin, float *angles, float factor );
+extern void V_ApplyShake( float* origin, float* angles, float factor );
 extern void V_CalcShake( void );
-extern int V_ScreenShake( const char *pszName, int iSize, void *pbuf );
-extern int V_ScreenFade( const char *pszName, int iSize, void *pbuf );
+extern int V_ScreenShake( const char* pszName, int iSize, void* pbuf );
+extern int V_ScreenFade( const char* pszName, int iSize, void* pbuf );
 
 // Fade in/out
 extern int gmsgFade;
@@ -52,5 +52,5 @@ typedef struct
 	byte			r, g, b, a;		// fade to color ( max alpha )
 } ScreenFade;
 
-#endif		// SHAKE_H
+#endif // SHAKE_H
 

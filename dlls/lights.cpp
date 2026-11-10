@@ -23,25 +23,13 @@
 #include "extdll.h"
 #include "util.h"
 #include "cbase.h"
+#include "server_support.h"
+#include "lights.h"
+
+#define SF_LIGHT_NOT_TOGGLED 2
 
 
 
-class CLight : public CPointEntity
-{
-public:
-	virtual void	KeyValue( KeyValueData* pkvd ); 
-	virtual void	Spawn( void );
-	void	Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
-
-	virtual int		Save( CSave &save );
-	virtual int		Restore( CRestore &restore );
-	
-	static	TYPEDESCRIPTION m_SaveData[];
-
-private:
-	int		m_iStyle;
-	int		m_iszPattern;
-};
 LINK_ENTITY_TO_CLASS( light, CLight );
 
 TYPEDESCRIPTION	CLight::m_SaveData[] = 
@@ -70,7 +58,7 @@ void CLight :: KeyValue( KeyValueData* pkvd)
 	}
 	else if (FStrEq(pkvd->szKeyName, "pattern"))
 	{
-		m_iszPattern = ALLOC_STRING( pkvd->szValue );
+		m_iszPattern = AllocStringLocal( pkvd->szValue );
 		pkvd->fHandled = TRUE;
 	}
 	else
@@ -88,12 +76,6 @@ If targeted, it will toggle between on or off.
 
 void CLight :: Spawn( void )
 {
-	if (FStringNull(pev->targetname))
-	{       // inert light
-		REMOVE_ENTITY(ENT(pev));
-		return;
-	}
-	
 	if (m_iStyle >= 32)
 	{
 //		CHANGE_METHOD(ENT(pev), em_use, light_use);
@@ -104,6 +86,9 @@ void CLight :: Spawn( void )
 		else
 			LIGHT_STYLE(m_iStyle, "m");
 	}
+
+	if ( ( pev->spawnflags & SF_LIGHT_NOT_TOGGLED ) || FStringNull( pev->targetname ) )
+		REMOVE_ENTITY( ENT( pev ) );
 }
 
 

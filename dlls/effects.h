@@ -28,6 +28,7 @@
 
 #define SF_SPRITE_STARTON		0x0001
 #define SF_SPRITE_ONCE			0x0002
+#define SF_SPRITE_ONCE_AND_REMOVE	0x0004
 #define SF_SPRITE_TEMPORARY		0x8000
 
 class CSprite : public CPointEntity
@@ -35,6 +36,7 @@ class CSprite : public CPointEntity
 public:
 	void Spawn( void );
 	void Precache( void );
+	void KeyValue( KeyValueData *pkvd );
 
 	int		ObjectCaps( void )
 	{ 
@@ -62,7 +64,7 @@ public:
 	}
 	void TurnOff( void );
 	void TurnOn( void );
-	inline float Frames( void ) { return m_maxFrame; }
+	inline int Frames( void ) const { return m_maxFrame + 1; }
 	inline void SetTransparency( int rendermode, int r, int g, int b, int a, int fx )
 	{
 		pev->rendermode = rendermode;
@@ -77,25 +79,30 @@ public:
 	inline void SetColor( int r, int g, int b ) { pev->rendercolor.x = r; pev->rendercolor.y = g; pev->rendercolor.z = b; }
 	inline void SetBrightness( int brightness ) { pev->renderamt = brightness; }
 
-	inline void AnimateAndDie( float framerate ) 
-	{ 
-		SetThink(&CSprite::AnimateUntilDead); 
+	inline void AnimateAndDie( float framerate )
+	{
+		m_lastTime = gpGlobals->time;
+		SetThink( &CSprite::AnimateUntilDead );
 		pev->framerate = framerate;
-		pev->dmgtime = gpGlobals->time + (m_maxFrame / framerate); 
-		pev->nextthink = gpGlobals->time; 
+		pev->dmgtime = gpGlobals->time + ( (float) ( m_maxFrame + 1 ) / framerate );
+		pev->nextthink = gpGlobals->time;
 	}
 
 	void EXPORT AnimateUntilDead( void );
+	void LiveForTime( float time );
 
 	virtual int		Save( CSave &save );
 	virtual int		Restore( CRestore &restore );
 	static	TYPEDESCRIPTION m_SaveData[];
 	static CSprite *SpriteCreate( const char *pSpriteName, const Vector &origin, BOOL animate );
+	static CSprite *SpriteCreate( const char *pSpriteName, const Vector &origin, bool animate, float frameRate );
 
 private:
 
-	float		m_lastTime;
-	float		m_maxFrame;
+	float m_lastTime;
+	int   m_startFrame;
+	int   m_maxFrame;
+	int   m_vpType;
 };
 
 
@@ -147,7 +154,12 @@ public:
 	inline int  GetTexture( void ) { return pev->modelindex; }
 	inline int  GetWidth( void ) { return pev->scale; }
 	inline int  GetNoise( void ) { return pev->body; }
-	// inline void GetColor( int r, int g, int b ) { pev->rendercolor.x = r; pev->rendercolor.y = g; pev->rendercolor.z = b; }
+	inline void GetColor( int &r, int &g, int &b )
+	{
+		r = (int) pev->rendercolor.x;
+		g = (int) pev->rendercolor.y;
+		b = (int) pev->rendercolor.z;
+	}
 	inline int  GetBrightness( void ) { return pev->renderamt; }
 	inline int  GetFrame( void ) { return pev->frame; }
 	inline int  GetScrollRate( void ) { return pev->animtime; }
@@ -167,6 +179,9 @@ public:
 	void		HoseInit( const Vector &start, const Vector &direction );
 
 	static CBeam *BeamCreate( const char *pSpriteName, int width );
+
+	virtual void XenTeleportZap( const Vector &start, const Vector &end );
+	virtual void XenTeleport( const Vector &origin, int radius );
 
 	inline void LiveForTime( float time ) { SetThink(&CBeam::SUB_Remove); pev->nextthink = gpGlobals->time + time; }
 	inline void	BeamDamageInstant( TraceResult *ptr, float damage ) 
@@ -203,7 +218,11 @@ public:
 
 	CSprite	*m_pSprite;
 	int		m_iszSpriteName;
+	int		m_iFrameStart;
 	Vector  m_firePosition;
+
+	EHANDLE	m_hActivator;
+	EHANDLE	m_hCaller;
 };
 
 #endif		//EFFECTS_H

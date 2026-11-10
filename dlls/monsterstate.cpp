@@ -25,6 +25,7 @@
 #include "animation.h"
 #include "saverestore.h"
 #include "soundent.h"
+#include "game.h"
 
 //=========================================================
 // SetState
@@ -59,16 +60,51 @@ void CBaseMonster :: SetState ( MONSTERSTATE State )
 //=========================================================
 // RunAI
 //=========================================================
+#define FALL_DAMAGE_DELAY	3	// seconds after first touching the ground
+#define CORPSE_ALIGN_MAX_SPEED	10
+
 void CBaseMonster :: RunAI ( void )
 {
 	// to test model's eye height
 	//UTIL_ParticleEffect ( pev->origin + pev->view_ofs, g_vecZero, 255, 10 );
 
+	if ( pev->deadflag == DEAD_DEAD )
+		m_fDeathKnockback = false;
+
+	// falls only hurt once the monster has stood on something
+	if ( !m_fFallDamageReady )
+	{
+		TraceResult tr;
+
+		UTIL_TraceHull( pev->origin, pev->origin - Vector( 0, 0, pev->size.z * 0.5 ), ignore_monsters, human_hull, ENT( pev ), &tr );
+
+		if ( tr.pHit )
+			m_fFallDamageReady = true;
+
+		m_flFallDamageTime = gpGlobals->time + FALL_DAMAGE_DELAY;
+	}
+
+	// a monster told to guard an entity follows it
+	if ( m_hGuardEnt == NULL && m_iszGuardEntName )
+	{
+		m_hGuardEnt = UTIL_FindEntityByTargetname( NULL, STRING( m_iszGuardEntName ) );
+
+		if ( m_hGuardEnt != NULL && !IsPlayerFollowing() )
+			StartPlayerFollowing( m_hGuardEnt, false );
+	}
+
 	// IDLE sound permitted in ALERT state is because monsters were silent in ALERT state. Only play IDLE sound in IDLE state
 	// once we have sounds for that state.
-	if ( ( m_MonsterState == MONSTERSTATE_IDLE || m_MonsterState == MONSTERSTATE_ALERT ) && RANDOM_LONG(0,99) == 0 && !(pev->flags & SF_MONSTER_GAG) )
+	if ( ( m_MonsterState == MONSTERSTATE_IDLE || m_MonsterState == MONSTERSTATE_ALERT ) && RANDOM_LONG(0,99) == 0 && !(pev->spawnflags & SF_MONSTER_GAG) )
 	{
 		IdleSound();
+	}
+
+	// a resting corpse follows the ground
+	if ( m_MonsterState == MONSTERSTATE_DEAD
+		&& ( ( pev->flags & FL_ONGROUND ) || pev->velocity.Length() <= CORPSE_ALIGN_MAX_SPEED ) )
+	{
+		AlignToGround();
 	}
 
 	if ( m_MonsterState != MONSTERSTATE_NONE	&& 
@@ -80,10 +116,12 @@ void CBaseMonster :: RunAI ( void )
 		// things will happen before the player gets there!
 		// UPDATE: We now let COMBAT state monsters think and act fully outside of player PVS. This allows the player to leave 
 		// an area where monsters are fighting, and the fight will continue.
-		if ( !FNullEnt( FIND_CLIENT_IN_PVS( edict() ) ) || ( m_MonsterState == MONSTERSTATE_COMBAT ) )
+		Listen();// check for audible sounds.
+
+		if ( sv_ai_enemy_detection_mode.value > 0 || ( m_MonsterState == MONSTERSTATE_COMBAT ) || ( m_MonsterState == MONSTERSTATE_SCRIPT )
+			|| !FNullEnt( FIND_CLIENT_IN_PVS( edict() ) ) )
 		{
 			Look( m_flDistLook );
-			Listen();// check for audible sounds. 
 
 			// now filter conditions.
 			ClearConditions( IgnoreConditions() );
@@ -98,13 +136,32 @@ void CBaseMonster :: RunAI ( void )
 		}
 
 		CheckAmmo();
+
+		CheckCreatureDanger();
+
+		CheckSelectedTank();
+
+		EvaluatePaths();
 	}
+
+	if ( m_MonsterState == MONSTERSTATE_DEAD )
+		CheckRevival();
+
+	if ( m_fShockGlow && gpGlobals->time > m_flShockGlowTime )
+		ShockGlowEffect( false );
+
+	CheckTimeBasedDamage();
+
+	CheckFallDamage();
 
 	FCheckAITrigger();
 
 	PrescheduleThink();
 
 	MaintainSchedule();
+
+	if ( !( pev->flags & FL_ONGROUND ) )
+		m_flFallVelocity = -pev->velocity.z;
 
 	// if the monster didn't use these conditions during the above call to MaintainSchedule() or CheckAITrigger()
 	// we throw them out cause we don't want them sitting around through the lifespan of a schedule
@@ -135,34 +192,31 @@ MONSTERSTATE CBaseMonster :: GetIdealState ( void )
 		IDLE goes to HUNT upon smelling food
 		*/
 		{
+			if ( pev->spawnflags & SF_MONSTER_PRISONER )
+				break;
+
 			if ( iConditions & bits_COND_NEW_ENEMY )			
 			{
 				// new enemy! This means an idle monster has seen someone it dislikes, or 
 				// that a monster in combat has found a more suitable target to attack
 				m_IdealMonsterState = MONSTERSTATE_COMBAT;
 			}
-			else if ( iConditions & bits_COND_LIGHT_DAMAGE )
-			{
-				MakeIdealYaw ( m_vecEnemyLKP );
-				m_IdealMonsterState = MONSTERSTATE_ALERT;
-			}
-			else if ( iConditions & bits_COND_HEAVY_DAMAGE )
+			else if ( iConditions & ( bits_COND_LIGHT_DAMAGE | bits_COND_HEAVY_DAMAGE ) )
 			{
 				MakeIdealYaw ( m_vecEnemyLKP );
 				m_IdealMonsterState = MONSTERSTATE_ALERT;
 			}
 			else if ( iConditions & bits_COND_HEAR_SOUND )
 			{
-				CSound *pSound;
-				
-				pSound = PBestSound();
-				ASSERT( pSound != NULL );
-				if ( pSound )
-				{
-					MakeIdealYaw ( pSound->m_vecOrigin );
-					if ( pSound->m_iType & (bits_SOUND_COMBAT|bits_SOUND_DANGER) )
-						m_IdealMonsterState = MONSTERSTATE_ALERT;
-				}
+				CSound *pSound = PBestSound();
+
+				if ( !pSound )
+					break;
+
+				FaceSound( pSound, gpGlobals->time >= m_useTime );
+
+				if ( pSound->m_iType & (bits_SOUND_COMBAT|bits_SOUND_DANGER) )
+					m_IdealMonsterState = MONSTERSTATE_ALERT;
 			}
 			else if ( iConditions & (bits_COND_SMELL | bits_COND_SMELL_FOOD) )
 			{
@@ -185,11 +239,13 @@ MONSTERSTATE CBaseMonster :: GetIdealState ( void )
 			}
 			else if ( iConditions & bits_COND_HEAR_SOUND )
 			{
-				m_IdealMonsterState = MONSTERSTATE_ALERT;
 				CSound *pSound = PBestSound();
-				ASSERT( pSound != NULL );
-				if ( pSound )
-					MakeIdealYaw ( pSound->m_vecOrigin );
+
+				if ( !pSound )
+					break;
+
+				FaceSound( pSound, ( pSound->m_iType & (bits_SOUND_COMBAT|bits_SOUND_DANGER) ) != 0 );
+				m_IdealMonsterState = MONSTERSTATE_ALERT;
 			}
 			break;
 		}
@@ -200,11 +256,7 @@ MONSTERSTATE CBaseMonster :: GetIdealState ( void )
 		*/
 		{
 			if ( m_hEnemy == NULL )
-			{
 				m_IdealMonsterState = MONSTERSTATE_ALERT;
-				// pev->effects = EF_BRIGHTFIELD;
-				ALERT ( at_aiconsole, "***Combat state with no enemy!\n" );
-			}
 			break;
 		}
 	case MONSTERSTATE_HUNT:
@@ -225,10 +277,30 @@ MONSTERSTATE CBaseMonster :: GetIdealState ( void )
 		break;
 
 	case MONSTERSTATE_DEAD:
-		m_IdealMonsterState = MONSTERSTATE_DEAD;
+		if ( m_IdealMonsterState != MONSTERSTATE_PRONE )
+			m_IdealMonsterState = MONSTERSTATE_DEAD;
 		break;
 	}
 
 	return m_IdealMonsterState;
 }
 
+//=========================================================
+// FaceSound - turn toward a sound or follow a friend's look direction
+//=========================================================
+#define FACE_SOUND_LOOK_DIST	2048
+
+void CBaseMonster :: FaceSound( CSound *pSound, bool fMayFollowLook )
+{
+	CBaseEntity *pOwner = pSound->m_hOwner;
+
+	if ( fMayFollowLook && pOwner && IRelationship( pOwner, false ) <= R_NO && RANDOM_LONG( 0, 1 ) )
+	{
+		UTIL_MakeVectors( pOwner->pev->angles );
+		MakeIdealYaw( pOwner->pev->origin + gpGlobals->v_forward * FACE_SOUND_LOOK_DIST );
+	}
+	else
+	{
+		MakeIdealYaw( pSound->m_vecOrigin );
+	}
+}

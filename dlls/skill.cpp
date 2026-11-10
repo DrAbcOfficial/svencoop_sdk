@@ -24,24 +24,20 @@ skilldata_t	gSkillData;
 
 
 //=========================================================
-// take the name of a cvar, tack a digit for the skill level
-// on, and return the value.of that Cvar 
+// return the value of a skill Cvar
 //=========================================================
-float GetSkillCvar( char *pName )
+float GetSkillCvar( const char *szBuffer)
 {
-	int		iCount;
-	float	flValue;
-	char	szBuffer[ 64 ];
-	
-	iCount = sprintf( szBuffer, "%s%d",pName, gSkillData.iSkillLevel );
-
-	flValue = CVAR_GET_FLOAT ( szBuffer );
+	float flValue = CVAR_GET_FLOAT ( szBuffer );
 
 	if ( flValue <= 0 )
 	{
-		ALERT ( at_console, "\n\n** GetSkillCVar Got a zero for %s **\n\n", szBuffer );
+		ALERT (at_aiconsole, "\n\n** GetSkillCVar: Got a zero for \"%s\" **\n\n", szBuffer);
+	}
+	else
+	{
+		ALERT(at_aiconsole, "** GetSkillCVar: Value of \"%s\" is %f **\n", szBuffer, flValue);
 	}
 
 	return flValue;
 }
-

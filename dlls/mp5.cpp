@@ -1,9 +1,9 @@
 /***
 *
 *	Copyright (c) 1996-2001, Valve LLC. All rights reserved.
-*	
-*	This product contains software technology licensed from Id 
-*	Software, Inc. ("Id Technology").  Id Technology (c) 1996 Id Software, Inc. 
+*
+*	This product contains software technology licensed from Id
+*	Software, Inc. ("Id Technology").  Id Technology (c) 1996 Id Software, Inc.
 *	All Rights Reserved.
 *
 *   Use, distribution, and modification of this source code and/or resulting
@@ -18,10 +18,13 @@
 #include "cbase.h"
 #include "monsters.h"
 #include "weapons.h"
-#include "nodes.h"
 #include "player.h"
 #include "soundent.h"
-#include "gamerules.h"
+#include "weaponinfo.h"
+#include "event_flags.h"
+#include "CClassicMode.h"
+#include "playerammo.h"
+#include "server_support.h"
 
 enum mp5_e
 {
@@ -35,351 +38,426 @@ enum mp5_e
 	MP5_FIRE3,
 };
 
-
-
 LINK_ENTITY_TO_CLASS( weapon_mp5, CMP5 );
 LINK_ENTITY_TO_CLASS( weapon_9mmAR, CMP5 );
+LINK_ENTITY_TO_CLASS( weapon_9mmar, CMP5 );
 
-
-//=========================================================
-//=========================================================
-int CMP5::SecondaryAmmoIndex( void )
+void CMP5::Spawn( void )
 {
-	return m_iSecondaryAmmoType;
-}
+	Precache();
 
-void CMP5::Spawn( )
-{
+	if ( CClassicMode::GetInstance()->IsEnabled() )
+		SetModel_Intercept( edict(), GetW_Model( "models/hlclassic/w_9mmAR.mdl" ) );
+	else
+		SetModel_Intercept( edict(), GetW_Model( "models/w_9mmAR.mdl" ) );
+
 	pev->classname = MAKE_STRING("weapon_9mmAR"); // hack to allow for old names
-	Precache( );
-	SET_MODEL(ENT(pev), "models/w_9mmAR.mdl");
+
+	if ( CClassicMode::GetInstance()->IsEnabled() )
+		m_iDefaultAmmo = MP5_CLASSIC_DEFAULT_GIVE;
+	else
+		m_iDefaultAmmo = MP5_DEFAULT_GIVE;
+
+	m_iSecondaryAmmoType = 0;
 	m_iId = WEAPON_MP5;
+	m_flCustomDmg = pev->dmg;
 
-	m_iDefaultAmmo = MP5_DEFAULT_GIVE;
-
-	FallInit();// get ready to fall down.
+	CBasePhysicsObject::Spawn();// get ready to fall down.
 }
-
 
 void CMP5::Precache( void )
 {
-	PRECACHE_MODEL("models/v_9mmAR.mdl");
-	PRECACHE_MODEL("models/w_9mmAR.mdl");
-	PRECACHE_MODEL("models/p_9mmAR.mdl");
+	PrecacheCustomModels();
 
-	m_iShell = PRECACHE_MODEL ("models/shell.mdl");// brass shellTE_MODEL
+	bool bClassic = CClassicMode::GetInstance()->IsEnabled();
 
-	PRECACHE_MODEL("models/grenade.mdl");	// grenade
+	UTIL_PrecacheModel( this, bClassic ? "models/hlclassic/v_9mmAR.mdl" : "models/v_9mmAR.mdl");
+	UTIL_PrecacheModel( this, bClassic ? "models/hlclassic/w_9mmAR.mdl" : "models/w_9mmAR.mdl");
+	UTIL_PrecacheModel( this, bClassic ? "models/hlclassic/p_9mmAR.mdl" : "models/p_9mmAR.mdl" );
+	UTIL_PrecacheModel( this, bClassic ? "models/hlclassic/grenade.mdl" : "models/grenade.mdl" ); // grenade
+	UTIL_PrecacheModel( this, bClassic ? "models/hlclassic/w_9mmarclip.mdl" : "models/w_mp5_clip.mdl" );
 
-	PRECACHE_MODEL("models/w_9mmARclip.mdl");
-	PRECACHE_SOUND("items/9mmclip1.wav");              
+	m_iShell = UTIL_PrecacheModel( this, bClassic ? "models/hlclassic/shell.mdl" : "models/shell.mdl"); // brass shell
 
-	PRECACHE_SOUND("items/clipinsert1.wav");
-	PRECACHE_SOUND("items/cliprelease1.wav");
-
-	PRECACHE_SOUND ("weapons/hks1.wav");// H to the K
-	PRECACHE_SOUND ("weapons/hks2.wav");// H to the K
-	PRECACHE_SOUND ("weapons/hks3.wav");// H to the K
-
-	PRECACHE_SOUND( "weapons/glauncher.wav" );
-	PRECACHE_SOUND( "weapons/glauncher2.wav" );
-
-	PRECACHE_SOUND ("weapons/357_cock1.wav");
+	PrecacheSound_Intercept( this, "hlclassic/items/9mmclip1.wav" );
+	PrecacheSound_Intercept( this, "hlclassic/items/clipinsert1.wav" );
+	PrecacheSound_Intercept( this, "hlclassic/items/cliprelease1.wav" );
+	PrecacheSound_Intercept( this, "hlclassic/weapons/hks1.wav" );
+	PrecacheSound_Intercept( this, "hlclassic/weapons/hks2.wav" );
+	PrecacheSound_Intercept( this, "hlclassic/weapons/hks3.wav" );
+	PrecacheSound_Intercept( this, "hlclassic/weapons/glauncher.wav" );
+	PrecacheSound_Intercept( this, "hlclassic/weapons/glauncher2.wav" );
+	PrecacheSound_Intercept( this, "hlclassic/weapons/357_cock1.wav" );
+	PrecacheSound_Intercept( this, "items/9mmclip1.wav");
+	PrecacheSound_Intercept( this, "items/clipinsert1.wav");
+	PrecacheSound_Intercept( this, "items/cliprelease1.wav");
+	PrecacheSound_Intercept( this, "weapons/hks1.wav"); // H to the K
+	PrecacheSound_Intercept( this, "weapons/hks2.wav"); // H to the K
+	PrecacheSound_Intercept( this, "weapons/hks3.wav"); // H to the K
+	PrecacheSound_Intercept( this, "weapons/glauncher.wav" );
+	PrecacheSound_Intercept( this, "weapons/glauncher2.wav" );
+	PrecacheSound_Intercept( this, "weapons/357_cock1.wav");
 
 	m_usMP5 = PRECACHE_EVENT( 1, "events/mp5.sc" );
-	m_usMP52 = PRECACHE_EVENT( 1, "events/mp52.sc" );
+
+	UTIL_PrecacheOther( "ammo_9mmbox" );
 }
 
-int CMP5::GetItemInfo(ItemInfo *p)
+// Classic mode brings back the 50 round clip and the grenade launcher
+bool CMP5::GetItemInfo(ItemInfo *p)
 {
 	p->pszName = STRING(pev->classname);
 	p->pszAmmo1 = "9mm";
 	p->iMaxAmmo1 = _9MM_MAX_CARRY;
-	p->pszAmmo2 = "ARgrenades";
-	p->iMaxAmmo2 = M203_GRENADE_MAX_CARRY;
-	p->iMaxClip = MP5_MAX_CLIP;
+
+	bool bClassic = CClassicMode::GetInstance()->IsEnabled();
+
+	int iMaxClip;
+
+	if ( bClassic )
+		iMaxClip = MP5_CLASSIC_MAX_CLIP;
+	else
+		iMaxClip = MP5_MAX_CLIP;
+
+	p->iAmmo1Drop = iMaxClip;
+	p->pszAmmo1Entity = "ammo_9mmAR";
+
+	if ( bClassic )
+		p->pszAmmo2 = "ARgrenades";
+	else
+		p->pszAmmo2 = NULL;
+
+	if ( bClassic )
+		p->iMaxAmmo2 = M203_GRENADE_MAX_CARRY;
+	else
+		p->iMaxAmmo2 = -1;
+
+	if ( bClassic )
+		p->pszAmmo2Entity = "ammo_ARgrenades";
+	else
+		p->pszAmmo2Entity = NULL;
+
+	if ( bClassic )
+		p->iAmmo2Drop = 1;
+	else
+		p->iAmmo2Drop = AMMO_DROP_NONE;
+
+	p->iMaxClip = iMaxClip;
 	p->iSlot = 2;
 	p->iPosition = 0;
 	p->iFlags = 0;
 	p->iId = m_iId = WEAPON_MP5;
 	p->iWeight = MP5_WEIGHT;
 
-	return 1;
+	return true;
 }
 
-int CMP5::AddToPlayer( CBasePlayer *pPlayer )
+bool CMP5::AddToPlayer( CBasePlayer *pPlayer )
 {
 	if ( CBasePlayerWeapon::AddToPlayer( pPlayer ) )
 	{
-		MESSAGE_BEGIN( MSG_ONE, gmsgWeapPickup, NULL, pPlayer->pev );
-			WRITE_BYTE( m_iId );
-		MESSAGE_END();
+		AddToPlayerMessage();
 		return TRUE;
 	}
 	return FALSE;
 }
 
-BOOL CMP5::Deploy( )
+void CMP5::PrimaryAttack( void )
 {
-	return DefaultDeploy( "models/v_9mmAR.mdl", "models/p_9mmAR.mdl", MP5_DEPLOY, "mp5" );
-}
-
-
-void CMP5::PrimaryAttack()
-{
-	// don't fire underwater
-	if (m_pPlayer->pev->waterlevel == 3)
+	if ( CClassicMode::GetInstance()->IsEnabled() )
 	{
-		PlayEmptySound( );
-		m_flNextPrimaryAttack = 0.15;
+		ClassicPrimaryAttack();
 		return;
 	}
 
-	if (m_iClip <= 0)
+	// don't fire underwater
+	if (m_hPlayer->pev->waterlevel == 3 || m_iClip <= 0)
 	{
 		PlayEmptySound();
-		m_flNextPrimaryAttack = 0.15;
+		m_flNextPrimaryAttack = UTIL_WeaponTimeBase() + 0.15;
 		return;
 	}
 
-	m_pPlayer->m_iWeaponVolume = NORMAL_GUN_VOLUME;
-	m_pPlayer->m_iWeaponFlash = NORMAL_GUN_FLASH;
-
-	m_iClip--;
-
-
-	m_pPlayer->pev->effects = (int)(m_pPlayer->pev->effects) | EF_MUZZLEFLASH;
+	m_hPlayer->m_iWeaponVolume = NORMAL_GUN_VOLUME;
+	m_hPlayer->m_iWeaponFlash = NORMAL_GUN_FLASH;
 
 	// player "shoot" animation
-	m_pPlayer->SetAnimation( PLAYER_ATTACK1 );
+	m_hPlayer->SetAnimation( PLAYER_ATTACK1 );
 
-	Vector vecSrc	 = m_pPlayer->GetGunPosition( );
-	Vector vecAiming = m_pPlayer->GetAutoaimVector( AUTOAIM_5DEGREES );
-	Vector vecDir;
+	Vector vecSrc	 = m_hPlayer->GetGunPosition( );
+	Vector vecAiming = m_hPlayer->GetAutoaimVector( AUTOAIM_5DEGREES );
 
-#ifdef CLIENT_DLL
-	if ( !bIsMultiplayer() )
-#else
-	if ( !g_pGameRules->IsMultiplayer() )
-#endif
+	if ( m_fInZoom )
 	{
-		// optimized multiplayer. Widened to make it easier to hit a moving player
-		vecDir = m_pPlayer->FireBulletsPlayer( 1, vecSrc, vecAiming, VECTOR_CONE_6DEGREES, 8192, BULLET_PLAYER_MP5, 2, 0, m_pPlayer->pev, m_pPlayer->random_seed );
+		Vector vecSpread = BulletAccuracy( VECTOR_CONE_8DEGREES, VECTOR_CONE_4DEGREES, VECTOR_CONE_3DEGREES );
+
+		m_hPlayer->FireBullets( 1, vecSrc, vecAiming, vecSpread, 8192, BULLET_PLAYER_MP5, 2, (int) m_flCustomDmg, NULL, FBDM_DRAW );
+
+		PLAYBACK_EVENT_FULL( FEV_NOTHOST, m_hPlayer->edict(), m_usMP5, 0.0, (float *)&g_vecZero, (float *)&g_vecZero, 0.0, 0.0, 0, 0, 1, 0 );
 	}
 	else
 	{
-		// single player spread
-		vecDir = m_pPlayer->FireBulletsPlayer( 1, vecSrc, vecAiming, VECTOR_CONE_3DEGREES, 8192, BULLET_PLAYER_MP5, 2, 0, m_pPlayer->pev, m_pPlayer->random_seed );
+		Vector vecSpread = BulletAccuracy( VECTOR_CONE_8DEGREES, VECTOR_CONE_6DEGREES, VECTOR_CONE_5DEGREES );
+
+		m_hPlayer->FireBullets( 1, vecSrc, vecAiming, vecSpread, 8192, BULLET_PLAYER_MP5, 2, (int) m_flCustomDmg, NULL, FBDM_DRAW );
+
+		PLAYBACK_EVENT_FULL( FEV_NOTHOST, m_hPlayer->edict(), m_usMP5, 0.0, (float *) &g_vecZero, (float *) &g_vecZero, 0.0, 0.0, 0, 0, 0, 0 );
 	}
 
-  int flags;
-#if defined( CLIENT_WEAPONS )
-	flags = FEV_NOTHOST;
-#else
-	flags = 0;
-#endif
-
-	PLAYBACK_EVENT_FULL( flags, m_pPlayer->edict(), m_usMP5, 0.0, (float *)&g_vecZero, (float *)&g_vecZero, vecDir.x, vecDir.y, 0, 0, 0, 0 );
-
-	if (!m_iClip && m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0)
+	if ( m_iClip-- == 1 && m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0)
+	{
 		// HEV suit - indicate out of ammo condition
-		m_pPlayer->SetSuitUpdate("!HEV_AMO0", FALSE, 0);
+		m_hPlayer->SetSuitUpdate("!HEV_AMO0", FALSE, 0);
+	}
 
-	m_flNextPrimaryAttack = GetNextAttackDelay(0.1);
+	m_flNextPrimaryAttack = UTIL_WeaponTimeBase() + ( UTIL_SharedRandomFloat( m_hPlayer->random_seed, 0.02, 0.05 ) + 0.05f );
 
-	if ( m_flNextPrimaryAttack < UTIL_WeaponTimeBase() )
-		m_flNextPrimaryAttack = UTIL_WeaponTimeBase() + 0.1;
-
-	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_pPlayer->random_seed, 10, 15 );
+	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_hPlayer->random_seed, 10, 15 );
 }
 
+void CMP5::ClassicPrimaryAttack( void )
+{
+	// don't fire underwater
+	if ( m_hPlayer->pev->waterlevel == 3 || m_iClip <= 0 )
+	{
+		PlayEmptySound();
+		m_flNextPrimaryAttack = UTIL_WeaponTimeBase() + 0.15;
+		return;
+	}
 
+	m_hPlayer->m_iWeaponVolume = NORMAL_GUN_VOLUME;
+	m_hPlayer->m_iWeaponFlash = NORMAL_GUN_FLASH;
 
+	// player "shoot" animation
+	m_hPlayer->SetAnimation( PLAYER_ATTACK1 );
+
+	Vector vecSrc = m_hPlayer->GetGunPosition();
+	Vector vecAiming = m_hPlayer->GetAutoaimVector( AUTOAIM_5DEGREES );
+	Vector vecSpread = BulletAccuracy( VECTOR_CONE_8DEGREES, VECTOR_CONE_6DEGREES, VECTOR_CONE_5DEGREES );
+
+	m_hPlayer->FireBullets( 1, vecSrc, vecAiming, vecSpread, 8192, BULLET_PLAYER_MP5, 2, (int) m_flCustomDmg, NULL, FBDM_DRAW );
+
+	PLAYBACK_EVENT_FULL( FEV_NOTHOST, m_hPlayer->edict(), m_usMP5, 0.0, (float *) &g_vecZero, (float *) &g_vecZero, 0.0, 0.0, 0, 0, 0, 0 );
+
+	if ( m_iClip-- == 1 && m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 )
+	{
+		// HEV suit - indicate out of ammo condition
+		m_hPlayer->SetSuitUpdate( "!HEV_AMO0", FALSE, 0 );
+	}
+
+	if ( UTIL_WeaponTimeBase() > m_flNextPrimaryAttack )
+		m_flNextPrimaryAttack = UTIL_WeaponTimeBase() + 0.1;
+
+	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_hPlayer->random_seed, 10, 15 );
+}
+
+void CMP5::ClassicSecondaryAttack( void )
+{
+	// don't fire underwater
+	if ( m_hPlayer->pev->waterlevel == 3 )
+	{
+		PlayEmptySound();
+		m_flNextPrimaryAttack = UTIL_WeaponTimeBase() + 0.15;
+		return;
+	}
+
+	if ( m_hPlayer->m_rgAmmo[m_iSecondaryAmmoType] <= 0 )
+	{
+		PlayEmptySound();
+		return;
+	}
+
+	m_hPlayer->m_iWeaponVolume = NORMAL_GUN_VOLUME;
+	m_hPlayer->m_iWeaponFlash = BRIGHT_GUN_FLASH;
+
+	m_hPlayer->m_iExtraSoundTypes = bits_SOUND_DANGER;
+	m_hPlayer->m_flStopExtraSoundTime = UTIL_WeaponTimeBase() + 0.2;
+
+	m_hPlayer->m_rgAmmo[m_iSecondaryAmmoType]--;
+
+	SendWeaponAnim( MP5_LAUNCH, 0, 0 );
+
+	// player "shoot" animation
+	m_hPlayer->SetAnimation( PLAYER_ATTACK1 );
+
+	if ( UTIL_SharedRandomLong( m_hPlayer->random_seed, 0, 1 ) )
+	{
+		PLAYBACK_EVENT_FULL( FEV_NOTHOST, m_hPlayer->edict(), g_evWeaponCustom, 0.0, (float *) &g_vecZero, (float *) &g_vecZero,
+		                     WEAPONCUSTOM_SND_GLAUNCHER, 0.8, WEAPONCUSTOM_SOUND, CHAN_WEAPON, 0, 0 );
+	}
+	else
+	{
+		PLAYBACK_EVENT_FULL( FEV_NOTHOST, m_hPlayer->edict(), g_evWeaponCustom, 0.0, (float *) &g_vecZero, (float *) &g_vecZero,
+		                     WEAPONCUSTOM_SND_GLAUNCHER2, 0.8, WEAPONCUSTOM_SOUND, CHAN_WEAPON, 0, 0 );
+	}
+
+	UTIL_MakeVectors( m_hPlayer->pev->v_angle + m_hPlayer->pev->punchangle );
+
+	Vector origin = m_hPlayer->pev->origin;
+
+	if ( !( m_hPlayer->pev->button & IN_DUCK ) )
+		origin = origin + m_hPlayer->pev->view_ofs * 0.5f;
+
+	CGrenade::ShootContact( m_hPlayer->pev,
+	                        origin + gpGlobals->v_forward * 16 + gpGlobals->v_right * 6, gpGlobals->v_forward * 900 );
+
+	m_flNextPrimaryAttack = UTIL_WeaponTimeBase() + 1.0;
+	m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 1.0;
+	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 5;
+
+	if ( m_hPlayer->m_rgAmmo[m_iSecondaryAmmoType] <= 0 )
+		m_hPlayer->SetSuitUpdate( "!HEV_AMO0", FALSE, 0 );
+}
+
+// Zooms in, or fires a grenade in classic mode
 void CMP5::SecondaryAttack( void )
 {
 	// don't fire underwater
-	if (m_pPlayer->pev->waterlevel == 3)
+	if ( CClassicMode::GetInstance()->IsEnabled() )
 	{
-		PlayEmptySound( );
-		m_flNextPrimaryAttack = 0.15;
+		ClassicSecondaryAttack();
 		return;
 	}
 
-	if (m_pPlayer->m_rgAmmo[m_iSecondaryAmmoType] == 0)
+	if ( m_fInZoom )
 	{
-		PlayEmptySound( );
-		return;
+		if ( FRunfuncs() )
+			SetFOV( 0 );
+
+		UTIL_CopyString( m_hPlayer->m_szAnimExtention, "mp5", sizeof( m_hPlayer->m_szAnimExtention ) );
+		m_fInZoom = false;
+	}
+	else if ( !( m_hPlayer->m_afPhysicsFlags & PFLAG_CAMERA ) )
+	{
+		if ( FRunfuncs() )
+			SetFOV( MP5_ZOOM_FOV );
+
+		m_fInZoom = true;
 	}
 
-	m_pPlayer->m_iWeaponVolume = NORMAL_GUN_VOLUME;
-	m_pPlayer->m_iWeaponFlash = BRIGHT_GUN_FLASH;
+	m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 0.6;
+}
 
-	m_pPlayer->m_iExtraSoundTypes = bits_SOUND_DANGER;
-	m_pPlayer->m_flStopExtraSoundTime = UTIL_WeaponTimeBase() + 0.2;
-			
-	m_pPlayer->m_rgAmmo[m_iSecondaryAmmoType]--;
+int CMP5::SecondaryAmmoIndex( void )
+{
+	return m_iSecondaryAmmoType;
+}
 
-	// player "shoot" animation
-	m_pPlayer->SetAnimation( PLAYER_ATTACK1 );
+bool CMP5::Deploy( void )
+{
+	if ( CVAR_GET_FLOAT( "weaponmode_mp5" ) == 1.0f )
+	{
+		m_fInZoom = false;
+		m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 500.0;
+	}
 
- 	UTIL_MakeVectors( m_pPlayer->pev->v_angle + m_pPlayer->pev->punchangle );
+	bool classic = CClassicMode::GetInstance()->IsEnabled();
+	const char *playerModel = GetP_Model( classic ? "models/hlclassic/p_9mmAR.mdl" : "models/p_9mmAR.mdl" );
+	const char *viewModel = GetV_Model( classic ? "models/hlclassic/v_9mmAR.mdl" : "models/v_9mmAR.mdl" );
 
-	// we don't add in player velocity anymore.
-	CGrenade::ShootContact( m_pPlayer->pev, 
-							m_pPlayer->pev->origin + m_pPlayer->pev->view_ofs + gpGlobals->v_forward * 16, 
-							gpGlobals->v_forward * 800 );
+	return DefaultDeploy( viewModel, playerModel, MP5_DEPLOY, "mp5", 0, 0 );
+}
 
-	int flags;
-#if defined( CLIENT_WEAPONS )
-	flags = FEV_NOTHOST;
-#else
-	flags = 0;
-#endif
+void CMP5::Holster( int skiplocal /* = 0 */ )
+{
+	m_fInReload = false; // cancel any reload in progress.
 
-	PLAYBACK_EVENT( flags, m_pPlayer->edict(), m_usMP52 );
-	
-	m_flNextPrimaryAttack = GetNextAttackDelay(1);
-	m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 1;
-	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 5;// idle pretty soon after shooting.
+	if ( m_fInZoom )
+		SecondaryAttack();
 
-	if (!m_pPlayer->m_rgAmmo[m_iSecondaryAmmoType])
-		// HEV suit - indicate out of ammo condition
-		m_pPlayer->SetSuitUpdate("!HEV_AMO0", FALSE, 0);
+	m_hPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 0.5;
+	m_hPlayer->pev->viewmodel = 0;
 }
 
 void CMP5::Reload( void )
 {
-	if ( m_pPlayer->ammo_9mm <= 0 )
-		return;
+	int iMaxClip;
 
-	DefaultReload( MP5_MAX_CLIP, MP5_RELOAD, 1.5 );
+	if ( CClassicMode::GetInstance()->IsEnabled() )
+		iMaxClip = MP5_CLASSIC_MAX_CLIP;
+	else
+		iMaxClip = MP5_MAX_CLIP;
+
+	if ( DefaultReload( iMaxClip, MP5_RELOAD, 1.6, 0 ) )
+	{
+		CBasePlayerWeapon::Reload();
+
+		if ( m_fInZoom )
+			SecondaryAttack();
 }
-
+}
 
 void CMP5::WeaponIdle( void )
 {
 	ResetEmptySound( );
 
-	m_pPlayer->GetAutoaimVector( AUTOAIM_5DEGREES );
+	m_hPlayer->GetAutoaimVector( AUTOAIM_5DEGREES );
 
-	if ( m_flTimeWeaponIdle > UTIL_WeaponTimeBase() )
+	if ( !( m_flTimeWeaponIdle <= UTIL_WeaponTimeBase() ) )
 		return;
 
-	int iAnim;
-	switch ( RANDOM_LONG( 0, 1 ) )
+	if ( CVAR_GET_FLOAT( "weaponmode_mp5" ) == 1.0f )
 	{
-	case 0:	
-		iAnim = MP5_LONGIDLE;	
-		break;
-	
-	default:
-	case 1:
-		iAnim = MP5_IDLE1;
-		break;
+		if ( FRunfuncs() )
+			SetFOV( 0 );
+
+		m_fInZoom = false;
+		m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 500.0;
 	}
 
-	SendWeaponAnim( iAnim );
+	SendWeaponAnim( UTIL_SharedRandomLong( m_hPlayer->random_seed, 0, 1 ) ? MP5_IDLE1 : MP5_LONGIDLE, 0, 0 );
 
-	m_flTimeWeaponIdle = UTIL_SharedRandomFloat( m_pPlayer->random_seed, 10, 15 ); // how long till we do this again.
+	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_hPlayer->random_seed, 10, 15 ); // how long till we do this again.
 }
 
-
-
-class CMP5AmmoClip : public CBasePlayerAmmo
+void CMP5::GetWeaponData( weapon_data_t *data )
 {
-	void Spawn( void )
-	{ 
-		Precache( );
-		SET_MODEL(ENT(pev), "models/w_9mmARclip.mdl");
-		CBasePlayerAmmo::Spawn( );
-	}
-	void Precache( void )
+	data->iuser1 = m_iPrimaryAmmoType;
+	data->iuser2 = m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType];
+	data->iuser3 = m_hPlayer->m_rgAmmo[m_iSecondaryAmmoType];
+}
+
+void CMP5::SetWeaponData( weapon_data_t *data )
+{
+	m_iPrimaryAmmoType = data->iuser1;
+	m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType] = data->iuser2;
+}
+
+class CMP5AmmoClip : public CPlayerAmmo
+{
+public:
+	CMP5AmmoClip() : CPlayerAmmo( AMMO_MP5CLIP_GIVE, "9mm", _9MM_MAX_CARRY )
 	{
-		PRECACHE_MODEL ("models/w_9mmARclip.mdl");
-		PRECACHE_SOUND("items/9mmclip1.wav");
+		if ( CClassicMode::GetInstance()->IsEnabled() )
+			m_iAmmoGive = MP5_CLASSIC_MAX_CLIP;
 	}
-	BOOL AddAmmo( CBaseEntity *pOther ) 
-	{ 
-		int bResult = (pOther->GiveAmmo( AMMO_MP5CLIP_GIVE, "9mm", _9MM_MAX_CARRY) != -1);
-		if (bResult)
-		{
-			EMIT_SOUND(ENT(pev), CHAN_ITEM, "items/9mmclip1.wav", 1, ATTN_NORM);
-		}
-		return bResult;
-	}
+
+	const char *GetDefaultModel( void ) { return CClassicMode::GetInstance()->IsEnabled() ? "models/hlclassic/w_9mmarclip.mdl" : "models/w_mp5_clip.mdl"; }
+	const char *GetPickupSound( void ) { return CClassicMode::GetInstance()->IsEnabled() ? "hlclassic/items/9mmclip1.wav" : "items/9mmclip1.wav"; }
 };
+
 LINK_ENTITY_TO_CLASS( ammo_mp5clip, CMP5AmmoClip );
 LINK_ENTITY_TO_CLASS( ammo_9mmAR, CMP5AmmoClip );
 
-
-
-class CMP5Chainammo : public CBasePlayerAmmo
+class CMP5Chainammo : public CPlayerAmmo
 {
-	void Spawn( void )
-	{ 
-		Precache( );
-		SET_MODEL(ENT(pev), "models/w_chainammo.mdl");
-		CBasePlayerAmmo::Spawn( );
-	}
-	void Precache( void )
-	{
-		PRECACHE_MODEL ("models/w_chainammo.mdl");
-		PRECACHE_SOUND("items/9mmclip1.wav");
-	}
-	BOOL AddAmmo( CBaseEntity *pOther ) 
-	{ 
-		int bResult = (pOther->GiveAmmo( AMMO_CHAINBOX_GIVE, "9mm", _9MM_MAX_CARRY) != -1);
-		if (bResult)
-		{
-			EMIT_SOUND(ENT(pev), CHAN_ITEM, "items/9mmclip1.wav", 1, ATTN_NORM);
-		}
-		return bResult;
-	}
+public:
+	CMP5Chainammo() : CPlayerAmmo( AMMO_CHAINBOX_GIVE, "9mm", _9MM_MAX_CARRY ) {}
+
+	const char *GetDefaultModel( void ) { return CClassicMode::GetInstance()->IsEnabled() ? "models/hlclassic/w_chainammo.mdl" : "models/w_chainammo.mdl"; }
+	const char *GetPickupSound( void ) { return CClassicMode::GetInstance()->IsEnabled() ? "hlclassic/items/9mmclip1.wav" : "items/9mmclip1.wav"; }
 };
+
 LINK_ENTITY_TO_CLASS( ammo_9mmbox, CMP5Chainammo );
 
-
-class CMP5AmmoGrenade : public CBasePlayerAmmo
+class CMP5AmmoGrenade : public CPlayerAmmo
 {
-	void Spawn( void )
-	{ 
-		Precache( );
-		SET_MODEL(ENT(pev), "models/w_ARgrenade.mdl");
-		CBasePlayerAmmo::Spawn( );
-	}
-	void Precache( void )
-	{
-		PRECACHE_MODEL ("models/w_ARgrenade.mdl");
-		PRECACHE_SOUND("items/9mmclip1.wav");
-	}
-	BOOL AddAmmo( CBaseEntity *pOther ) 
-	{ 
-		int bResult = (pOther->GiveAmmo( AMMO_M203BOX_GIVE, "ARgrenades", M203_GRENADE_MAX_CARRY ) != -1);
+public:
+	CMP5AmmoGrenade() : CPlayerAmmo( AMMO_M203BOX_GIVE, "ARgrenades", M203_GRENADE_MAX_CARRY ) {}
 
-		if (bResult)
-		{
-			EMIT_SOUND(ENT(pev), CHAN_ITEM, "items/9mmclip1.wav", 1, ATTN_NORM);
-		}
-		return bResult;
-	}
+	const char *GetDefaultModel( void ) { return CClassicMode::GetInstance()->IsEnabled() ? "models/hlclassic/w_argrenade.mdl" : "models/w_ARgrenade.mdl"; }
+	const char *GetPickupSound( void ) { return CClassicMode::GetInstance()->IsEnabled() ? "hlclassic/items/9mmclip1.wav" : "items/9mmclip1.wav"; }
 };
+
 LINK_ENTITY_TO_CLASS( ammo_mp5grenades, CMP5AmmoGrenade );
 LINK_ENTITY_TO_CLASS( ammo_ARgrenades, CMP5AmmoGrenade );
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

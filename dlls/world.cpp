@@ -21,6 +21,22 @@
 */
 
 #include "extdll.h"
+#include "server_sound.h"
+#include "server_support.h"
+#include "server_entvars.h"
+#include "CMap.h"
+#include "CServer.h"
+#include "CASServerManager.h"
+#include "CASScriptEntityPreprocessor.h"
+#include "CMapPreprocessor.h"
+#include "CObjectLifetimeHandler.h"
+#include "BSPFile.h"
+#include "CString.h"
+#include "CStringMap.h"
+#include "CReplacementMap.h"
+#include "WorldModels.h"
+#include "../engine/bspfile.h"
+#include "server_filesystem.h"
 #include "util.h"
 #include "cbase.h"
 #include "nodes.h"
@@ -32,7 +48,12 @@
 #include "player.h"
 #include "weapons.h"
 #include "gamerules.h"
+#include "SvenVersion.h"
 #include "teamplay_gamerules.h"
+#include "monsters.h"
+#include "talkmonster.h"
+
+#define MAX_MAP_GAME_VERSION	SVEN_GAME_VERSION_NUMBER
 
 extern CGraph WorldGraph;
 extern CSoundEnt *pSoundEnt;
@@ -42,7 +63,15 @@ DLL_GLOBAL edict_t				*g_pBodyQueueHead;
 CGlobalState					gGlobalState;
 extern DLL_GLOBAL	int			gDisplayTitle;
 
-extern void W_Precache(void);
+string_t g_szModelReplacement;
+string_t g_szSoundReplacement;
+bool g_iActiveIdle;
+int g_iMapForGameVersion;
+
+StandardWeaponModels g_pStandardWeaponModels[256];
+const char *gszNoCustomMdl = "none";
+
+CWorld *CWorld::m_pInstance;
 
 //
 // This must match the list in util.h
@@ -90,6 +119,12 @@ DLL_DECALLIST gDecals[] = {
 	{ "{smscorch3", 0 },	// DECAL_SMALLSCORCH3,	// Small scorch mark
 	{ "{mommablob", 0 },	// DECAL_MOMMABIRTH		// BM Birth spray
 	{ "{mommablob", 0 },	// DECAL_MOMMASPLAT		// BM Mortar spray?? need decal
+	{ "{ofscorch1", 0 },	// DECAL_OFSCORCH1
+	{ "{ofscorch2", 0 },	// DECAL_OFSCORCH2
+	{ "{ofscorch3", 0 },	// DECAL_OFSCORCH3
+	{ "{spr_splt1", 0 },	// DECAL_SPORESPLAT1
+	{ "{spr_splt2", 0 },	// DECAL_SPORESPLAT2
+	{ "{spr_splt3", 0 },	// DECAL_SPORESPLAT3
 };
 
 /*
@@ -298,7 +333,7 @@ globalentity_t *CGlobalState :: Find( string_t globalname )
 //#ifdef _DEBUG
 void CGlobalState :: DumpGlobals( void )
 {
-	static char *estates[] = { "Off", "On", "Dead" };
+	static const char *estates[] = { "Off", "On", "Dead" };
 	globalentity_t *pTest;
 
 	ALERT( at_console, "-- Globals --\n" );
@@ -314,14 +349,18 @@ void CGlobalState :: DumpGlobals( void )
 
 void CGlobalState :: EntityAdd( string_t globalname, string_t mapName, GLOBALESTATE state )
 {
-	ASSERT( !Find(globalname) );
-
 	globalentity_t *pNewEntity = (globalentity_t *)calloc( sizeof( globalentity_t ), 1 );
-	ASSERT( pNewEntity != NULL );
+
+	if ( !pNewEntity )
+		return;
 	pNewEntity->pNext = m_pList;
 	m_pList = pNewEntity;
-	strcpy( pNewEntity->name, STRING( globalname ) );
-	strcpy( pNewEntity->levelName, STRING(mapName) );
+	UTIL_CopyString( pNewEntity->name, STRING( globalname ), sizeof(pNewEntity->name));
+
+	const char *pMapName = STRING(mapName);
+
+	if ( strlen(pMapName) <= sizeof(pNewEntity->levelName) )
+		UTIL_CopyString( pNewEntity->levelName, pMapName, sizeof(pNewEntity->levelName) );
 	pNewEntity->state = state;
 	m_listCount++;
 }
@@ -416,7 +455,7 @@ void CGlobalState::EntityUpdate( string_t globalname, string_t mapname )
 	globalentity_t *pEnt = Find( globalname );
 
 	if ( pEnt )
-		strcpy( pEnt->levelName, STRING(mapname) );
+		UTIL_CopyString( pEnt->levelName, STRING(mapname), sizeof(pEnt->levelName));
 }
 
 
@@ -449,7 +488,10 @@ void RestoreGlobalState( SAVERESTOREDATA *pSaveData )
 
 void ResetGlobalState( void )
 {
-	gGlobalState.ClearStates();
+	if ( CVAR_GET_FLOAT("mp_keep_globalstate") < 1.0f )
+		gGlobalState.ClearStates();
+	else
+		CVAR_SET_FLOAT("mp_keep_globalstate", 0);
 	gInitHUD = TRUE;	// Init the HUD on a new game / load game
 }
 
@@ -467,19 +509,242 @@ LINK_ENTITY_TO_CLASS( worldspawn, CWorld );
 #define SF_WORLD_FORCETEAM	0x0004		// Force teams
 
 extern DLL_GLOBAL BOOL		g_fGameOver;
-float g_flWeaponCheat; 
+float g_flWeaponCheat;
+
+CWorld *CWorld::GetInstance( void )
+{
+	return m_pInstance;
+}
+
+void CWorld::OnCreate( void )
+{
+	CMap::CreateInstance();
+	CASServerManager::GetInstance()->WorldCreated();
+	m_pInstance = this;
+	CBaseEntity::OnCreate();
+
+	CVAR_SET_STRING( "sv_skyname", "desert" );
+	CVAR_SET_FLOAT( "sv_skyvec_x", 0 );
+	CVAR_SET_FLOAT( "sv_skyvec_y", 0 );
+	CVAR_SET_FLOAT( "sv_skyvec_z", 0 );
+	CVAR_SET_FLOAT( "sv_skycolor_r", 200 );
+	CVAR_SET_FLOAT( "sv_skycolor_g", 194 );
+	CVAR_SET_FLOAT( "sv_skycolor_b", 188 );
+
+	double maxDistance = CVAR_GET_FLOAT( "sv_zmax" );
+
+	maxDistance = min( maxDistance, 454046.777344 );
+	CVAR_SET_FLOAT( "sv_zmax", max( 4096.0, maxDistance ) );
+
+	UTIL_CopyString( m_szSentenceFile, "sound/default_sentences.txt", sizeof( m_szSentenceFile ) );
+
+	for ( int i = 0; i < ARRAYSIZE( g_pStandardWeaponModels ); i++ )
+	{
+		StandardWeaponModels &models = g_pStandardWeaponModels[i];
+
+		UTIL_CopyString( models.view, gszNoCustomMdl, sizeof( models.view ) );
+		UTIL_CopyString( models.world, gszNoCustomMdl, sizeof( models.world ) );
+		UTIL_CopyString( models.player, gszNoCustomMdl, sizeof( models.player ) );
+	}
+
+	CServer_SoundEngine::GetSoundEngine()->Initialize();
+
+	g_iActiveIdle = false;
+	g_szSoundReplacement = 0;
+	g_szModelReplacement = 0;
+	g_iMapForGameVersion = 0;
+}
+
+void CWorld::OnDestroy( void )
+{
+	g_MapObjectLifetimeHandler.Clear();
+	CBaseEntity::OnDestroy();
+	m_pInstance = NULL;
+}
+
+const char *CWorld::MODELREPLACEMENT_Find( const char *model )
+{
+	const char *replacement = m_ModelReplacementMap.Find( model );
+
+	return replacement ? replacement : model;
+}
+
+void CWorld::PrecacheGlobalCustomModels( string_t fileName )
+{
+	ReplacementSettings settings = { "Model", "models", NULL };
+
+	LoadReplacementMap( STRING( fileName ), true, settings, m_ModelReplacementMap );
+}
+
+void CWorld::PrecacheStandardWeaponModels( void )
+{
+	for ( int i = 0; i < ARRAYSIZE( g_pStandardWeaponModels ); i++ )
+	{
+		StandardWeaponModels &models = g_pStandardWeaponModels[i];
+
+		if ( strcmp( models.view, gszNoCustomMdl ) )
+			UTIL_PrecacheModel( this, models.view );
+
+		if ( strcmp( models.world, gszNoCustomMdl ) )
+			UTIL_PrecacheModel( this, models.world );
+
+		if ( strcmp( models.player, gszNoCustomMdl ) )
+			UTIL_PrecacheModel( this, models.player );
+	}
+}
+
+const char *GetWeaponStandardModel( WEAPONMDLIDX modelType, int weaponId, const char *defaultModel )
+{
+	if ( (unsigned int) weaponId >= ARRAYSIZE( g_pStandardWeaponModels ) )
+		return defaultModel;
+
+	const StandardWeaponModels &models = g_pStandardWeaponModels[weaponId];
+	const char *model;
+
+	switch ( modelType )
+	{
+		case 0:
+			model = models.player;
+			break;
+		case 1:
+			model = models.world;
+			break;
+		case 2:
+			model = models.view;
+			break;
+		default:
+			return defaultModel;
+	}
+
+	return stricmp( model, gszNoCustomMdl ) ? model : defaultModel;
+}
+
+void CWorld::WeaponModelKey( KeyValueData *pkvd )
+{
+	static const struct
+	{
+		const char *name;
+		int         id;
+	} weapons[] = {
+		{ "WEAPON_CROWBAR", 1 },
+		{ "WEAPON_GLOCK", 2 },
+		{ "WEAPON_PYTHON", 3 },
+		{ "WEAPON_DESERT_EAGLE", 27 },
+		{ "WEAPON_MP5", 4 },
+		{ "WEAPON_CHAINGUN", 5 },
+		{ "WEAPON_CROSSBOW", 6 },
+		{ "WEAPON_SHOTGUN", 7 },
+		{ "WEAPON_RPG", 8 },
+		{ "WEAPON_GAUSS", 9 },
+		{ "WEAPON_EGON", 10 },
+		{ "WEAPON_HORNETGUN", 11 },
+		{ "WEAPON_HANDGRENADE", 12 },
+		{ "WEAPON_TRIPMINE", 13 },
+		{ "WEAPON_SATCHEL", 14 },
+		{ "WEAPON_SNARK", 15 },
+		{ "WEAPON_UZI", 17 },
+		{ "WEAPON_MEDKIT", 18 },
+		{ "WEAPON_CROWBAR_ELECTRIC", 19 },
+		{ "WEAPON_PIPEWRENCH", 20 },
+		{ "WEAPON_SHOCKRIFLE", 28 },
+		{ "WEAPON_DISPLACER", 29 }
+	};
+	static const char suffixes[] = { 'v', 'w', 'p' };
+
+	for ( int i = 0; i < ARRAYSIZE( weapons ); i++ )
+	{
+		for ( int modelType = 0; modelType < ARRAYSIZE( suffixes ); modelType++ )
+		{
+			char key[64];
+
+			UTIL_FormatString( key, sizeof( key ), "%s_%c", weapons[i].name, suffixes[modelType] );
+
+			if ( strcmp( pkvd->szKeyName, key ) )
+				continue;
+
+			StandardWeaponModels &models = g_pStandardWeaponModels[weapons[i].id];
+			char *model = modelType == 0 ? models.view : modelType == 1 ? models.world
+			                                                            : models.player;
+
+			UTIL_CopyString( model, key, sizeof( models.view ) );
+			pkvd->fHandled = TRUE;
+			return;
+		}
+	}
+}
 
 void CWorld :: Spawn( void )
 {
+	SetupEntVars();
+
 	g_fGameOver = FALSE;
 	Precache( );
+
+	if ( g_iMapForGameVersion > MAX_MAP_GAME_VERSION )
+	{
+		char szError[256];
+
+		sprintf( szError, "This map requires game version %d. You can't run it on version %d.\n", g_iMapForGameVersion, MAX_MAP_GAME_VERSION );
+		UTIL_HostError( szError, -1 );
+		return;
+	}
+
 	g_flWeaponCheat = CVAR_GET_FLOAT( "sv_cheats" );  // Is the impulse 101 command allowed?
 }
 
+static const char *g_szMapGenericFiles[] =
+{
+	"maps/%s_skl.cfg",
+	"maps/%s.cfg",
+	"maps/%s.res",
+	"maps/%s.txt",
+	"maps/%s_motd.txt",
+	"maps/%s.gmr",
+	"maps/%s.gsr",
+};
+
 void CWorld :: Precache( void )
 {
+	UTIL_ResetPrecachedModelCount();
+
 	g_pLastSpawn = NULL;
-	
+
+	g_engfuncs.pfnForceUnmodified( force_exactfile, NULL, NULL, "cl_dlls/client.dll" );
+	g_engfuncs.pfnForceUnmodified( force_exactfile, NULL, NULL, "cl_dlls/client.so" );
+	g_engfuncs.pfnForceUnmodified( force_exactfile, NULL, NULL, "cl_dlls/client.dylib" );
+
+	for ( int iFile = 0; iFile < ARRAYSIZE( g_szMapGenericFiles ); ++iFile )
+	{
+		char szFile[256];
+
+		_snprintf( szFile, sizeof( szFile ), g_szMapGenericFiles[iFile], STRING( gpGlobals->mapname ) );
+
+		// Only files the server really has may be offered to the clients
+		if ( ( (IFileSystem_SvEngine *) g_pFileSystem )->FileExistsEx( szFile, "GAME|DEFAULTGAME" ) )
+			g_engfuncs.pfnPrecacheGeneric( (char *) STRING( ALLOC_STRING( szFile ) ) );
+	}
+
+	PRECACHE_MODEL( "models/error.mdl" );
+	PRECACHE_MODEL( "sprites/error.spr" );
+
+	CVAR_SET_FLOAT( "skill", 2 );
+	CVAR_SET_STRING( "mp_nomedkit", "0" );
+	CVAR_SET_STRING( "mp_disable_pcbalancing", "0" );
+	CVAR_SET_STRING( "mp_disable_medkit_points", "0" );
+	CVAR_SET_STRING( "mp_pcbalancing_factorlist", "" );
+	CVAR_SET_STRING( "weaponmode_9mmhandgun", "0" );
+	CVAR_SET_STRING( "weaponmode_eagle", "0" );
+	CVAR_SET_STRING( "weaponmode_shotgun", "0" );
+	CVAR_SET_STRING( "weaponmode_mp5", "0" );
+	CVAR_SET_STRING( "weaponmode_crossbow", "0" );
+	CVAR_SET_STRING( "weaponmode_rpg", "0" );
+	CVAR_SET_STRING( "mp_consistency", "0" );
+	CVAR_SET_STRING( "sv_allowdownload", "1" );
+	CVAR_SET_STRING( "sv_send_resources", "1" );
+	CVAR_SET_STRING( "mp_nextmap", "" );
+	CVAR_SET_STRING( "sv_notransition", "" );
+	CVAR_SET_STRING( "sv_friction", "4" );
+
 #if 1
 	CVAR_SET_STRING("sv_gravity", "800"); // 67ft/sec
 	CVAR_SET_STRING("sv_stepsize", "18");
@@ -489,6 +754,11 @@ void CWorld :: Precache( void )
 #endif
 
 	CVAR_SET_STRING("room_type", "0");// clear DSP
+	CVAR_SET_FLOAT( "sv_zmax", 16000 );
+
+	CServer_SoundEngine::GetSoundEngine()->Precache();
+
+	g_flNextAmbientRefresh = 0;
 
 	// Set up game rules
 	if (g_pGameRules)
@@ -496,7 +766,13 @@ void CWorld :: Precache( void )
 		delete g_pGameRules;
 	}
 
+	CServer::GetInstance()->MapInit();
 	g_pGameRules = InstallGameRules( );
+
+	if ( g_szModelReplacement )
+		PrecacheGlobalCustomModels( g_szModelReplacement );
+
+	CMap::GetInstance()->Initialize( );
 
 	//!!!UNDONE why is there so much Spawn code in the Precache function? I'll just keep it here 
 
@@ -510,33 +786,20 @@ void CWorld :: Precache( void )
 		ALERT ( at_console, "**COULD NOT CREATE SOUNDENT**\n" );
 	}
 
-	InitBodyQue();
-	
-// init sentence group playback stuff from sentences.txt.
-// ok to call this multiple times, calls after first are ignored.
-
-	SENTENCEG_Init();
-
-// init texture type array from materials.txt
-
-	TEXTURETYPE_Init();
-
-
-// the area based ambient sounds MUST be the first precache_sounds
-
-// player precaches     
-	W_Precache ();									// get weapon precaches
+	Weapon_Init();									// get weapon precaches
 
 	ClientPrecache();
+	PrecacheStandardWeaponModels();
 
 // sounds used from C physics code
-	PRECACHE_SOUND("common/null.wav");				// clears sound channels
+	PrecacheSound_Intercept( this, "common/null.wav" );	// clears sound channels
+	CServer_SoundEngine::GetSoundEngine()->PrecacheSound("common/null.wav");
 
-	PRECACHE_SOUND( "items/suitchargeok1.wav" );//!!! temporary sound for respawning weapons.
-	PRECACHE_SOUND( "items/gunpickup2.wav" );// player picks up a gun.
+	PrecacheSound_Intercept( this, "items/suitchargeok1.wav" ); //!!! temporary sound for respawning weapons.
+	PrecacheSound_Intercept( this, "items/gunpickup2.wav" ); // player picks up a gun.
 
-	PRECACHE_SOUND( "common/bodydrop3.wav" );// dead bodies hitting the ground (animation events)
-	PRECACHE_SOUND( "common/bodydrop4.wav" );
+	PrecacheSound_Intercept( this, "common/bodydrop3.wav" ); // dead bodies hitting the ground (animation events)
+	PrecacheSound_Intercept( this, "common/bodydrop4.wav" );
 	
 	g_Language = (int)CVAR_GET_FLOAT( "sv_language" );
 	if ( g_Language == LANGUAGE_GERMAN )
@@ -549,11 +812,17 @@ void CWorld :: Precache( void )
 		PRECACHE_MODEL( "models/agibs.mdl" );
 	}
 
-	PRECACHE_SOUND ("weapons/ric1.wav");
-	PRECACHE_SOUND ("weapons/ric2.wav");
-	PRECACHE_SOUND ("weapons/ric3.wav");
-	PRECACHE_SOUND ("weapons/ric4.wav");
-	PRECACHE_SOUND ("weapons/ric5.wav");
+	PRECACHE_MODEL( "sprites/muzzleflash_saw.spr" );
+
+	PrecacheSound_Intercept( this, "weapons/ric1.wav");
+	PrecacheSound_Intercept( this, "weapons/ric2.wav");
+	PrecacheSound_Intercept( this, "weapons/ric3.wav");
+	PrecacheSound_Intercept( this, "weapons/ric4.wav");
+	PrecacheSound_Intercept( this, "weapons/ric5.wav" );
+	PrecacheSound_Intercept( this, "weapons/explode3.wav" );
+	PrecacheSound_Intercept( this, "weapons/explode4.wav" );
+	PrecacheSound_Intercept( this, "weapons/explode5.wav" );
+	PrecacheSound_Intercept( this, "misc/r_tele3.wav" );
 //
 // Setup light animation tables. 'a' is total darkness, 'z' is maxbright.
 //
@@ -628,15 +897,10 @@ void CWorld :: Precache( void )
 		}
 	}
 
-	if ( pev->speed > 0 )
-		CVAR_SET_FLOAT( "sv_zmax", pev->speed );
-	else
-		CVAR_SET_FLOAT( "sv_zmax", 4096 );
-
 	if ( pev->netname )
 	{
 		ALERT( at_aiconsole, "Chapter title: %s\n", STRING(pev->netname) );
-		CBaseEntity *pEntity = CBaseEntity::Create( "env_message", g_vecZero, g_vecZero, NULL );
+		CBaseEntity *pEntity = CBaseEntity::Create( "env_message", g_vecZero, g_vecZero, false, NULL );
 		if ( pEntity )
 		{
 			pEntity->SetThink( &CBaseEntity::SUB_CallUseToggle );
@@ -665,6 +929,37 @@ void CWorld :: Precache( void )
 	{
 		CVAR_SET_FLOAT( "mp_defaultteam", 0 );
 	}
+
+	if ( g_szSoundReplacement )
+		m_pSoundReplacementMap = CMap::GetInstance()->GetSoundReplacementMap( STRING( g_szSoundReplacement ), true );
+
+	CTalkMonster::g_talkWaitTime = 0;
+
+	InitBodyQue();
+
+	CString mapPath;
+	CMemory<unsigned int> mapData;
+
+	mapPath.Format( "maps/%s.bsp", STRING( gpGlobals->mapname ) );
+
+	dheader_t *header = LoadBSPFile( mapPath.Data(), mapData );
+
+	if ( header )
+	{
+		CASScriptEntityPreprocessor scripts;
+		CBaseEntityPreprocessor *preprocessors[] = { &scripts };
+		CMapPreprocessor preprocessor( preprocessors, ARRAYSIZE( preprocessors ) );
+
+		preprocessor.Preprocess( mapData.Data() + header->lumps[LUMP_ENTITIES].fileofs,
+			header->lumps[LUMP_ENTITIES].filelen );
+	}
+	else
+	{
+		ALERT( at_console, "Failed to load map '%s' for ent data parsing!\n", mapPath.Data() );
+		CASServerManager::GetInstance()->LoadModules();
+	}
+
+	Weapon_Precache();
 }
 
 
@@ -673,7 +968,45 @@ void CWorld :: Precache( void )
 //
 void CWorld :: KeyValue( KeyValueData *pkvd )
 {
-	if ( FStrEq(pkvd->szKeyName, "skyname") )
+	if ( FStrEq( pkvd->szKeyName, "freeroam" ) )
+	{
+		g_iActiveIdle = atoi( pkvd->szValue ) != 0;
+		pkvd->fHandled = TRUE;
+	}
+	else if ( FStrEq( pkvd->szKeyName, "scversion" ) || FStrEq( pkvd->szKeyName, "scversion2" ) )
+	{
+		int version = atoi( pkvd->szValue );
+
+		if ( version > g_iMapForGameVersion )
+			g_iMapForGameVersion = version;
+
+		pkvd->fHandled = TRUE;
+	}
+	else if ( FStrEq( pkvd->szKeyName, "globalsoundlist" ) )
+	{
+		g_szSoundReplacement = AllocStringLocal( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if ( FStrEq( pkvd->szKeyName, "globalmodellist" ) )
+	{
+		g_szModelReplacement = AllocStringLocal( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if (FStrEq(pkvd->szKeyName, "sentence_file"))
+	{
+		CServer_SoundEngine *sound = CServer_SoundEngine::GetSoundEngine();
+
+		UTIL_CopyString(sound->m_szSentenceFile, pkvd->szValue, sizeof(sound->m_szSentenceFile));
+		pkvd->fHandled = TRUE;
+	}
+	else if (FStrEq(pkvd->szKeyName, "materials_file"))
+	{
+		CServer_SoundEngine *sound = CServer_SoundEngine::GetSoundEngine();
+
+		UTIL_CopyString(sound->m_szMaterialsFile, pkvd->szValue, sizeof(sound->m_szMaterialsFile));
+		pkvd->fHandled = TRUE;
+	}
+	else if ( FStrEq(pkvd->szKeyName, "skyname") )
 	{
 		// Sent over net now.
 		CVAR_SET_STRING( "sv_skyname", pkvd->szValue );
@@ -739,4 +1072,6 @@ void CWorld :: KeyValue( KeyValueData *pkvd )
 	}
 	else
 		CBaseEntity::KeyValue( pkvd );
+
+	WeaponModelKey( pkvd );
 }

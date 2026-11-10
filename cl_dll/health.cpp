@@ -45,11 +45,7 @@ int giDmgFlags[NUM_DMG_TYPES] =
 	DMG_BURN|DMG_SLOWBURN,
 	DMG_NERVEGAS, 
 	DMG_RADIATION,
-	DMG_SHOCK,
-	DMG_CALTROP,
-	DMG_TRANQ,
-	DMG_CONCUSS,
-	DMG_HALLUC
+	DMG_SHOCK
 };
 
 int CHudHealth::Init(void)
@@ -87,7 +83,7 @@ void CHudHealth::Reset( void )
 
 int CHudHealth::VidInit(void)
 {
-	m_hSprite = LoadSprite(PAIN_NAME);
+	m_hSprite = SPR_Load(PAIN_NAME);
 
 	m_HUD_dmg_bio = gHUD.GetSpriteIndex( "dmg_bio" ) + 1;
 	m_HUD_cross = gHUD.GetSpriteIndex( "cross" );
@@ -139,12 +135,8 @@ int CHudHealth:: MsgFunc_Damage(const char *pszName,  int iSize, void *pbuf )
 }
 
 
-// Returns back a color from the
-// Green <-> Yellow <-> Red ramp
 void CHudHealth::GetPainColor( int &r, int &g, int &b )
 {
-	int iHealth = m_iHealth;
-
 	if (m_iHealth > 25)
 	{
 		UnpackRGB(r,g,b, RGB_BLUEISH);
@@ -157,65 +149,62 @@ void CHudHealth::GetPainColor( int &r, int &g, int &b )
 	}
 }
 
+bool CHudHealth::ShouldDrawSeparator(void)
+{
+	return !(gHUD.m_iHideHUDDisplay & HIDEHUD_ARMOR) && gHUD.GetWidth() < 800;
+}
+
+int CHudHealth::GetWidth(void)
+{
+	wrect_t &rc = gHUD.GetSpriteRect(m_HUD_cross);
+	int width = rc.right - rc.left + 4;
+
+	width += gHUD.GetNumberWidth(m_iHealth, 3, 4, 0) + gHUD.GetSpaceWidth();
+	if (ShouldDrawSeparator())
+		width += gHUD.GetSeparatorWidth();
+
+	return width;
+}
+
 int CHudHealth::Draw(float flTime)
 {
-	int r, g, b;
-	int a = 0, x, y;
-	int HealthWidth;
-
-	if ( (gHUD.m_iHideHUDDisplay & HIDEHUD_HEALTH) )
+	if (gHUD.m_iHideHUDDisplay & HIDEHUD_HEALTH)
 		return 1;
-	
-	// Has health changed? Flash the health #
-	if (m_fFade)
-	{
-		m_fFade -= (gHUD.m_flTimeDelta * 20);
-		if (m_fFade <= 0)
-		{
-			a = MIN_ALPHA;
-			m_fFade = 0;
-		}
 
-		// Fade the health number back to dim
-
-		a = MIN_ALPHA +  (m_fFade/FADE_TIME) * 128;
-
-	}
-	else
-		a = MIN_ALPHA;
+	gHUD.UpdateFade(m_fFade);
+	int a = gHUD.GetFadeAlpha(m_fFade);
 
 	// If health is getting low, make it bright red
 	if (m_iHealth <= 15)
-		a = 255;
-		
-	GetPainColor( r, g, b );
-	ScaleColors(r, g, b, a );
+		a = gHUD.GetMaxAlpha();
+
+	int iWidth, g, b;
+
+	GetPainColor(iWidth, g, b );
+	ScaleColors(iWidth, g, b, a );
 
 	// Only draw health if we have the suit.
-	if (gHUD.m_iWeaponBits & (1<<(WEAPON_SUIT)))
+	if (gHUD.m_iWeaponBits & (1<< WEAPON_SUIT))
 	{
-		HealthWidth = gHUD.GetSpriteRect(gHUD.m_HUD_number_0).right - gHUD.GetSpriteRect(gHUD.m_HUD_number_0).left;
-		int CrossWidth = gHUD.GetSpriteRect(m_HUD_cross).right - gHUD.GetSpriteRect(m_HUD_cross).left;
+		wrect_t &rc = gHUD.GetSpriteRect(m_HUD_cross);
+		int width = rc.right - rc.left;
+		int offset = (rc.bottom - rc.top - gHUD.m_iFontHeight) >> 1;
+		int y = gHUD.GetLineY(1);
+		int x = gHUD.GetBorderSize();
 
-		y = ScreenHeight - gHUD.m_iFontHeight - gHUD.m_iFontHeight / 2;
-		x = CrossWidth /2;
+		gHUD.DrawSprite(x, y - offset, gHUD.GetSprite(m_HUD_cross), &rc, iWidth, g, b, 0, SPR_ADDITIVE);
 
-		gHUD.DrawSprite(x, y, gHUD.GetSprite(m_HUD_cross), &gHUD.GetSpriteRect(m_HUD_cross), r, g, b, 0, SPR_ADDITIVE);
+		x = gHUD.DrawNumber(x + width + 4, y, m_iHealth, iWidth, g, b, 3, 4, 0);
 
-		x = CrossWidth + HealthWidth / 2;
+		x += gHUD.GetSpaceWidth();
 
-		x = gHUD.DrawHudNumber(x, y, DHN_3DIGITS | DHN_DRAWZERO, m_iHealth, r, g, b);
-
-		x += HealthWidth/2;
-
-		int iHeight = gHUD.m_iFontHeight;
-		int iWidth = HealthWidth/10;
-		UnpackRGB(r, g, b, RGB_BLUEISH);
-		FillRGBA(x, y, iWidth, iHeight, r, g, b, a);
+		if (ShouldDrawSeparator())
+			gHUD.DrawSeparator(x, y, iWidth, g, b, a);
 	}
 
 	DrawDamage(flTime);
-	return DrawPain(flTime);
+	DrawPain(flTime);
+	return 1;
 }
 
 void CHudHealth::CalcDamageDirection(vec3_t vecFrom)
@@ -254,25 +243,25 @@ void CHudHealth::CalcDamageDirection(vec3_t vecFrom)
 		if (side > 0)
 		{
 			if (side > 0.3)
-				m_fAttackFront = max(m_fAttackFront, side);
+				m_fAttackFront = V_max(m_fAttackFront, side);
 		}
 		else
 		{
-			float f = ffabs(side);
+			float f = fabs(side);
 			if (f > 0.3)
-				m_fAttackRear = max(m_fAttackRear, f);
+				m_fAttackRear = V_max(m_fAttackRear, f);
 		}
 
 		if (front > 0)
 		{
 			if (front > 0.3)
-				m_fAttackRight = max(m_fAttackRight, front);
+				m_fAttackRight = V_max(m_fAttackRight, front);
 		}
 		else
 		{
-			float f = ffabs(front);
+			float f = fabs(front);
 			if (f > 0.3)
-				m_fAttackLeft = max(m_fAttackLeft, f);
+				m_fAttackLeft = V_max(m_fAttackLeft, f);
 		}
 	}
 }
@@ -286,7 +275,7 @@ int CHudHealth::DrawPain(float flTime)
 	int x, y, a, shade;
 
 	// TODO:  get the shift value of the health
-	a = 255;	// max brightness until then
+	a = gHUD.GetMaxAlpha();	// max brightness until then
 
 	float fFade = gHUD.m_flTimeDelta * 2;
 	
@@ -294,54 +283,53 @@ int CHudHealth::DrawPain(float flTime)
 	if (m_fAttackFront > 0.4)
 	{
 		GetPainColor(r,g,b);
-		shade = a * max( m_fAttackFront, 0.5 );
+		shade = a * V_max( m_fAttackFront, 0.5 );
 		ScaleColors(r, g, b, shade);
 
 		x = ScreenWidth/2 - SPR_Width(m_hSprite, 0)/2;
 		y = ScreenHeight/2 - SPR_Height(m_hSprite,0) * 3;
-
 		gHUD.DrawSprite(x, y, m_hSprite, NULL, r, g, b, 0, SPR_ADDITIVE);
-		m_fAttackFront = max( 0, m_fAttackFront - fFade );
+		m_fAttackFront = V_max( 0, m_fAttackFront - fFade );
 	} else
 		m_fAttackFront = 0;
 
 	if (m_fAttackRight > 0.4)
 	{
 		GetPainColor(r,g,b);
-		shade = a * max( m_fAttackRight, 0.5 );
+		shade = a * V_max( m_fAttackRight, 0.5 );
 		ScaleColors(r, g, b, shade);
 
 		x = ScreenWidth/2 + SPR_Width(m_hSprite, 1) * 2;
 		y = ScreenHeight/2 - SPR_Height(m_hSprite,1)/2;
 		gHUD.DrawSprite(x, y, m_hSprite, NULL, r, g, b, 1, SPR_ADDITIVE);
-		m_fAttackRight = max( 0, m_fAttackRight - fFade );
+		m_fAttackRight = V_max( 0, m_fAttackRight - fFade );
 	} else
 		m_fAttackRight = 0;
 
 	if (m_fAttackRear > 0.4)
 	{
 		GetPainColor(r,g,b);
-		shade = a * max( m_fAttackRear, 0.5 );
+		shade = a * V_max( m_fAttackRear, 0.5 );
 		ScaleColors(r, g, b, shade);
 
 		x = ScreenWidth/2 - SPR_Width(m_hSprite, 2)/2;
 		y = ScreenHeight/2 + SPR_Height(m_hSprite,2) * 2;
 		gHUD.DrawSprite(x, y, m_hSprite, NULL, r, g, b, 2, SPR_ADDITIVE);
-		m_fAttackRear = max( 0, m_fAttackRear - fFade );
+		m_fAttackRear = V_max( 0, m_fAttackRear - fFade );
 	} else
 		m_fAttackRear = 0;
 
 	if (m_fAttackLeft > 0.4)
 	{
 		GetPainColor(r,g,b);
-		shade = a * max( m_fAttackLeft, 0.5 );
+		shade = a * V_max( m_fAttackLeft, 0.5 );
 		ScaleColors(r, g, b, shade);
 
 		x = ScreenWidth/2 - SPR_Width(m_hSprite, 3) * 3;
 		y = ScreenHeight/2 - SPR_Height(m_hSprite,3)/2;
 		gHUD.DrawSprite(x, y, m_hSprite, NULL, r, g, b, 3, SPR_ADDITIVE);
 
-		m_fAttackLeft = max( 0, m_fAttackLeft - fFade );
+		m_fAttackLeft = V_max( 0, m_fAttackLeft - fFade );
 	} else
 		m_fAttackLeft = 0;
 
@@ -358,7 +346,7 @@ int CHudHealth::DrawDamage(float flTime)
 
 	UnpackRGB(r,g,b, RGB_BLUEISH);
 	
-	a = (int)( ffabs(sin(flTime*2)) * 256.0);
+	a = (int)(fabsf((float)sin(flTime*2)) * gHUD.GetMaxAlpha());
 
 	ScaleColors(r, g, b, a);
 
@@ -381,7 +369,7 @@ int CHudHealth::DrawDamage(float flTime)
 
 		if ( m_bitsDamage & giDmgFlags[i] )
 		{
-			pdmg->fExpire = min( flTime + DMG_IMAGE_LIFE, pdmg->fExpire );
+			pdmg->fExpire = V_min( flTime + DMG_IMAGE_LIFE, pdmg->fExpire );
 
 			if ( pdmg->fExpire <= flTime		// when the time has expired
 				&& a < 40 )						// and the flash is at the low point of the cycle
@@ -432,8 +420,8 @@ void CHudHealth::UpdateTiles(float flTime, long bitsDamage)
 		if (bitsOn & giDmgFlags[i])
 		{
 			// put this one at the bottom
-			pdmg->x = giDmgWidth/8;
-			pdmg->y = ScreenHeight - giDmgHeight * 2;
+			pdmg->x = gHUD.GetBorderSize() + giDmgWidth/8;
+			pdmg->y = gHUD.GetLineY(1) - (giDmgHeight >> 1) - giDmgHeight;
 			pdmg->fExpire=flTime + DMG_IMAGE_LIFE;
 			
 			// move everyone else up

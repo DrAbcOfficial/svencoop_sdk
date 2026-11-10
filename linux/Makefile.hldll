@@ -11,26 +11,210 @@ HLDLL_OBJ_DIR=$(BUILD_OBJ_DIR)/hldll
 HLWPN_OBJ_DIR=$(HLDLL_OBJ_DIR)/wpn_shared
 PM_OBJ_DIR=$(HLDLL_OBJ_DIR)/pm_shared
 GAME_SHARED_OBJ_DIR=$(HLDLL_OBJ_DIR)/game_shared
+ANGELSCRIPT_SRC_DIR=$(SOURCE_DIR)/external/angelscript/sdk/angelscript/source
+ANGELSCRIPT_ADDON_DIR=$(SOURCE_DIR)/external/angelscript/sdk/add_on
+ANGELSCRIPT_OBJ_DIR=$(HLDLL_OBJ_DIR)/angelscript
+SERVER_CRYPTOPP_SRC_DIR=$(SOURCE_DIR)/external/cryptopp
+SERVER_CRYPTOPP_OBJ_DIR=$(HLDLL_OBJ_DIR)/cryptopp
 
-#CFLAGS=$(BASE_CFLAGS) $(ARCH_CFLAGS) $(SHLIBCFLAGS) -DCLIENT_WEAPONS
-CFLAGS=$(BASE_CFLAGS)  $(ARCH_CFLAGS)  -DCLIENT_WEAPONS
+#CFLAGS=$(BASE_CFLAGS) $(ARCH_CFLAGS) $(SHLIBCFLAGS) -DCLIENT_WEAPONS -DDISABLE_VEC_ORIGIN
+CFLAGS=$(BASE_CFLAGS)  $(ARCH_CFLAGS)  -DCLIENT_WEAPONS -DDISABLE_VEC_ORIGIN -DAS_PROCESS_METADATA=0 -DAS_USE_STLNAMES=1 -DAS_USE_ACCESSORS=0
 #-O3 -ffast-math -fno-strength-reduce
 
-HLDLL_INCLUDEDIRS=-I$(ENGINE_SRC_DIR) -I$(COMMON_SRC_DIR) -I$(PM_SRC_DIR) -I$(GAME_SHARED_SRC_DIR) -I$(PUBLIC_SRC_DIR)
+HLDLL_INCLUDEDIRS=-I$(ENGINE_SRC_DIR) -I$(COMMON_SRC_DIR) -I$(PM_SRC_DIR) -I$(GAME_SHARED_SRC_DIR) -I$(PUBLIC_SRC_DIR) -I$(SOURCE_DIR)/external/angelscript/sdk/angelscript/include
 HLWPN_INCLUDEDIRS=-I$(HLDLL_SRC_DIR) -I$(ENGINE_SRC_DIR) -I$(COMMON_SRC_DIR) -I$(PM_SRC_DIR) -I$(PUBLIC_SRC_DIR)
-PM_INCLUDEDIRS=-I$(COMMON_SRC_DIR)  -I$(PUBLIC_SRC_DIR)
+PM_INCLUDEDIRS=-I$(HLDLL_SRC_DIR) -I$(GAME_SHARED_SRC_DIR) -I$(COMMON_SRC_DIR) -I$(ENGINE_SRC_DIR) -I$(PUBLIC_SRC_DIR)
 GAME_SHARED_INCLUDEDIRS=-I$(HLDLL_SRC_DIR) -I$(ENGINE_SRC_DIR) -I$(COMMON_SRC_DIR) -I$(PM_SRC_DIR) -I$(PUBLIC_SRC_DIR)
 
-LDFLAGS= -lm -lstdc++
+LDFLAGS= -lm -lstdc++ -ldl -lpthread
 
 DO_HLDLL_CC=$(CC) $(HLDLL_INCLUDEDIRS) $(CFLAGS) -o $@ -c $<
 DO_HLWPN_CC=$(CC) $(HLWPN_INCLUDEDIRS) $(CFLAGS) -o $@ -c $<
 DO_PM_CC=$(CC) $(PM_INCLUDEDIRS) $(CFLAGS) -o $@ -c $<
 DO_GAME_SHARED_CC=$(CC) $(GAME_SHARED_INCLUDEDIRS) $(CFLAGS) -o $@ -c $<
+DO_ANGELSCRIPT_CC=$(CC) $(CFLAGS) -I$(SOURCE_DIR)/external/angelscript/sdk/angelscript/include -fPIC -DAS_NO_EXCEPTIONS -o $@ -c $<
 
 #####################################################################
 
 HLDLL_OBJS = \
+	$(HLDLL_OBJ_DIR)/ASDiagnostics.o \
+	$(HLDLL_OBJ_DIR)/ASDiagnosticsCommands.o \
+	$(HLDLL_OBJ_DIR)/bodyguard.o \
+	$(HLDLL_OBJ_DIR)/client_commands.o \
+	$(HLDLL_OBJ_DIR)/flame.o \
+	$(HLDLL_OBJ_DIR)/op4torch.o \
+	$(HLDLL_OBJ_DIR)/server_commands.o \
+	$(HLDLL_OBJ_DIR)/nav/DetourNavMesh.o \
+	$(HLDLL_OBJ_DIR)/nav/Recast.o \
+	$(HLDLL_OBJ_DIR)/CNetworkProfiler.o \
+	$(HLDLL_OBJ_DIR)/ASSoundEnt.o \
+	$(HLDLL_OBJ_DIR)/ASWeaponDependencies.o \
+	$(HLDLL_OBJ_DIR)/robotgrunt.o \
+	$(HLDLL_OBJ_DIR)/ASBaseAnimating.o \
+	$(HLDLL_OBJ_DIR)/ASBaseCineMonster.o \
+	$(HLDLL_OBJ_DIR)/ASBaseEffects.o \
+	$(HLDLL_OBJ_DIR)/ASBaseEntity.o \
+	$(HLDLL_OBJ_DIR)/ASBaseMonster.o \
+	$(HLDLL_OBJ_DIR)/ASBasePathTrack.o \
+	$(HLDLL_OBJ_DIR)/ASInventory.o \
+	$(HLDLL_OBJ_DIR)/ASPlayerEntity.o \
+	$(HLDLL_OBJ_DIR)/ASSound.o \
+	$(HLDLL_OBJ_DIR)/CASAdminControl.o \
+	$(HLDLL_OBJ_DIR)/CASEngineFuncs.o \
+	$(HLDLL_OBJ_DIR)/CASEntityLoader.o \
+	$(HLDLL_OBJ_DIR)/CASPlayerFuncs.o \
+	$(HLDLL_OBJ_DIR)/CASSoundEngine.o \
+	$(HLDLL_OBJ_DIR)/CInventoryMisc.o \
+	$(HLDLL_OBJ_DIR)/hwgrunt.o \
+	$(HLDLL_OBJ_DIR)/otis.o \
+	$(HLDLL_OBJ_DIR)/player_hud.o \
+	$(HLDLL_OBJ_DIR)/player_script_support.o \
+	$(HLDLL_OBJ_DIR)/server_cheats.o \
+	$(HLDLL_OBJ_DIR)/attackvectors.o \
+	$(HLDLL_OBJ_DIR)/player_monsterinfo.o \
+	$(HLDLL_OBJ_DIR)/player_hud_support.o \
+	$(HLDLL_OBJ_DIR)/monster_steps.o \
+	$(HLDLL_OBJ_DIR)/monster_tank.o \
+	$(HLDLL_OBJ_DIR)/sprite_train.o \
+	$(HLDLL_OBJ_DIR)/weather.o \
+	$(HLDLL_OBJ_DIR)/global_light_control.o \
+	$(HLDLL_OBJ_DIR)/game_persistent_inventory.o \
+	$(HLDLL_OBJ_DIR)/hypercube.o \
+	$(HLDLL_OBJ_DIR)/xenmaker.o \
+	$(HLDLL_OBJ_DIR)/custom_precache.o \
+	$(HLDLL_OBJ_DIR)/op4mortar.o \
+	$(HLDLL_OBJ_DIR)/ambient_music.o \
+	$(HLDLL_OBJ_DIR)/squadmaker.o \
+	$(HLDLL_OBJ_DIR)/trigger_camera.o \
+	$(HLDLL_OBJ_DIR)/charger.o \
+	$(HLDLL_OBJ_DIR)/env_render_individual.o \
+	$(HLDLL_OBJ_DIR)/func_clip.o \
+	$(HLDLL_OBJ_DIR)/trigger_changemodel.o \
+	$(HLDLL_OBJ_DIR)/trigger_createentity.o \
+	$(HLDLL_OBJ_DIR)/trigger_custom_save.o \
+	$(HLDLL_OBJ_DIR)/trigger_cyclicobserver.o \
+	$(HLDLL_OBJ_DIR)/trigger_effect.o \
+	$(HLDLL_OBJ_DIR)/trigger_entity_iterator.o \
+	$(HLDLL_OBJ_DIR)/trigger_hurt_remote.o \
+	$(HLDLL_OBJ_DIR)/trigger_lookat.o \
+	$(HLDLL_OBJ_DIR)/trigger_numericdisplay.o \
+	$(HLDLL_OBJ_DIR)/trigger_respawn.o \
+	$(HLDLL_OBJ_DIR)/trigger_script.o \
+	$(HLDLL_OBJ_DIR)/trigger_setorigin.o \
+	$(HLDLL_OBJ_DIR)/trigger_trackgoal.o \
+	$(HLDLL_OBJ_DIR)/trigger_vote.o \
+	$(HLDLL_OBJ_DIR)/grapple.o \
+	$(HLDLL_OBJ_DIR)/teleportdestination.o \
+	$(HLDLL_OBJ_DIR)/pipewrench.o \
+	$(HLDLL_OBJ_DIR)/medkit.o \
+	$(HLDLL_OBJ_DIR)/uzi.o \
+	$(HLDLL_OBJ_DIR)/displacer.o \
+	$(HLDLL_OBJ_DIR)/desert_eagle.o \
+	$(HLDLL_OBJ_DIR)/m16.o \
+	$(HLDLL_OBJ_DIR)/minigun.o \
+	$(HLDLL_OBJ_DIR)/sporelauncher.o \
+	$(HLDLL_OBJ_DIR)/CSurvivalMode.o \
+	$(HLDLL_OBJ_DIR)/CAdvFuncVehicle.o \
+	$(HLDLL_OBJ_DIR)/CSpawnPoints.o \
+	$(HLDLL_OBJ_DIR)/trigger_player.o \
+	$(HLDLL_OBJ_DIR)/trigger_changemaxammo.o \
+	$(HLDLL_OBJ_DIR)/trigger_changevalue.o \
+	$(HLDLL_OBJ_DIR)/trigger_copyvalue.o \
+	$(HLDLL_OBJ_DIR)/func_vehicle.o \
+	$(HLDLL_OBJ_DIR)/CPlayerDatabase.o \
+	$(HLDLL_OBJ_DIR)/CServerCrypto.o \
+	$(HLDLL_OBJ_DIR)/CServer.o \
+	$(HLDLL_OBJ_DIR)/donid.o \
+	$(HLDLL_OBJ_DIR)/CPlayerExtrasList.o \
+	$(HLDLL_OBJ_DIR)/donid_miniz.o \
+	$(HLDLL_OBJ_DIR)/ASFileSystem.o \
+	$(HLDLL_OBJ_DIR)/CASVirtualFileSystem.o \
+	$(HLDLL_OBJ_DIR)/CASFile.o \
+	$(HLDLL_OBJ_DIR)/CASBLOB.o \
+	$(HLDLL_OBJ_DIR)/CStringServer.o \
+	$(HLDLL_OBJ_DIR)/CASDirectory.o \
+	$(HLDLL_OBJ_DIR)/CASExtensionList.o \
+	$(HLDLL_OBJ_DIR)/CASDirectoryList.o \
+	$(HLDLL_OBJ_DIR)/CEscapeSequences.o \
+	$(HLDLL_OBJ_DIR)/CKeyvaluesWriter.o \
+	$(HLDLL_OBJ_DIR)/CObjectLifetimeHandler.o \
+	$(HLDLL_OBJ_DIR)/CKeyvalues.o \
+	$(HLDLL_OBJ_DIR)/CKeyvaluesParser.o \
+	$(HLDLL_OBJ_DIR)/CMapPreprocessor.o \
+	$(HLDLL_OBJ_DIR)/BSPFile.o \
+	$(HLDLL_OBJ_DIR)/CASDateTime.o \
+	$(HLDLL_OBJ_DIR)/CASHeaderList.o \
+	$(HLDLL_OBJ_DIR)/CKeyvaluesLexer.o \
+	$(HLDLL_OBJ_DIR)/server_entvars.o \
+	$(HLDLL_OBJ_DIR)/CBaseConCommand.o \
+	$(HLDLL_OBJ_DIR)/CBaseCommand.o \
+	$(HLDLL_OBJ_DIR)/CCustomKeyvalue.o \
+	$(HLDLL_OBJ_DIR)/CCommand.o \
+	$(HLDLL_OBJ_DIR)/CCustomKeyvalues.o \
+	$(HLDLL_OBJ_DIR)/entvars_types.o \
+	$(HLDLL_OBJ_DIR)/CMap.o \
+	$(HLDLL_OBJ_DIR)/CCfgFile.o \
+	$(HLDLL_OBJ_DIR)/CCfgCommand.o \
+	$(HLDLL_OBJ_DIR)/CASBaseClass.o \
+	$(HLDLL_OBJ_DIR)/IASScriptGlobal.o \
+	$(HLDLL_OBJ_DIR)/IASImplementationFactory.o \
+	$(HLDLL_OBJ_DIR)/CASScriptBaseClasses.o \
+	$(HLDLL_OBJ_DIR)/CASCommand.o \
+	$(HLDLL_OBJ_DIR)/CASDocumentation.o \
+	$(HLDLL_OBJ_DIR)/CScriptDictionary.o \
+	$(HLDLL_OBJ_DIR)/ASEntityHandle.o \
+	$(HLDLL_OBJ_DIR)/ASString.o \
+	$(HLDLL_OBJ_DIR)/ASVarious.o \
+	$(HLDLL_OBJ_DIR)/EntityClassification.o \
+	$(HLDLL_OBJ_DIR)/ASEntityClassification.o \
+	$(HLDLL_OBJ_DIR)/CNetworkMessages.o \
+	$(HLDLL_OBJ_DIR)/user_messages.o \
+	$(HLDLL_OBJ_DIR)/ASNetworkMessage.o \
+	$(HLDLL_OBJ_DIR)/CASRegex.o \
+	$(HLDLL_OBJ_DIR)/ASRegex.o \
+	$(HLDLL_OBJ_DIR)/CKeyValueBuffer.o \
+	$(HLDLL_OBJ_DIR)/ASKeyValueBuffer.o \
+	$(HLDLL_OBJ_DIR)/ASEngineFuncs.o \
+	$(HLDLL_OBJ_DIR)/DamageInfo.o \
+	$(HLDLL_OBJ_DIR)/CLinkedStringPool.o \
+	$(HLDLL_OBJ_DIR)/CMutex.o \
+	$(HLDLL_OBJ_DIR)/ASVector.o \
+	$(HLDLL_OBJ_DIR)/CASMath.o \
+	$(HLDLL_OBJ_DIR)/ASMath.o \
+	$(HLDLL_OBJ_DIR)/ASDateTime.o \
+	$(HLDLL_OBJ_DIR)/ASEngine.o \
+	$(HLDLL_OBJ_DIR)/ASModelFuncs.o \
+	$(HLDLL_OBJ_DIR)/CASModelFuncs.o \
+	$(HLDLL_OBJ_DIR)/ModelUtils.o \
+	$(HLDLL_OBJ_DIR)/ASPendingRegistration.o \
+	$(HLDLL_OBJ_DIR)/ServerDLL.o \
+	$(HLDLL_OBJ_DIR)/server_resource.o \
+	$(HLDLL_OBJ_DIR)/CToEntityCollision.o \
+	$(HLDLL_OBJ_DIR)/CToPlayerCollisions.o \
+	$(HLDLL_OBJ_DIR)/ASBLOB.o \
+	$(HLDLL_OBJ_DIR)/CASPluginModuleInfo.o \
+	$(HLDLL_OBJ_DIR)/CASServerMapModuleInfo.o \
+	$(HLDLL_OBJ_DIR)/DllType.o \
+	$(HLDLL_OBJ_DIR)/ASDebugEntities.o \
+	$(HLDLL_OBJ_DIR)/EntityRelationships.o \
+	$(HLDLL_OBJ_DIR)/CCustomRespawnDelay.o \
+	$(HLDLL_OBJ_DIR)/RGBA.o \
+	$(HLDLL_OBJ_DIR)/ASRGBA.o \
+	$(HLDLL_OBJ_DIR)/VectorRotation.o \
+	$(HLDLL_OBJ_DIR)/CCStringFactory.o \
+	$(HLDLL_OBJ_DIR)/CConCommand.o \
+	$(HLDLL_OBJ_DIR)/CASFileSystemUtils.o \
+	$(HLDLL_OBJ_DIR)/CLog.o \
+	$(HLDLL_OBJ_DIR)/CASLog.o \
+	$(HLDLL_OBJ_DIR)/CASFileQuota.o \
+	$(HLDLL_OBJ_DIR)/CStringMap.o \
+	$(HLDLL_OBJ_DIR)/CReplacementMap.o \
+	$(HLDLL_OBJ_DIR)/server_sound.o \
+	$(HLDLL_OBJ_DIR)/server_sound_list.o \
+	$(HLDLL_OBJ_DIR)/server_sound_sentences.o \
+	$(HLDLL_OBJ_DIR)/server_support.o \
+	$(HLDLL_OBJ_DIR)/server_filesystem.o \
+	$(HLDLL_OBJ_DIR)/interface.o \
 	$(HLDLL_OBJ_DIR)/aflock.o \
 	$(HLDLL_OBJ_DIR)/agrunt.o \
 	$(HLDLL_OBJ_DIR)/airtank.o \
@@ -45,6 +229,43 @@ HLDLL_OBJS = \
 	$(HLDLL_OBJ_DIR)/bullsquid.o \
 	$(HLDLL_OBJ_DIR)/buttons.o \
 	$(HLDLL_OBJ_DIR)/cbase.o \
+	$(HLDLL_OBJ_DIR)/voltigore.o \
+	$(HLDLL_OBJ_DIR)/shockrifle.o \
+	$(HLDLL_OBJ_DIR)/trigger_condition.o \
+	$(HLDLL_OBJ_DIR)/playerammo.o \
+	$(HLDLL_OBJ_DIR)/m249.o \
+	$(HLDLL_OBJ_DIR)/sniper_rifle.o \
+	$(HLDLL_OBJ_DIR)/shocktrooper.o \
+	$(HLDLL_OBJ_DIR)/shock.o \
+	$(HLDLL_OBJ_DIR)/stukabat.o \
+	$(HLDLL_OBJ_DIR)/sqknest.o \
+	$(HLDLL_OBJ_DIR)/pitdrone.o \
+	$(HLDLL_OBJ_DIR)/gonome.o \
+	$(HLDLL_OBJ_DIR)/PickupUtils.o \
+	$(HLDLL_OBJ_DIR)/trigger_random.o \
+	$(HLDLL_OBJ_DIR)/trigger_setcvar.o \
+	$(HLDLL_OBJ_DIR)/env_fog.o \
+	$(HLDLL_OBJ_DIR)/squadtalkmonster.o \
+	$(HLDLL_OBJ_DIR)/zombie_variants.o \
+	$(HLDLL_OBJ_DIR)/PathEntities.o \
+	$(HLDLL_OBJ_DIR)/PathCondition.o \
+	$(HLDLL_OBJ_DIR)/CASWaypointManager.o \
+	$(HLDLL_OBJ_DIR)/item_inventory.o \
+	$(HLDLL_OBJ_DIR)/InventoryRules.o \
+	$(HLDLL_OBJ_DIR)/babygarg.o \
+	$(HLDLL_OBJ_DIR)/blkoposprey.o \
+	$(HLDLL_OBJ_DIR)/kingpin.o \
+	$(HLDLL_OBJ_DIR)/CBasePhysicsObject.o \
+	$(HLDLL_OBJ_DIR)/CBasePickupObject.o \
+	$(HLDLL_OBJ_DIR)/tor.o \
+	$(HLDLL_OBJ_DIR)/sporegrenade.o \
+	$(HLDLL_OBJ_DIR)/shockroach.o \
+	$(HLDLL_OBJ_DIR)/hgrunt_dead.o \
+	$(HLDLL_OBJ_DIR)/hgrunt_variants.o \
+	$(HLDLL_OBJ_DIR)/hgrunt_repel.o \
+	$(HLDLL_OBJ_DIR)/chumtoad.o \
+	$(HLDLL_OBJ_DIR)/trigger_changesky.o \
+	$(HLDLL_OBJ_DIR)/scientist_cleansuit.o \
 	$(HLDLL_OBJ_DIR)/client.o \
 	$(HLDLL_OBJ_DIR)/combat.o \
 	$(HLDLL_OBJ_DIR)/controller.o \
@@ -98,6 +319,8 @@ HLDLL_OBJS = \
 	$(HLDLL_OBJ_DIR)/plane.o \
 	$(HLDLL_OBJ_DIR)/plats.o \
 	$(HLDLL_OBJ_DIR)/player.o \
+	$(HLDLL_OBJ_DIR)/portal.o \
+	$(HLDLL_OBJ_DIR)/portal_trace.o \
 	$(HLDLL_OBJ_DIR)/python.o \
 	$(HLDLL_OBJ_DIR)/rat.o \
 	$(HLDLL_OBJ_DIR)/roach.o \
@@ -138,9 +361,193 @@ PM_OBJS = \
 	$(PM_OBJ_DIR)/pm_debug.o
 
 GAME_SHARED_OBJS = \
+	$(GAME_SHARED_OBJ_DIR)/CString.o \
+	$(GAME_SHARED_OBJ_DIR)/materials.o \
+	$(GAME_SHARED_OBJ_DIR)/CAutoString.o \
+	$(GAME_SHARED_OBJ_DIR)/CHashStringPool.o \
 	$(GAME_SHARED_OBJ_DIR)/voice_gamemgr.o
 
-all: dirs hl.$(SHLIBEXT)
+ANGELSCRIPT_OBJS = \
+	$(ANGELSCRIPT_OBJ_DIR)/serializer.o \
+	$(ANGELSCRIPT_OBJ_DIR)/contextmgr.o \
+	$(ANGELSCRIPT_OBJ_DIR)/debugger.o \
+	$(ANGELSCRIPT_OBJ_DIR)/scriptbuilder.o \
+	$(ANGELSCRIPT_OBJ_DIR)/scriptarray.o \
+	$(ANGELSCRIPT_OBJ_DIR)/scriptmath.o \
+	$(ANGELSCRIPT_OBJ_DIR)/scriptmathcomplex.o \
+	$(ANGELSCRIPT_OBJ_DIR)/scripthelper.o \
+	$(ANGELSCRIPT_OBJ_DIR)/scriptgrid.o \
+	$(ANGELSCRIPT_OBJ_DIR)/weakref.o \
+	$(ANGELSCRIPT_OBJ_DIR)/scripthandle.o \
+	$(ANGELSCRIPT_OBJ_DIR)/scriptany.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_atomic.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_builder.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_bytecode.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_callfunc.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_callfunc_x86.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_compiler.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_configgroup.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_context.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_datatype.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_gc.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_generic.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_globalproperty.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_memory.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_module.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_objecttype.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_outputbuffer.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_parser.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_restore.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_scriptcode.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_scriptengine.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_scriptfunction.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_scriptnode.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_scriptobject.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_string.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_string_util.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_thread.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_tokenizer.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_typeinfo.o \
+	$(ANGELSCRIPT_OBJ_DIR)/as_variablescope.o
+
+SVEN_SCRIPT_RUNTIME_OBJS = \
+	$(HLDLL_OBJ_DIR)/ASSurvivalMode.o \
+	$(HLDLL_OBJ_DIR)/ASObserver.o \
+	$(HLDLL_OBJ_DIR)/CASVote.o \
+	$(HLDLL_OBJ_DIR)/ASVote.o \
+	$(HLDLL_OBJ_DIR)/CVoteManager.o \
+	$(HLDLL_OBJ_DIR)/player_vote.o \
+	$(HLDLL_OBJ_DIR)/ASEntityInterfaces.o \
+	$(HLDLL_OBJ_DIR)/ASPlayerFuncs.o \
+	$(HLDLL_OBJ_DIR)/ASEntityHeaderSupport.o \
+	$(HLDLL_OBJ_DIR)/ASEntityFuncs.o \
+	$(HLDLL_OBJ_DIR)/CASEntityFuncs.o \
+	$(HLDLL_OBJ_DIR)/ASWeaponFuncs.o \
+	$(HLDLL_OBJ_DIR)/ASTextMenus.o \
+	$(HLDLL_OBJ_DIR)/CASWeaponFuncs.o \
+	$(HLDLL_OBJ_DIR)/ASMonsterDependencies.o \
+	$(HLDLL_OBJ_DIR)/ASPlayerDependencies.o \
+	$(HLDLL_OBJ_DIR)/ASEntityDependencyLeaves.o \
+	$(HLDLL_OBJ_DIR)/ASEntityDependencies.o \
+	$(HLDLL_OBJ_DIR)/CASScriptEntityPreprocessor.o \
+	$(HLDLL_OBJ_DIR)/CASMap.o \
+	$(HLDLL_OBJ_DIR)/ASMap.o \
+	$(HLDLL_OBJ_DIR)/CASGame.o \
+	$(HLDLL_OBJ_DIR)/ASGame.o \
+	$(HLDLL_OBJ_DIR)/CASUtility.o \
+	$(HLDLL_OBJ_DIR)/ASUtility.o \
+	$(HLDLL_OBJ_DIR)/CMultiplayGameMgrHelper.o \
+	$(HLDLL_OBJ_DIR)/CCVarSystem.o \
+	$(HLDLL_OBJ_DIR)/CClassicMode.o \
+	$(HLDLL_OBJ_DIR)/ASClassicMode.o \
+	$(HLDLL_OBJ_DIR)/ASStartInventory.o \
+	$(HLDLL_OBJ_DIR)/CStartInventory.o \
+	$(HLDLL_OBJ_DIR)/CASStartInventory.o \
+	$(HLDLL_OBJ_DIR)/CAdminList.o \
+	$(HLDLL_OBJ_DIR)/MapCycle.o \
+	$(HLDLL_OBJ_DIR)/CASMapCycle.o \
+	$(HLDLL_OBJ_DIR)/ASMapCycle.o \
+	$(HLDLL_OBJ_DIR)/CASTextMenu.o \
+	$(HLDLL_OBJ_DIR)/CASTextMenus.o \
+	$(HLDLL_OBJ_DIR)/ASEdict.o \
+	$(HLDLL_OBJ_DIR)/ASClientSayParameters.o \
+	$(HLDLL_OBJ_DIR)/ASGlobalState.o \
+	$(HLDLL_OBJ_DIR)/ASScriptLog.o \
+	$(HLDLL_OBJ_DIR)/ASAngelscript.o \
+	$(HLDLL_OBJ_DIR)/CASModuleReflectionGroup.o \
+	$(HLDLL_OBJ_DIR)/CASEngineReflectionGroup.o \
+	$(HLDLL_OBJ_DIR)/CASASReflection.o \
+	$(HLDLL_OBJ_DIR)/ASReflection.o \
+	$(HLDLL_OBJ_DIR)/ASPrintf.o \
+	$(HLDLL_OBJ_DIR)/CCustomEntityHandler.o \
+	$(HLDLL_OBJ_DIR)/CCustomEntity.o \
+	$(HLDLL_OBJ_DIR)/CASItemRegistry.o \
+	$(HLDLL_OBJ_DIR)/ConCommandUtils.o \
+	$(HLDLL_OBJ_DIR)/CConCommandSystem.o \
+	$(HLDLL_OBJ_DIR)/CCVar.o \
+	$(HLDLL_OBJ_DIR)/CClientCommand.o \
+	$(HLDLL_OBJ_DIR)/CASConCommandSystem.o \
+	$(HLDLL_OBJ_DIR)/CASConCommand.o \
+	$(HLDLL_OBJ_DIR)/CASClientCommand.o \
+	$(HLDLL_OBJ_DIR)/CASCVar.o \
+	$(HLDLL_OBJ_DIR)/CASBaseConCommand.o \
+	$(HLDLL_OBJ_DIR)/CASPersistenceInstance.o \
+	$(HLDLL_OBJ_DIR)/CASPersistence.o \
+	$(HLDLL_OBJ_DIR)/CASPluginManager.o \
+	$(HLDLL_OBJ_DIR)/ConCommandAccess.o \
+	$(HLDLL_OBJ_DIR)/AdminLevel.o \
+	$(HLDLL_OBJ_DIR)/ASPrintVariable.o \
+	$(HLDLL_OBJ_DIR)/CASArgument.o \
+	$(HLDLL_OBJ_DIR)/CASArguments.o \
+	$(HLDLL_OBJ_DIR)/CASBaseCallable.o \
+	$(HLDLL_OBJ_DIR)/CASBaseManager.o \
+	$(HLDLL_OBJ_DIR)/CASBaseObjectData.o \
+	$(HLDLL_OBJ_DIR)/CASBaseRegistration.o \
+	$(HLDLL_OBJ_DIR)/CASCommonServerModuleValidation.o \
+	$(HLDLL_OBJ_DIR)/CASContextPool.o \
+	$(HLDLL_OBJ_DIR)/CASDebugger.o \
+	$(HLDLL_OBJ_DIR)/CASFunction.o \
+	$(HLDLL_OBJ_DIR)/CASHook.o \
+	$(HLDLL_OBJ_DIR)/CASHookManager.o \
+	$(HLDLL_OBJ_DIR)/CASMethod.o \
+	$(HLDLL_OBJ_DIR)/CASModule.o \
+	$(HLDLL_OBJ_DIR)/CASModuleBuilder.o \
+	$(HLDLL_OBJ_DIR)/CASModuleHandle.o \
+	$(HLDLL_OBJ_DIR)/CASModuleHookManager.o \
+	$(HLDLL_OBJ_DIR)/CASModuleInfo.o \
+	$(HLDLL_OBJ_DIR)/CASModuleList.o \
+	$(HLDLL_OBJ_DIR)/CASObjectInstance.o \
+	$(HLDLL_OBJ_DIR)/CASObjectType.o \
+	$(HLDLL_OBJ_DIR)/CASReflection.o \
+	$(HLDLL_OBJ_DIR)/CASReturnValue.o \
+	$(HLDLL_OBJ_DIR)/CASScheduler.o \
+	$(HLDLL_OBJ_DIR)/CASScriptDebugger.o \
+	$(HLDLL_OBJ_DIR)/CASScriptInfo.o \
+	$(HLDLL_OBJ_DIR)/CASServerImplementationFactory.o \
+	$(HLDLL_OBJ_DIR)/CASServerManager.o \
+	$(HLDLL_OBJ_DIR)/CASServerRegistration.o
+
+SVEN_SCRIPT_RUNTIME_LIB = $(HLDLL_OBJ_DIR)/libSvenScriptRuntime.a
+
+SERVER_CRYPTOPP_OBJS = \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/algebra.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/algparam.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/allocate.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/asn.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/authenc.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/basecode.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/client_templates.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/cpu.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/cryptlib.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/des.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/dessp.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/eprecomp.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/filters.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/fips140.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/gcm.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/gcm_simd.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/hex.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/hrtimer.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/integer.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/iterhash.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/misc.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/modes.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/mqueue.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/nbtheory.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/osrng.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/primetab.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/pubkey.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/queue.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/randpool.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/rdtables.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/rijndael.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/rijndael_simd.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/sha.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/sha_simd.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/sse_simd.o \
+	$(SERVER_CRYPTOPP_OBJ_DIR)/strciphr.o
+
+all: dirs server.$(SHLIBEXT)
 
 dirs:
 	-mkdir $(BUILD_OBJ_DIR)
@@ -148,24 +555,64 @@ dirs:
 	-mkdir $(HLWPN_OBJ_DIR)
 	-mkdir $(PM_OBJ_DIR)
 	-mkdir $(GAME_SHARED_OBJ_DIR)
+	-mkdir $(ANGELSCRIPT_OBJ_DIR)
 
-hl.$(SHLIBEXT): $(HLDLL_OBJS) $(HLWPN_OBJS) $(PM_OBJS) $(GAME_SHARED_OBJS)
-	$(CC) $(LDFLAGS) $(SHLIBLDFLAGS) -o $(BUILD_DIR)/$@ $(HLDLL_OBJS) $(HLWPN_OBJS) $(PM_OBJS) $(GAME_SHARED_OBJS)
-	p4 edit ../../game/mod/dlls/hl.$(SHLIBEXT)
-	cp $(BUILD_DIR)/$@  ../../game/mod/dlls/hl.$(SHLIBEXT)
-	./gendbg.sh ../../game/mod/dlls/hl.$(SHLIBEXT)
+server.$(SHLIBEXT): $(HLDLL_OBJS) $(HLWPN_OBJS) $(PM_OBJS) $(GAME_SHARED_OBJS) $(ANGELSCRIPT_OBJS) $(SVEN_SCRIPT_RUNTIME_LIB) $(SERVER_CRYPTOPP_OBJS)
+	$(CC) $(LDFLAGS) $(SHLIBLDFLAGS) -o $(BUILD_DIR)/$@ $(HLDLL_OBJS) $(HLWPN_OBJS) $(PM_OBJS) $(GAME_SHARED_OBJS) $(ANGELSCRIPT_OBJS) $(SVEN_SCRIPT_RUNTIME_LIB) $(SERVER_CRYPTOPP_OBJS) -lcurl
 	
+$(SVEN_SCRIPT_RUNTIME_LIB): $(SVEN_SCRIPT_RUNTIME_OBJS)
+	$(AR) rcs $@ $^
+
 $(HLWPN_OBJ_DIR)/%.o : $(HLWPN_SRC_DIR)/%.cpp
 	$(DO_HLWPN_CC)
 
 $(HLDLL_OBJ_DIR)/%.o : $(HLDLL_SRC_DIR)/%.cpp
 	$(DO_HLDLL_CC)
 
-$(PM_OBJ_DIR)/%.o : $(PM_SRC_DIR)/%.c
+$(HLDLL_OBJ_DIR)/donid_miniz.o : $(SOURCE_DIR)/external/miniz/miniz.c
+	$(DO_HLDLL_CC)
+
+$(PM_OBJ_DIR)/%.o : $(PM_SRC_DIR)/%.cpp
 	$(DO_PM_CC)
 
 $(GAME_SHARED_OBJ_DIR)/%.o : $(GAME_SHARED_SRC_DIR)/%.cpp
 	$(DO_GAME_SHARED_CC)
+
+$(ANGELSCRIPT_OBJ_DIR)/%.o : $(ANGELSCRIPT_SRC_DIR)/%.cpp
+	$(DO_ANGELSCRIPT_CC)
+
+$(ANGELSCRIPT_OBJ_DIR)/contextmgr.o : $(ANGELSCRIPT_ADDON_DIR)/contextmgr/contextmgr.cpp
+	$(DO_ANGELSCRIPT_CC)
+
+$(ANGELSCRIPT_OBJ_DIR)/debugger.o : $(ANGELSCRIPT_ADDON_DIR)/debugger/debugger.cpp
+	$(DO_ANGELSCRIPT_CC)
+
+$(ANGELSCRIPT_OBJ_DIR)/scriptany.o : $(ANGELSCRIPT_ADDON_DIR)/scriptany/scriptany.cpp
+	$(DO_ANGELSCRIPT_CC)
+
+$(ANGELSCRIPT_OBJ_DIR)/scripthandle.o : $(ANGELSCRIPT_ADDON_DIR)/scripthandle/scripthandle.cpp
+	$(DO_ANGELSCRIPT_CC)
+
+$(ANGELSCRIPT_OBJ_DIR)/scriptarray.o : $(ANGELSCRIPT_ADDON_DIR)/scriptarray/scriptarray.cpp
+	$(DO_ANGELSCRIPT_CC)
+
+$(ANGELSCRIPT_OBJ_DIR)/scriptmath.o : $(ANGELSCRIPT_ADDON_DIR)/scriptmath/scriptmath.cpp
+	$(DO_ANGELSCRIPT_CC) -DAS_USE_FLOAT=1
+
+$(ANGELSCRIPT_OBJ_DIR)/weakref.o : $(ANGELSCRIPT_ADDON_DIR)/weakref/weakref.cpp
+	$(DO_ANGELSCRIPT_CC)
+
+$(ANGELSCRIPT_OBJ_DIR)/scriptgrid.o : $(ANGELSCRIPT_ADDON_DIR)/scriptgrid/scriptgrid.cpp
+	$(DO_ANGELSCRIPT_CC)
+
+$(ANGELSCRIPT_OBJ_DIR)/scriptmathcomplex.o : $(ANGELSCRIPT_ADDON_DIR)/scriptmath/scriptmathcomplex.cpp
+	$(DO_ANGELSCRIPT_CC)
+
+$(ANGELSCRIPT_OBJ_DIR)/scripthelper.o : $(ANGELSCRIPT_ADDON_DIR)/scripthelper/scripthelper.cpp
+	$(DO_ANGELSCRIPT_CC)
+
+$(ANGELSCRIPT_OBJ_DIR)/scriptbuilder.o : $(ANGELSCRIPT_ADDON_DIR)/scriptbuilder/scriptbuilder.cpp
+	$(DO_ANGELSCRIPT_CC)
 
 clean:
 	-rm -rf $(GAME_SHARED_OBJ_DIR)
@@ -173,3 +620,23 @@ clean:
 	-rm -rf $(HLWPN_OBJ_DIR)
 	-rm -rf $(HLDLL_OBJ_DIR)
 	-rm -f hl_$(ARCH).$(SHLIBEXT)
+
+$(HLDLL_OBJ_DIR)/interface.o : $(PUBLIC_SRC_DIR)/interface.cpp
+	$(DO_HLDLL_CC)
+
+# The custom-entity creation interceptor catches C++ factory exceptions.
+$(HLDLL_OBJ_DIR)/cbase.o: CFLAGS += -fexceptions
+
+$(SERVER_CRYPTOPP_OBJ_DIR)/gcm_simd.o: CFLAGS += -mssse3 -mpclmul
+$(SERVER_CRYPTOPP_OBJ_DIR)/rijndael_simd.o: CFLAGS += -msse4.1 -maes
+$(SERVER_CRYPTOPP_OBJ_DIR)/sha_simd.o: CFLAGS += -msse4.2 -msha
+$(SERVER_CRYPTOPP_OBJ_DIR)/sse_simd.o: CFLAGS += -msse2
+
+$(SERVER_CRYPTOPP_OBJ_DIR):
+	mkdir -p $@
+
+$(SERVER_CRYPTOPP_OBJ_DIR)/%.o : $(SERVER_CRYPTOPP_SRC_DIR)/%.cpp | $(SERVER_CRYPTOPP_OBJ_DIR)
+	$(CPLUS) $(CFLAGS) $(SHLIBCFLAGS) -o $@ -c $<
+
+$(ANGELSCRIPT_OBJ_DIR)/serializer.o : $(ANGELSCRIPT_ADDON_DIR)/serializer/serializer.cpp
+	$(DO_ANGELSCRIPT_CC)

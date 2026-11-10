@@ -198,7 +198,7 @@ void CTeamMenuPanel::Update( void )
 				// Update the Team Info
 				// Now count the number of teammembers of this class
 				int iTotal = 0;
-				for ( int j = 1; j < MAX_PLAYERS; j++ )
+				for ( int j = 1; j <= MAX_PLAYERS; j++ )
 				{
 					if ( g_PlayerInfoList[j].name == NULL )
 						continue; // empty player slot, skip
@@ -219,9 +219,9 @@ void CTeamMenuPanel::Update( void )
 					// Set the text of the info Panel
 					char szText[ ((MAX_PLAYER_NAME_LENGTH + 3) * 31) + 256 ]; 
 					if (iTotal == 1)
-						sprintf(szText, "%s: %d Player (%d points)", gViewPort->GetTeamName(i), iTotal, (int)g_TeamInfo[i].score );
+						sprintf(szText, "%s: %d Player (%d points)", gViewPort->GetTeamName(i), iTotal, g_TeamInfo[i].frags );
 					else
-						sprintf(szText, "%s: %d Players (%d points)", gViewPort->GetTeamName(i), iTotal, (int)g_TeamInfo[i].score );
+						sprintf(szText, "%s: %d Players (%d points)", gViewPort->GetTeamName(i), iTotal, g_TeamInfo[i].frags );
 					strncat( szText, szPlayerList, sizeof(szText) - strlen(szText) );
 					szText[ sizeof(szText) - 1 ] = '\0';
 

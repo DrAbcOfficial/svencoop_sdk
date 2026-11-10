@@ -21,6 +21,8 @@
 #include	"monsters.h"
 #include	"schedule.h"
 #include	"weapons.h"
+#include "soundent.h"
+#include "CClassicMode.h"
 
 //=========================================================
 // Monster's Anim Events Go Here
@@ -68,7 +70,7 @@ IMPLEMENT_SAVERESTORE( CGMan, CBaseMonster );
 //=========================================================
 int	CGMan :: Classify ( void )
 {
-	return	CLASS_NONE;
+	return GetClassification( CLASS_NONE );
 }
 
 //=========================================================
@@ -77,16 +79,7 @@ int	CGMan :: Classify ( void )
 //=========================================================
 void CGMan :: SetYawSpeed ( void )
 {
-	int ys;
-
-	switch ( m_Activity )
-	{
-	case ACT_IDLE:
-	default:
-		ys = 90;
-	}
-
-	pev->yaw_speed = ys;
+	pev->yaw_speed = 270;
 }
 
 //=========================================================
@@ -109,7 +102,7 @@ void CGMan :: HandleAnimEvent( MonsterEvent_t *pEvent )
 //=========================================================
 int CGMan :: ISoundMask ( void )
 {
-	return	NULL;
+	return	bits_SOUND_NONE;
 }
 
 //=========================================================
@@ -119,7 +112,13 @@ void CGMan :: Spawn()
 {
 	Precache();
 
-	SET_MODEL( ENT(pev), "models/gman.mdl" );
+	if ( !SetupModel() )
+	{
+		if ( CClassicMode::GetInstance()->IsEnabled() )
+			SET_MODEL( ENT(pev), "models/hlclassic/gman.mdl" );
+		else
+			SET_MODEL( ENT(pev), "models/gman.mdl" );
+	}
 	UTIL_SetSize(pev, VEC_HUMAN_HULL_MIN, VEC_HUMAN_HULL_MAX);
 
 	pev->solid			= SOLID_SLIDEBOX;
@@ -129,6 +128,9 @@ void CGMan :: Spawn()
 	m_flFieldOfView		= 0.5;// indicates the width of this monster's forward view cone ( as a dotproduct result )
 	m_MonsterState		= MONSTERSTATE_NONE;
 
+	if ( !m_FormattedName )
+		m_FormattedName = MAKE_STRING( "Government Man" );
+
 	MonsterInit();
 }
 
@@ -137,7 +139,14 @@ void CGMan :: Spawn()
 //=========================================================
 void CGMan :: Precache()
 {
-	PRECACHE_MODEL( "models/gman.mdl" );
+	if ( !pev->model )
+	{
+		UTIL_PrecacheModel( this, CClassicMode::GetInstance()->IsEnabled()
+		                              ? "models/hlclassic/gman.mdl"
+		                              : "models/gman.mdl" );
+	}
+
+	CBaseEntity::Precache();
 }	
 
 

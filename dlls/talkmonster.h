@@ -37,7 +37,8 @@
 #define bit_saidHeard			(1<<6)
 #define bit_saidSmelled			(1<<7)
 
-#define TLK_CFRIENDS		3
+#define TLK_CFRIENDS		8
+#define TLK_MAX_FOLLOWERS	6		// followers one player may lead
 
 typedef enum
 {
@@ -98,7 +99,7 @@ enum
 class CTalkMonster : public CBaseMonster
 {
 public:
-	void			TalkInit( void );				
+	virtual void	TalkInit( void );
 	CBaseEntity		*FindNearestFriend(BOOL fPlayer);
 	float			TargetDistance( void );
 	void			StopTalking( void ) { SentenceStop(); }
@@ -108,14 +109,13 @@ public:
 	int				TakeDamage( entvars_t *pevInflictor, entvars_t *pevAttacker, float flDamage, int bitsDamageType);
 	void			Touch(	CBaseEntity *pOther );
 	void			Killed( entvars_t *pevAttacker, int iGib );
-	int				IRelationship ( CBaseEntity *pTarget );
+	int				IRelationship ( CBaseEntity *pTarget, bool ignoreNoTarget = false );
 	virtual int		CanPlaySentence( BOOL fDisregardState );
 	virtual void	PlaySentence( const char *pszSentence, float duration, float volume, float attenuation );
 	void			PlayScriptedSentence( const char *pszSentence, float duration, float volume, float attenuation, BOOL bConcurrent, CBaseEntity *pListener );
 	void			KeyValue( KeyValueData *pkvd );
 
 	// AI functions
-	void			SetActivity ( Activity newActivity );
 	Schedule_t		*GetScheduleOfType ( int Type );
 	void			StartTask( Task_t *pTask );
 	void			RunTask( Task_t *pTask );
@@ -138,16 +138,14 @@ public:
 	BOOL			IsTalking( void );
 	void			Talk( float flDuration );	
 	// For following
-	BOOL			CanFollow( void );
-	BOOL			IsFollowing( void ) { return m_hTargetEnt != NULL && m_hTargetEnt->IsPlayer(); }
-	void			StopFollowing( BOOL clearSchedule );
-	void			StartFollowing( CBaseEntity *pLeader );
-	virtual void	DeclineFollowing( void ) {}
+	void			StartPlayerFollowing( CBaseEntity *pLeader, bool fSilent = false );
 	void			LimitFollowers( CBaseEntity *pPlayer, int maxFollowers );
+	void			UseSound( void );
+	void			UnUseSound( void );
 
-	void EXPORT		FollowerUse( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
+	void EXPORT		FollowerPlayerUse( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
 	
-	virtual void	SetAnswerQuestion( CTalkMonster *pSpeaker );
+	virtual void	SetAnswerQuestion( CBaseMonster *pSpeaker );
 	virtual int		FriendNumber( int arrayNumber )	{ return arrayNumber; }
 
 	virtual int		Save( CSave &save );
@@ -155,14 +153,13 @@ public:
 	static	TYPEDESCRIPTION m_SaveData[];
 
 	
-	static char *m_szFriends[TLK_CFRIENDS];		// array of friend names
+	static const char *m_szFriends[TLK_CFRIENDS];		// array of friend names
 	static float g_talkWaitTime;
 	
 	int			m_bitsSaid;						// set bits for sentences we don't want repeated
 	int			m_nSpeak;						// number of times initiated talking
 	int			m_voicePitch;					// pitch of voice for this head
 	const char	*m_szGrp[TLK_CGROUPS];			// sentence group names
-	float		m_useTime;						// Don't allow +USE until this time
 	int			m_iszUse;						// Custom +USE sentence group (follow)
 	int			m_iszUnUse;						// Custom +USE sentence group (stop following)
 
@@ -174,8 +171,6 @@ public:
 };
 
 
-// Clients can push talkmonsters out of their way
-#define		bits_COND_CLIENT_PUSH		( bits_COND_SPECIAL1 )
 // Don't see a client right now.
 #define		bits_COND_CLIENT_UNSEEN		( bits_COND_SPECIAL2 )
 

@@ -20,8 +20,8 @@
 class CFlyingMonster : public CBaseMonster
 {
 public:
-	int 		CheckLocalMove ( const Vector &vecStart, const Vector &vecEnd, CBaseEntity *pTarget, float *pflDist );// check validity of a straight move through space
-	BOOL		FTriangulate ( const Vector &vecStart , const Vector &vecEnd, float flDist, CBaseEntity *pTargetEnt, Vector *pApex );
+	int 		CheckLocalMove ( const Vector &vecStart, const Vector &vecEnd, CBaseEntity *pTarget, float *pflDist, Vector *pvecEndPosition = NULL, bool fWalkMoveCheck = false );// check validity of a straight move through space
+	BOOL		FTriangulate ( const Vector &vecStart , const Vector &vecEnd, float flDist, CBaseEntity *pTargetEnt, Vector *pApex, Vector *pApex2 = NULL, bool fNoExtension = false );
 	Activity	GetStoppedActivity( void );
 	void		Killed( entvars_t *pevAttacker, int iGib );
 	void		Stop( void );

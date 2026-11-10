@@ -23,16 +23,46 @@
 #include "const.h"
 #include "entity_state.h"
 #include "r_efx.h"
+#include "client_sound.h"
 
 // g_runfuncs is true if this is the first time we've "predicated" a particular movement/firing
 //  command.  If it is 1, then we should play events/sounds etc., otherwise, we just will be
 //  updating state info, but not firing events
-int	g_runfuncs = 0;
+bool g_runfuncs = false;
+
+static int g_rseq;
+static int g_gaitseq;
+static Vector g_clorg;
+static Vector g_clang;
+
+void Game_GetSequence(int *sequence, int *gaitsequence)
+{
+	*sequence = g_rseq;
+	*gaitsequence = g_gaitseq;
+}
+
+void Game_SetSequence(int sequence, int gaitsequence)
+{
+	g_rseq = sequence;
+	g_gaitseq = gaitsequence;
+}
+
+void Game_GetOrientation(float *origin, float *angles)
+{
+	VectorCopy(g_clorg, origin);
+	VectorCopy(g_clang, angles);
+}
+
+void Game_SetOrientation(Vector origin, Vector angles)
+{
+	g_clorg = origin;
+	g_clang = angles;
+}
 
 // During our weapon prediction processing, we'll need to reference some data that is part of
 //  the final state passed into the postthink functionality.  We'll set this pointer and then
 //  reset it to NULL as appropriate
-struct local_state_s *g_finalstate = NULL;
+local_state_t *g_finalstate = NULL;
 
 /*
 ====================
@@ -41,12 +71,12 @@ COM_Log
 Log debug messages to file ( appends )
 ====================
 */
-void COM_Log( char *pszFile, char *fmt, ...)
+void COM_Log( const char *pszFile, const char *fmt, ...)
 {
 	va_list		argptr;
 	char		string[1024];
 	FILE *fp;
-	char *pfilename;
+	const char *pfilename;
 	
 	if ( !pszFile )
 	{
@@ -72,6 +102,7 @@ void COM_Log( char *pszFile, char *fmt, ...)
 // remember the current animation for the view model, in case we get out of sync with
 //  server.
 static int g_currentanim;
+static int g_currentbody;
 
 /*
 =====================
@@ -82,11 +113,8 @@ Change weapon model animation
 */
 void HUD_SendWeaponAnim( int iAnim, int body, int force )
 {
-	// Don't actually change it.
-	if ( !g_runfuncs && !force )
-		return;
-
 	g_currentanim = iAnim;
+	g_currentbody = body;
 
 	// Tell animation system new info
 	gEngfuncs.pfnWeaponAnim( iAnim, body );
@@ -104,6 +132,11 @@ int HUD_GetWeaponAnim( void )
 	return g_currentanim;
 }
 
+int HUD_GetWeaponBody( void )
+{
+	return g_currentbody;
+}
+
 /*
 =====================
 HUD_PlaySound
@@ -116,7 +149,10 @@ void HUD_PlaySound( char *sound, float volume )
 	if ( !g_runfuncs || !g_finalstate )
 		return;
 
-	gEngfuncs.pfnPlaySoundByNameAtLocation( sound, volume, (float *)&g_finalstate->playerstate.origin );
+	cl_entity_t *pLocal = gEngfuncs.GetLocalPlayer();
+
+	CClient_SoundEngine::GetSoundEngine()->PlayFMODSound( 0, pLocal->index, g_finalstate->playerstate.origin,
+		CHAN_AUTO, sound, volume, ATTN_NORM, 0, PITCH_NORM, -1, 0 );
 }
 
 /*
@@ -147,7 +183,7 @@ HUD_SetMaxSpeed
 
 =====================
 */
-void HUD_SetMaxSpeed( const edict_t *ed, float speed )
+void HUD_SetMaxSpeed( edict_t *ed, float speed )
 {
 }
 
@@ -273,5 +309,5 @@ stub functions for such things as precaching.  So we don't have to modify weapon
 int				stub_PrecacheModel		( char* s ) { return 0; }
 int				stub_PrecacheSound		( char* s ) { return 0; }
 unsigned short	stub_PrecacheEvent		( int type, const char *s ) { return 0; }
-const char		*stub_NameForFunction	( uint32 function ) { return "func"; }
+const char*		stub_NameForFunction	( uint32 function ) { return "func"; }
 void			stub_SetModel			( edict_t *e, const char *m ) {}

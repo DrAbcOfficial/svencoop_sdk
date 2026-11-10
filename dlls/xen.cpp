@@ -17,27 +17,34 @@
 #include "cbase.h"
 #include "animation.h"
 #include "effects.h"
+#include "actanimating.h"
+
+#define SF_XEN_DROP_TO_SURFACE	2
+#define SF_XEN_RANDOM_YAW		4
+#define SF_XEN_NOT_SOLID		8
+
+void XenPlaceEntity( entvars_t *pev )
+{
+	if ( pev->spawnflags & SF_XEN_RANDOM_YAW )
+		pev->angles.y = RANDOM_FLOAT( 0, 360 );
+
+	if ( pev->spawnflags & SF_XEN_DROP_TO_SURFACE )
+	{
+		TraceResult tr;
+
+		UTIL_MakeVectors( pev->angles );
+		UTIL_TraceLine( pev->origin, pev->origin - gpGlobals->v_up * 20000, ignore_monsters, ENT( pev ), &tr );
+
+		pev->origin = tr.vecEndPos;
+		UTIL_SetOrigin( pev, pev->origin );
+	}
+}
+
 
 
 #define XEN_PLANT_GLOW_SPRITE		"sprites/flare3.spr"
 #define XEN_PLANT_HIDE_TIME			5
 
-
-class CActAnimating : public CBaseAnimating
-{
-public:
-	void			SetActivity( Activity act );
-	inline Activity	GetActivity( void ) { return m_Activity; }
-
-	virtual int	ObjectCaps( void ) { return CBaseAnimating :: ObjectCaps() & ~FCAP_ACROSS_TRANSITION; }
-
-	virtual int	Save( CSave &save );
-	virtual int	Restore( CRestore &restore );
-	static	TYPEDESCRIPTION m_SaveData[];
-
-private:
-	Activity	m_Activity;
-};
 
 TYPEDESCRIPTION	CActAnimating::m_SaveData[] = 
 {
@@ -64,6 +71,7 @@ void CActAnimating :: SetActivity( Activity act )
 class CXenPLight : public CActAnimating
 {
 public:
+	int Classify( void ) { return GetClassification( CLASS_ALIEN_PASSIVE ); }
 	void		Spawn( void );
 	void		Precache( void );
 	void		Touch( CBaseEntity *pOther );
@@ -92,6 +100,9 @@ IMPLEMENT_SAVERESTORE( CXenPLight, CActAnimating );
 void CXenPLight :: Spawn( void )
 {
 	Precache();
+
+	XenPlaceEntity( pev );
+
 
 	SET_MODEL( ENT(pev), "models/light.mdl" );
 	pev->movetype	= MOVETYPE_NONE;
@@ -195,6 +206,9 @@ LINK_ENTITY_TO_CLASS( xen_hair, CXenHair );
 void CXenHair::Spawn( void )
 {
 	Precache();
+
+	XenPlaceEntity( pev );
+
 	SET_MODEL( edict(), "models/hair.mdl" );
 	UTIL_SetSize( pev, Vector(-4,-4,0), Vector(4,4,32));
 	pev->sequence = 0;
@@ -261,6 +275,7 @@ void CXenTreeTrigger::Touch( CBaseEntity *pOther )
 class CXenTree : public CActAnimating
 {
 public:
+	void		OnDestroy( void );
 	void		Spawn( void );
 	void		Precache( void );
 	void		Touch( CBaseEntity *pOther );
@@ -290,13 +305,25 @@ TYPEDESCRIPTION	CXenTree::m_SaveData[] =
 
 IMPLEMENT_SAVERESTORE( CXenTree, CActAnimating );
 
+void CXenTree::OnDestroy( void )
+{
+	if ( m_pTrigger )
+	{
+		m_pTrigger->pev->owner = NULL;
+		UTIL_Remove( m_pTrigger );
+	}
+}
+
 void CXenTree :: Spawn( void )
 {
 	Precache();
 
+	XenPlaceEntity( pev );
+
+
 	SET_MODEL( ENT(pev), "models/tree.mdl" );
 	pev->movetype	= MOVETYPE_NONE;
-	pev->solid		= SOLID_BBOX;
+	pev->solid		= ( pev->spawnflags & SF_XEN_NOT_SOLID ) ? SOLID_NOT : SOLID_BBOX;
 
 	pev->takedamage = DAMAGE_YES;
 
@@ -425,9 +452,14 @@ void CXenTree :: Think( void )
 //
 // Spores
 //
+#define SF_SPORE_DROP_TO_FLOOR	2
+#define SF_SPORE_RANDOM_YAW	4
+#define SF_SPORE_NOT_SOLID	8
+
 class CXenSpore : public CActAnimating
 {
 public:
+	void		DropToFloor( void );
 	void		Spawn( void );
 	void		Precache( void );
 	void		Touch( CBaseEntity *pOther );
@@ -527,13 +559,57 @@ void CXenSporeLarge::Spawn( void )
 		CXenHull :: CreateHull( this, Vector(-12, -12, 0 ), Vector( 12, 12, 120 ), (m_hullSizes[i].x * forward) + (m_hullSizes[i].y * right) );
 }
 
+void CXenSpore::DropToFloor( void )
+{
+	TraceResult tr;
+
+	UTIL_MakeVectors( pev->angles );
+	UTIL_TraceLine( pev->origin, pev->origin - gpGlobals->v_up * 20000, ignore_monsters, edict(), &tr );
+
+	// Stand along the surface normal, keeping its side axis level
+	Vector up = tr.vecPlaneNormal;
+	Vector side = CrossProduct( Vector( 0, 0, 1 ), up );
+
+	if ( side.Length() > 0 )
+		side = side.Normalize();
+	else
+		side = Vector( 0, 1, 0 );
+
+	Vector forward = CrossProduct( side, up );
+	float matrix[3][3] = {
+		{ forward.x, forward.y, forward.z },
+		{ side.x, side.y, side.z },
+		{ up.x, up.y, up.z },
+	};
+	Vector angles;
+
+	EulerFromMatrix( matrix, angles );
+
+	pev->angles.x = -angles.y;
+	pev->angles.y = angles.z;
+	pev->angles.z = angles.x;
+	pev->origin = tr.vecEndPos;
+
+	UTIL_SetOrigin( pev, pev->origin );
+}
+
 void CXenSpore :: Spawn( void )
 {
 	Precache();
 
+	if ( pev->spawnflags & SF_SPORE_DROP_TO_FLOOR )
+		DropToFloor();
+	else if ( pev->spawnflags & SF_SPORE_RANDOM_YAW )
+		pev->angles.y = RANDOM_FLOAT( 0, 360 );
+
 	SET_MODEL( ENT(pev), pModelNames[pev->skin] );
 	pev->movetype	= MOVETYPE_NONE;
-	pev->solid		= SOLID_BBOX;
+
+	if ( pev->spawnflags & SF_SPORE_NOT_SOLID )
+		pev->solid = SOLID_NOT;
+	else
+		pev->solid = SOLID_BBOX;
+
 	pev->takedamage = DAMAGE_YES;
 
 //	SetActivity( ACT_IDLE );

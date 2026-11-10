@@ -23,12 +23,7 @@
 #define DMG_IMAGE_NERVE		5
 #define DMG_IMAGE_RAD		6
 #define DMG_IMAGE_SHOCK		7
-//tf defines
-#define DMG_IMAGE_CALTROP	8
-#define DMG_IMAGE_TRANQ		9
-#define DMG_IMAGE_CONCUSS	10
-#define DMG_IMAGE_HALLUC	11
-#define NUM_DMG_TYPES		12
+#define NUM_DMG_TYPES		8
 // instant damage
 
 #define DMG_GENERIC			0			// generic damage was done
@@ -107,7 +102,16 @@ public:
 	virtual void Reset( void );
 	int MsgFunc_Health(const char *pszName,  int iSize, void *pbuf);
 	int MsgFunc_Damage(const char *pszName,  int iSize, void *pbuf);
+	int GetWidth(void);
+	bool ShouldDrawSeparator(void);
+
 	int m_iHealth;
+
+private:
+	HSPRITE m_hSprite;
+	HSPRITE m_hDamage;
+
+public:
 	int m_HUD_dmg_bio;
 	int m_HUD_cross;
 	float m_fAttackFront, m_fAttackRear, m_fAttackLeft, m_fAttackRight;
@@ -115,9 +119,6 @@ public:
 	float m_fFade;
 
 private:
-	HSPRITE m_hSprite;
-	HSPRITE m_hDamage;
-	
 	DAMAGE_IMAGE m_dmg[NUM_DMG_TYPES];
 	int	m_bitsDamage;
 	int DrawPain(float fTime);

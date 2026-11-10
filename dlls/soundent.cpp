@@ -51,9 +51,9 @@ void CSound :: Reset ( void )
 //=========================================================
 // FIsSound - returns TRUE if the sound is an Audible sound
 //=========================================================
-BOOL CSound :: FIsSound ( void )
+bool CSound :: FIsSound ( void )
 {
-	if ( m_iType & ( bits_SOUND_COMBAT | bits_SOUND_WORLD | bits_SOUND_PLAYER | bits_SOUND_DANGER ) )
+	if ( m_iType & ( bits_SOUND_COMBAT | bits_SOUND_WORLD | bits_SOUND_PLAYER | bits_SOUND_DANGER | bits_SOUND_BULLETHIT ) )
 	{
 		return TRUE;
 	}
@@ -64,7 +64,7 @@ BOOL CSound :: FIsSound ( void )
 //=========================================================
 // FIsScent - returns TRUE if the sound is actually a scent
 //=========================================================
-BOOL CSound :: FIsScent ( void )
+bool CSound :: FIsScent ( void )
 {
 	if ( m_iType & ( bits_SOUND_CARCASS | bits_SOUND_MEAT | bits_SOUND_GARBAGE ) )
 	{
@@ -197,7 +197,8 @@ int CSoundEnt :: IAllocSound( void )
 // InsertSound - Allocates a free sound and fills it with 
 // sound info.
 //=========================================================
-void CSoundEnt :: InsertSound ( int iType, const Vector &vecOrigin, int iVolume, float flDuration )
+void CSoundEnt :: InsertSound ( int iType, const Vector &vecOrigin, int iVolume, float flDuration,
+                              CBaseEntity *pOwner )
 {
 	int	iThisSound;
 
@@ -219,6 +220,21 @@ void CSoundEnt :: InsertSound ( int iType, const Vector &vecOrigin, int iVolume,
 	pSoundEnt->m_SoundPool[ iThisSound ].m_iType = iType;
 	pSoundEnt->m_SoundPool[ iThisSound ].m_iVolume = iVolume;
 	pSoundEnt->m_SoundPool[ iThisSound ].m_flExpireTime = gpGlobals->time + flDuration;
+
+	if ( pOwner )
+	{
+		EHANDLE &owner = pSoundEnt->m_SoundPool[ iThisSound ].m_hOwner;
+
+		owner = NULL;
+
+		if ( pOwner->pev )
+		{
+			edict_t *edict = pOwner->pev->pContainingEntity;
+
+			if ( edict && !edict->free )
+				owner.Set( edict );
+		}
+	}
 }
 
 //=========================================================
@@ -230,7 +246,7 @@ void CSoundEnt :: Initialize ( void )
   	int i;
 	int iSound;
 
-	m_cLastActiveSounds;
+	m_cLastActiveSounds = 0;
 	m_iFreeSound = 0;
 	m_iActiveSound = SOUNDLIST_EMPTY;
 
@@ -376,4 +392,10 @@ int CSoundEnt :: ClientSoundIndex ( edict_t *pClient )
 #endif // _DEBUG
 
 	return iReturn;
+}
+
+void CSoundEnt::OnDestroy( void )
+{
+	pSoundEnt = NULL;
+	CBaseEntity::OnDestroy();
 }

@@ -26,6 +26,10 @@
 #include	"squadmonster.h"
 #include	"soundent.h"
 #include	"game.h"
+#include "CClassicMode.h"
+
+extern cvar_t sk_houndeye_dmg_blast;
+extern cvar_t sk_houndeye_health;
 
 extern CGraph WorldGraph;
 
@@ -35,7 +39,7 @@ extern CGraph WorldGraph;
 #define	HOUNDEYE_MAX_ATTACK_RADIUS		384
 #define	HOUNDEYE_SQUAD_BONUS			(float)1.1
 
-#define HOUNDEYE_EYE_FRAMES 4 // how many different switchable maps for the eye
+#define HOUNDEYE_EYE_FRAMES 3 // how many different switchable maps for the eye
 
 #define HOUNDEYE_SOUND_STARTLE_VOLUME	128 // how loud a sound has to be to badly scare a sleeping houndeye
 
@@ -49,7 +53,8 @@ enum
 	TASK_HOUND_THREAT_DISPLAY,
 	TASK_HOUND_FALL_ASLEEP,
 	TASK_HOUND_WAKE_UP,
-	TASK_HOUND_HOP_BACK
+	TASK_HOUND_HOP_BACK,
+	TASK_HOUND_GET_PATH_TO_ENEMY_CORPSE,
 };
 
 //=========================================================
@@ -60,6 +65,7 @@ enum
 	SCHED_HOUND_AGITATED = LAST_COMMON_SCHEDULE + 1,
 	SCHED_HOUND_HOP_RETREAT,
 	SCHED_HOUND_FAIL,
+	SCHED_HOUND_EAT,
 };
 
 //=========================================================
@@ -76,6 +82,30 @@ enum
 class CHoundeye : public CSquadMonster
 {
 public:
+	int TakeDamage( entvars_t *pevInflictor, entvars_t *pevAttacker, float flDamage, int bitsDamageType ) { return CBaseMonster::TakeDamage( pevInflictor, pevAttacker, flDamage, bitsDamageType ); }
+	// the sequence decides the box, standing on the entity's origin
+	void SetObjectCollisionBox( void )
+	{
+		if ( ( pev->spawnflags & SF_MONSTER_NO_MODEL_BOX ) || !m_fCustomModel )
+		{
+			CBaseEntity::SetObjectCollisionBox();
+			return;
+		}
+
+		Vector mins = g_vecZero;
+		Vector maxs = g_vecZero;
+
+		ExtractBbox( 1, mins, maxs );
+		mins.z = 0;
+		pev->absmin = pev->origin + mins;
+		pev->absmax = pev->origin + maxs;
+	}
+
+	float GetPointsForDamage( float flDamage );
+	int ObjectCaps( void );
+	void UseSound( void );
+	void UnUseSound( void );
+
 	void Spawn( void );
 	void Precache( void );
 	int  Classify ( void );
@@ -109,6 +139,7 @@ public:
 	BOOL m_fAsleep;// some houndeyes sleep in idle mode if this is set, the houndeye is lying down
 	BOOL m_fDontBlink;// don't try to open/close eye if this bit is set!
 	Vector	m_vecPackCenter; // the center of the pack. The leader maintains this by averaging the origins of all pack members.
+	Vector	m_vecEnemyCorpse;
 };
 LINK_ENTITY_TO_CLASS( monster_houndeye, CHoundeye );
 
@@ -128,7 +159,7 @@ IMPLEMENT_SAVERESTORE( CHoundeye, CSquadMonster );
 //=========================================================
 int	CHoundeye :: Classify ( void )
 {
-	return	CLASS_ALIEN_MONSTER;
+	return GetClassification( CLASS_ALIEN_MONSTER );
 }
 
 //=========================================================
@@ -164,6 +195,15 @@ BOOL CHoundeye :: FValidateHintType ( short sHint )
 //=========================================================
 BOOL CHoundeye :: FCanActiveIdle ( void )
 {
+	if ( pev->spawnflags & SF_MONSTER_FREE_ROAM_MODE2 )
+		return TRUE;
+
+	if ( pev->spawnflags & SF_MONSTER_FREE_ROAM_MODE1 )
+		return FALSE;
+
+	if ( g_iActiveIdle )
+		return TRUE;
+
 	if ( InSquad() )
 	{
 		CSquadMonster *pSquadLeader = MySquadLeader();
@@ -208,7 +248,7 @@ void CHoundeye :: SetYawSpeed ( void )
 {
 	int ys;
 
-	ys = 90;
+	ys = 270;
 
 	switch ( m_Activity )
 	{
@@ -217,16 +257,6 @@ void CHoundeye :: SetYawSpeed ( void )
 		break;
 	case ACT_IDLE:	
 		ys = 60;
-		break;
-	case ACT_WALK:
-		ys = 90;
-		break;
-	case ACT_RUN:	
-		ys = 90;
-		break;
-	case ACT_TURN_LEFT:
-	case ACT_TURN_RIGHT:
-		ys = 90;
 		break;
 	}
 
@@ -242,6 +272,9 @@ void CHoundeye :: SetActivity ( Activity NewActivity )
 
 	if ( NewActivity == m_Activity )
 		return;
+
+	if ( NewActivity == ACT_EAT )
+		pev->health = m_iMaxHealth;
 
 	if ( m_MonsterState == MONSTERSTATE_COMBAT && NewActivity == ACT_IDLE && RANDOM_LONG(0,1) )
 	{
@@ -330,22 +363,40 @@ void CHoundeye :: Spawn()
 {
 	Precache( );
 
-	SET_MODEL(ENT(pev), "models/houndeye.mdl");
+	if ( !SetupModel() )
+	{
+		if ( CClassicMode::GetInstance()->IsEnabled() )
+			SET_MODEL( ENT(pev), "models/hlclassic/houndeye.mdl" );
+		else
+			SET_MODEL(ENT(pev), "models/houndeye.mdl");
+	}
 	UTIL_SetSize(pev, Vector ( -16, -16, 0 ), Vector ( 16, 16, 36 ) );
 
 	pev->solid			= SOLID_SLIDEBOX;
 	pev->movetype		= MOVETYPE_STEP;
 	m_bloodColor		= BLOOD_COLOR_YELLOW;
 	pev->effects		= 0;
-	pev->health			= gSkillData.houndeyeHealth;
+	if ( !pev->health )
+		pev->health			= sk_houndeye_health.value;
+	m_iMaxHealth		= (int) pev->health;
 	pev->yaw_speed		= 5;//!!! should we put this in the monster's changeanim function since turn rates may vary with state/anim?
 	m_flFieldOfView		= 0.5;// indicates the width of this monster's forward view cone ( as a dotproduct result )
 	m_MonsterState		= MONSTERSTATE_NONE;
 	m_fAsleep			= FALSE; // everyone spawns awake
 	m_fDontBlink		= FALSE;
 	m_afCapability		|= bits_CAP_SQUAD;
+	m_afMoveShootCap	= 0;
+
+	if ( !m_FormattedName )
+		m_FormattedName = MAKE_STRING( "Houndeye" );
 
 	MonsterInit();
+
+	if ( m_fPlayerAlly && !( pev->spawnflags & SF_MONSTER_PREDISASTER ) )
+	{
+		SetUse( &CBaseMonster::CallFollowerPlayerUse );
+		m_fCanPlayerFollow = true;
+	}
 }
 
 //=========================================================
@@ -353,7 +404,12 @@ void CHoundeye :: Spawn()
 //=========================================================
 void CHoundeye :: Precache()
 {
-	PRECACHE_MODEL("models/houndeye.mdl");
+	CBaseEntity::Precache();
+
+	if ( CClassicMode::GetInstance()->IsEnabled() )
+		PRECACHE_MODEL( "models/hlclassic/houndeye.mdl" );
+	else
+		PRECACHE_MODEL( "models/houndeye.mdl" );
 
 	PRECACHE_SOUND("houndeye/he_alert1.wav");
 	PRECACHE_SOUND("houndeye/he_alert2.wav");
@@ -568,6 +624,8 @@ void CHoundeye :: SonicAttack ( void )
 	case 2:	EMIT_SOUND(ENT(pev), CHAN_WEAPON, "houndeye/he_blast3.wav", 1, ATTN_NORM);	break;
 	}
 
+	CSoundEnt::InsertSound( bits_SOUND_COMBAT, pev->origin, 512, 0.3, this );
+
 	// blast circles
 	MESSAGE_BEGIN( MSG_PAS, SVC_TEMPENTITY, pev->origin );
 		WRITE_BYTE( TE_BEAMCYLINDER );
@@ -618,8 +676,8 @@ void CHoundeye :: SonicAttack ( void )
 	{
 		if ( pEntity->pev->takedamage != DAMAGE_NO )
 		{
-			if ( !FClassnameIs(pEntity->pev, "monster_houndeye") )
-			{// houndeyes don't hurt other houndeyes with their attack
+			if ( pEntity->IsBreakable() || IRelationship( pEntity ) > R_NO )
+			{// houndeyes don't hurt their allies with their attack
 
 				// houndeyes do FULL damage if the ent in question is visible. Half damage otherwise.
 				// This means that you must get out of the houndeye's attack range entirely to avoid damage.
@@ -628,28 +686,28 @@ void CHoundeye :: SonicAttack ( void )
 				if ( SquadCount() > 1 )
 				{
 					// squad gets attack bonus.
-					flAdjustedDamage = gSkillData.houndeyeDmgBlast + gSkillData.houndeyeDmgBlast * ( HOUNDEYE_SQUAD_BONUS * ( SquadCount() - 1 ) );
+					flAdjustedDamage = sk_houndeye_dmg_blast.value + sk_houndeye_dmg_blast.value * ( HOUNDEYE_SQUAD_BONUS * ( SquadCount() - 1 ) );
 				}
 				else
 				{
 					// solo
-					flAdjustedDamage = gSkillData.houndeyeDmgBlast;
+					flAdjustedDamage = sk_houndeye_dmg_blast.value;
 				}
 
 				flDist = (pEntity->Center() - pev->origin).Length();
 
 				flAdjustedDamage -= ( flDist / HOUNDEYE_MAX_ATTACK_RADIUS ) * flAdjustedDamage;
 
-				if ( !FVisible( pEntity ) )
+				if ( !FVisible( pEntity, true ) )
 				{
 					if ( pEntity->IsPlayer() )
 					{
-						// if this entity is a client, and is not in full view, inflict half damage. We do this so that players still 
-						// take the residual damage if they don't totally leave the houndeye's effective radius. We restrict it to clients
+						// if this entity is a client, and is not in full view, inflict half damage. We do this so that players
+						// take the residual damage if they don't totally leave the houndeye's effective radius. We restrict it
 						// so that monsters in other parts of the level don't take the damage and get pissed.
 						flAdjustedDamage *= 0.5;
 					}
-					else if ( !FClassnameIs( pEntity->pev, "func_breakable" ) && !FClassnameIs( pEntity->pev, "func_pushable" ) ) 
+					else if ( !pEntity->IsBreakable() )
 					{
 						// do not hurt nonclients through walls, but allow damage to be done to breakables
 						flAdjustedDamage = 0;
@@ -761,6 +819,21 @@ void CHoundeye :: StartTask ( Task_t *pTask )
 			m_IdealActivity = ACT_GUARD;
 			break;
 		}
+	case TASK_HOUND_GET_PATH_TO_ENEMY_CORPSE:
+		{
+			UTIL_MakeVectors( pev->angles );
+
+			if ( BuildRoute( m_vecEnemyCorpse - gpGlobals->v_forward * 64, bits_MF_TO_LOCATION, NULL ) )
+			{
+				TaskComplete();
+			}
+			else
+			{
+				ALERT( at_aiconsole, "HoundGetPathToEnemyCorpse failed!!\n" );
+				TaskFail();
+			}
+			break;
+		}
 	default: 
 		{
 			CSquadMonster :: StartTask(pTask);
@@ -774,6 +847,9 @@ void CHoundeye :: StartTask ( Task_t *pTask )
 //=========================================================
 void CHoundeye :: RunTask ( Task_t *pTask )
 {
+	if ( m_hEnemy != NULL )
+		m_vecEnemyCorpse = m_hEnemy->pev->origin;
+
 	switch ( pTask->iTask )
 	{
 	case TASK_HOUND_THREAT_DISPLAY:
@@ -800,6 +876,15 @@ void CHoundeye :: RunTask ( Task_t *pTask )
 		{
 			if ( m_fSequenceFinished )
 			{
+				TaskComplete();
+			}
+			break;
+		}
+	case TASK_GUARD:
+		{
+			if ( m_fSequenceFinished )
+			{
+				m_Activity = ACT_RESET;
 				TaskComplete();
 			}
 			break;
@@ -903,7 +988,6 @@ Schedule_t	slHoundGuardPack[] =
 		bits_COND_SEE_HATE		|
 		bits_COND_LIGHT_DAMAGE	|
 		bits_COND_HEAVY_DAMAGE	|
-		bits_COND_PROVOKED		|
 		bits_COND_HEAR_SOUND,
 
 		bits_SOUND_COMBAT		|// sound flags
@@ -935,7 +1019,6 @@ Schedule_t	slHoundRangeAttack[] =
 	{ 
 		tlHoundYell1,
 		ARRAYSIZE ( tlHoundYell1 ), 
-		bits_COND_LIGHT_DAMAGE	|
 		bits_COND_HEAVY_DAMAGE,
 		0,
 		"HoundRangeAttack1"
@@ -1029,7 +1112,7 @@ Task_t	tlHoundSpecialAttack1[] =
 	{ TASK_STOP_MOVING,			0				},
 	{ TASK_FACE_IDEAL,			(float)0		},
 	{ TASK_SPECIAL_ATTACK1,		(float)0		},
-	{ TASK_PLAY_SEQUENCE,		(float)ACT_IDLE_ANGRY },
+	{ TASK_WAIT_FACE_ENEMY,		(float)0.3		},
 };
 
 Schedule_t	slHoundSpecialAttack1[] =
@@ -1089,7 +1172,7 @@ Task_t	tlHoundCombatFailPVS[] =
 {
 	{ TASK_STOP_MOVING,				0			},
 	{ TASK_HOUND_THREAT_DISPLAY,	0			},
-	{ TASK_WAIT_FACE_ENEMY,			(float)1	},
+	{ TASK_WAIT_FACE_ENEMY,			(float)0.5	},
 };
 
 Schedule_t	slHoundCombatFailPVS[] =
@@ -1110,9 +1193,8 @@ Task_t	tlHoundCombatFailNoPVS[] =
 {
 	{ TASK_STOP_MOVING,				0				},
 	{ TASK_HOUND_THREAT_DISPLAY,	0				},
-	{ TASK_WAIT_FACE_ENEMY,			(float)2		},
+	{ TASK_WAIT_FACE_ENEMY,			(float)1		},
 	{ TASK_SET_ACTIVITY,			(float)ACT_IDLE	},
-	{ TASK_WAIT_PVS,				0				},
 };
 
 Schedule_t	slHoundCombatFailNoPVS[] =
@@ -1125,6 +1207,34 @@ Schedule_t	slHoundCombatFailNoPVS[] =
 		bits_COND_HEAVY_DAMAGE,
 		0,
 		"HoundCombatFailNoPVS"
+	},
+};
+
+Task_t	tlHoundEat[] =
+{
+	{ TASK_STOP_MOVING,						0							},
+	{ TASK_SET_FAIL_SCHEDULE,				(float)SCHED_HOUND_EAT		},
+	{ TASK_FACE_ENEMY,						0							},
+	{ TASK_WAIT,							(float)0.5					},
+	{ TASK_HOUND_GET_PATH_TO_ENEMY_CORPSE,	0							},
+	{ TASK_RUN_PATH,						0							},
+	{ TASK_WAIT_FOR_MOVEMENT,				0							},
+	{ TASK_FACE_ENEMY,						0							},
+	{ TASK_PLAY_SEQUENCE,					(float)ACT_EAT				},
+	{ TASK_HOUND_HOP_BACK,					0							},
+	{ TASK_SET_ACTIVITY,					(float)ACT_IDLE				},
+};
+
+Schedule_t	slHoundEat[] =
+{
+	{ 
+		tlHoundEat,
+		ARRAYSIZE ( tlHoundEat ), 
+		bits_COND_NEW_ENEMY			|
+		bits_COND_LIGHT_DAMAGE		|
+		bits_COND_HEAVY_DAMAGE,
+		0,
+		"HoundEat"
 	},
 };
 
@@ -1141,6 +1251,7 @@ DEFINE_CUSTOM_SCHEDULES( CHoundeye )
 	slHoundHopRetreat,
 	slHoundCombatFailPVS,
 	slHoundCombatFailNoPVS,
+	slHoundEat,
 };
 
 IMPLEMENT_CUSTOM_SCHEDULES( CHoundeye, CSquadMonster );
@@ -1158,57 +1269,52 @@ Schedule_t* CHoundeye :: GetScheduleOfType ( int Type )
 			CSound *pWakeSound;
 
 			pWakeSound = PBestSound();
-			ASSERT( pWakeSound != NULL );
-			if ( pWakeSound )
-			{
-				MakeIdealYaw ( pWakeSound->m_vecOrigin );
 
-				if ( FLSoundVolume ( pWakeSound ) >= HOUNDEYE_SOUND_STARTLE_VOLUME )
-				{
-					// awakened by a loud sound
-					return &slHoundWakeUrgent[ 0 ];
-				}
+			if ( !pWakeSound )
+				return &slHoundWakeLazy[ 0 ];
+
+			MakeIdealYaw ( pWakeSound->m_vecOrigin );
+
+			if ( FLSoundVolume ( pWakeSound ) < HOUNDEYE_SOUND_STARTLE_VOLUME )
+			{
+				// sound was not loud enough to scare the bejesus out of houndeye
+				return &slHoundWakeLazy[ 0 ];
 			}
-			// sound was not loud enough to scare the bejesus out of houndeye
-			return &slHoundWakeLazy[ 0 ];
-		}
-		else if ( HasConditions( bits_COND_NEW_ENEMY ) )
-		{
-			// get up fast, to fight.
+
+			// awakened by a loud sound
 			return &slHoundWakeUrgent[ 0 ];
 		}
 
-		else
+		if ( HasConditions( bits_COND_NEW_ENEMY ) )
 		{
-			// hound is waking up on its own
-			return &slHoundWakeLazy[ 0 ];
+			// get up fast, to fight.
+			if ( m_iMaxHealth * 0.6 > pev->health )
+				pev->health = m_iMaxHealth * 0.8;
+
+			return &slHoundWakeUrgent[ 0 ];
 		}
+
+		// hound is waking up on its own
+		pev->health = m_iMaxHealth;
+		return &slHoundWakeLazy[ 0 ];
 	}
+
 	switch	( Type )
 	{
 	case SCHED_IDLE_STAND:
 		{
 			// we may want to sleep instead of stand!
-			if ( InSquad() && !IsLeader() && !m_fAsleep && RANDOM_LONG(0,29) < 1 )
-			{
+			if ( InSquad() && !IsLeader() && RANDOM_LONG( 0, 3 ) < 1 )
 				return &slHoundSleep[ 0 ];
-			}
-			else
-			{
-				return CSquadMonster :: GetScheduleOfType( Type );
-			}
+
+			if ( InSquad() && IsLeader() && !m_fAsleep && RANDOM_LONG( 0, 10 ) < 2 )
+				return GetScheduleOfType( SCHED_GUARD );
+
+			return CSquadMonster :: GetScheduleOfType( Type );
 		}
 	case SCHED_RANGE_ATTACK1:
 		{
 			return &slHoundRangeAttack[ 0 ];
-/*
-			if ( InSquad() )
-			{
-				return &slHoundRangeAttack[ RANDOM_LONG( 0, 1 ) ];
-			}
-
-			return &slHoundRangeAttack[ 1 ];
-*/
 		}
 	case SCHED_SPECIAL_ATTACK1:
 		{
@@ -1225,6 +1331,10 @@ Schedule_t* CHoundeye :: GetScheduleOfType ( int Type )
 	case SCHED_HOUND_HOP_RETREAT:
 		{
 			return &slHoundHopRetreat[ 0 ];
+		}
+	case SCHED_HOUND_EAT:
+		{
+			return &slHoundEat[ 0 ];
 		}
 	case SCHED_FAIL:
 		{
@@ -1260,11 +1370,25 @@ Schedule_t *CHoundeye :: GetSchedule( void )
 {
 	switch	( m_MonsterState )
 	{
+	case MONSTERSTATE_IDLE:
+	case MONSTERSTATE_ALERT:
+		{
+			if ( HasConditions( bits_COND_ENEMY_DEAD ) && pev->health != (float) m_iMaxHealth )
+				return GetScheduleOfType( SCHED_HOUND_EAT );
+
+			break;
+		}
 	case MONSTERSTATE_COMBAT:
 		{
+			if ( m_hEnemy != NULL )
+				m_vecEnemyCorpse = m_hEnemy->pev->origin;
+
 // dead enemy
 			if ( HasConditions( bits_COND_ENEMY_DEAD ) )
 			{
+				if ( RANDOM_LONG( 0, 10 ) > 3 && pev->health != (float) m_iMaxHealth )
+					return GetScheduleOfType( SCHED_HOUND_EAT );
+
 				// call base class, all code to handle dead enemies is centralized there.
 				return CBaseMonster :: GetSchedule();
 			}
@@ -1301,4 +1425,28 @@ Schedule_t *CHoundeye :: GetSchedule( void )
 	}
 
 	return CSquadMonster :: GetSchedule();
+}
+
+int CHoundeye::ObjectCaps( void )
+{
+	return IsPlayerAlly() ? FCAP_IMPULSE_USE : FCAP_ACROSS_TRANSITION;
+}
+
+float CHoundeye::GetPointsForDamage( float flDamage )
+{
+	float points = pev->max_health / sk_houndeye_health.value;
+
+	points *= 2.0f;
+
+	return points * ( flDamage / pev->max_health );
+}
+
+void CHoundeye::UseSound( void )
+{
+	AlertSound();
+}
+
+void CHoundeye::UnUseSound( void )
+{
+	PainSound();
 }

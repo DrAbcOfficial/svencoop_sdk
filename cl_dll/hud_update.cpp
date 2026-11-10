@@ -25,7 +25,12 @@
 int CL_ButtonBits( int );
 void CL_ResetButtonBits( int bits );
 
-extern float v_idlescale;
+extern float v_concussscale;
+extern float v_concusstargetscale;
+extern float v_concussfadeinc;
+extern float v_concussfreq;
+extern float v_concusstargetfreq;
+extern float v_concussfreqinc;
 float in_fov;
 extern void HUD_SetCmdBits( int bits );
 
@@ -43,7 +48,25 @@ int CHud::UpdateClientData(client_data_t *cdata, float time)
 
 	cdata->fov = m_iFOV;
 	
-	v_idlescale = m_iConcussionEffect;
+	if (v_concusstargetscale != m_flConcussionScale)
+	{
+		v_concusstargetscale = m_flConcussionScale;
+
+		if ( m_flConcussionFadeTime > 0 )
+			v_concussfadeinc = (m_flConcussionScale - v_concussscale) / m_flConcussionFadeTime;
+		else
+			v_concussfadeinc = 0;
+	}
+
+	if (v_concusstargetfreq != m_flConcussionFrequency)
+	{
+		v_concusstargetfreq = m_flConcussionFrequency;
+
+		if ( m_flConcussionFadeTime > 0 )
+			v_concussfreqinc = (m_flConcussionFrequency - v_concussfreq) / m_flConcussionFadeTime;
+		else
+			v_concussfreqinc = 0;
+	}
 
 	CL_ResetButtonBits( m_iKeyBits );
 

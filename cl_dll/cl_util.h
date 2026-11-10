@@ -18,14 +18,7 @@
 
 #include "cvardef.h"
 
-#ifndef TRUE
-#define TRUE 1
-#define FALSE 0
-#endif
-
-#include <stdio.h> // for safe_sprintf()
-#include <stdarg.h>  // "
-#include <string.h> // for strncpy()
+#include "Platform.h"
 
 // Macros to hook function calls into the HUD object
 #define HOOK_MESSAGE(x) gEngfuncs.pfnHookUserMsg(#x, __MsgFunc_##x );
@@ -44,7 +37,7 @@
 
 inline float CVAR_GET_FLOAT( const char *x ) {	return gEngfuncs.pfnGetCvarFloat( (char*)x ); }
 inline char* CVAR_GET_STRING( const char *x ) {	return gEngfuncs.pfnGetCvarString( (char*)x ); }
-inline struct cvar_s *CVAR_CREATE( const char *cv, const char *val, const int flags ) {	return gEngfuncs.pfnRegisterVariable( (char*)cv, (char*)val, flags ); }
+inline cvar_t *CVAR_CREATE( const char *cv, const char *val, const int flags ) { return gEngfuncs.pfnRegisterVariable( (char*)cv, (char*)val, flags ); }
 
 #define SPR_Load (*gEngfuncs.pfnSPR_Load)
 #define SPR_Set (*gEngfuncs.pfnSPR_Set)
@@ -158,20 +151,11 @@ inline int safe_sprintf( char *dst, int len_dst, const char *format, ...)
 	return 0;
 }
 
-const char* StripMapFromPFN(const char* str, char* dest);
-
 // sound functions
-inline void PlaySound( char *szSound, float vol ) { gEngfuncs.pfnPlaySoundByName( szSound, vol ); }
+void CL_Play2DSound( char *szSound, float vol );
+inline void PlaySound( char *szSound, float vol ) { CL_Play2DSound( szSound, vol ); }
 inline void PlaySound( int iSound, float vol ) { gEngfuncs.pfnPlaySoundByIndex( iSound, vol ); }
 
-#define max(a, b)  (((a) > (b)) ? (a) : (b))
-#define min(a, b)  (((a) < (b)) ? (a) : (b))
-#define ffabs(x)	   ((x) > 0 ? (x) : 0 - (x))
-
-void DRAW_DEBUG_LINE_V(int x, int y);
-void DRAW_DEBUG_LINE_H(int x, int y);
-void DRAW_DEBUG_CROSS(int x, int y);
-void DRAW_DEBUG_RECT(int x, int y, int w, int h);
 void ScaleColors( int &r, int &g, int &b, int a );
 
 #define DotProduct(x,y) ((x)[0]*(y)[0]+(x)[1]*(y)[1]+(x)[2]*(y)[2])
@@ -182,8 +166,17 @@ inline void VectorClear(float *a) { a[0]=0.0;a[1]=0.0;a[2]=0.0;}
 float Length(const float *v);
 void VectorMA (const float *veca, float scale, const float *vecb, float *vecc);
 void VectorScale (const float *in, float scale, float *out);
-float VectorNormalize (float *v);
+float VectorNormalize(float* v);
 void VectorInverse ( float *v );
+void NormalizeAngles(float *angles);
+
+// Vector versions from pm_math.cpp
+void VectorAngles( const Vector &forward, Vector &angles );
+int VectorCompare( const Vector &v1, const Vector &v2 );
+float VectorNormalize( Vector &v );
+void VectorInverseTemp( float *v );
+void VectorScale( const Vector &in, float scale, Vector &out );
+void NormalizeAngles( Vector &angles );
 
 extern vec3_t vec3_origin;
 
@@ -193,10 +186,12 @@ extern vec3_t vec3_origin;
 #pragma warning( disable: 4305 )
 
 inline void UnpackRGB(int &r, int &g, int &b, unsigned long ulRGB)\
-{\
-	r = (ulRGB & 0xFF0000) >>16;\
-	g = (ulRGB & 0xFF00) >> 8;\
-	b = ulRGB & 0xFF;\
+{
+	r = (ulRGB & 0xFF0000) >>16;
+	g = (ulRGB & 0xFF00) >> 8;
+	b = ulRGB & 0xFF;
 }
 
 HSPRITE LoadSprite(const char *pszName);
+
+#include "client_support.h"

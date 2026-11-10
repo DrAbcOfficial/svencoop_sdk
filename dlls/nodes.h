@@ -25,6 +25,8 @@
 
 #define bits_NODE_LAND      ( 1 << 0 )  // Land node, so nudge if necessary.
 #define bits_NODE_AIR       ( 1 << 1 )  // Air node, don't nudge.
+#define bits_NODE_LADDER    ( 1 << 3 )
+#define bits_NODE_ELEVATOR  ( 1 << 4 )
 #define bits_NODE_WATER     ( 1 << 2 )  // Water node, don't nudge.
 #define bits_NODE_GROUP_REALM (bits_NODE_LAND | bits_NODE_AIR | bits_NODE_WATER)
 
@@ -131,7 +133,7 @@ public:
 	// search each range. After the search is exhausted, we know we have the closest
 	// node.
 	//
-#define CACHE_SIZE 128
+#define CACHE_SIZE_ 128
 #define NUM_RANGES 256
 	DIST_INFO *m_di;	// This is m_cNodes long, but the entries don't correspond to CNode entries.
 	int m_RangeStart[3][NUM_RANGES];
@@ -142,7 +144,7 @@ public:
 	int m_minBoxX, m_minBoxY, m_minBoxZ, m_maxBoxX, m_maxBoxY, m_maxBoxZ;
 	int m_CheckedCounter;
 	float m_RegionMin[3], m_RegionMax[3]; // The range of nodes.
-	CACHE_ENTRY m_Cache[CACHE_SIZE];
+	CACHE_ENTRY m_Cache[CACHE_SIZE_];
 
 
 	int m_HashPrimes[16];
@@ -164,14 +166,17 @@ public:
 	int		FindShortestPath ( int *piPath, int iStart, int iDest, int iHull, int afCapMask);
 	int		FindNearestNode ( const Vector &vecOrigin, CBaseEntity *pEntity );
 	int		FindNearestNode ( const Vector &vecOrigin, int afNodeTypes );
+	int FindNearestNode( const Vector &vecOrigin, int afNodeTypes, entvars_t *ignored );
 	//int		FindNearestLink ( const Vector &vecTestPoint, int *piNearestLink, BOOL *pfAlongLine );
 	float	PathLength( int iStart, int iDest, int iHull, int afCapMask );
+	bool PathVis( int start, int destination, Vector origin, Vector end, int hull, int capabilities );
 	int		NextNodeInRoute( int iCurrentNode, int iDest, int iHull, int iCap );
 
 	enum NODEQUERY { NODEGRAPH_DYNAMIC, NODEGRAPH_STATIC };
 	// A static query means we're asking about the possiblity of handling this entity at ANY time
 	// A dynamic query means we're asking about it RIGHT NOW.  So we should query the current state
 	int		HandleLinkEnt ( int iNode, entvars_t *pevLinkEnt, int afCapMask, NODEQUERY queryType );
+	bool HandleLinkEnt( int node, CBaseEntity *link, int capabilities, NODEQUERY query, CBaseEntity *activator );
 	entvars_t*	LinkEntForLink ( CLink *pLink, CNode *pNode );
 	void	ShowNodeConnections ( int iNode );
 	void	InitGraph( void );

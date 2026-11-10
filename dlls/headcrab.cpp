@@ -22,6 +22,10 @@
 #include	"monsters.h"
 #include	"schedule.h"
 #include	"game.h"
+#include "CClassicMode.h"
+
+extern cvar_t sk_headcrab_dmg_bite;
+extern cvar_t sk_headcrab_health;
 
 //=========================================================
 // Monster's Anim Events Go Here
@@ -73,6 +77,27 @@ Schedule_t	slHCRangeAttack1Fast[] =
 class CHeadCrab : public CBaseMonster
 {
 public:
+	// the sequence decides the box, standing on the entity's origin
+	void SetObjectCollisionBox( void )
+	{
+		if ( ( pev->spawnflags & SF_MONSTER_NO_MODEL_BOX ) || !m_fCustomModel )
+		{
+			CBaseEntity::SetObjectCollisionBox();
+			return;
+		}
+
+		Vector mins = g_vecZero;
+		Vector maxs = g_vecZero;
+
+		ExtractBbox( 1, mins, maxs );
+		mins.z = 0;
+		pev->absmin = pev->origin + mins;
+		pev->absmax = pev->origin + maxs;
+	}
+
+	float GetPointsForDamage( float flDamage );
+	int ObjectCaps( void );
+
 	void Spawn( void );
 	void Precache( void );
 	void RunTask ( Task_t *pTask );
@@ -92,7 +117,7 @@ public:
 	BOOL CheckRangeAttack2 ( float flDot, float flDist );
 	int TakeDamage( entvars_t *pevInflictor, entvars_t *pevAttacker, float flDamage, int bitsDamageType );
 
-	virtual float GetDamageAmount( void ) { return gSkillData.headcrabDmgBite; }
+	virtual float GetDamageAmount( void ) { return sk_headcrab_dmg_bite.value; }
 	virtual int GetVoicePitch( void ) { return 100; }
 	virtual float GetSoundVolue( void ) { return 1.0; }
 	Schedule_t* GetScheduleOfType ( int Type );
@@ -156,7 +181,7 @@ const char *CHeadCrab::pBiteSounds[] =
 //=========================================================
 int	CHeadCrab :: Classify ( void )
 {
-	return	CLASS_ALIEN_PREY;
+	return GetClassification( CLASS_ALIEN_PREY );
 }
 
 //=========================================================
@@ -181,30 +206,7 @@ Vector CHeadCrab :: BodyTarget( const Vector &posSrc )
 //=========================================================
 void CHeadCrab :: SetYawSpeed ( void )
 {
-	int ys;
-
-	switch ( m_Activity )
-	{
-	case ACT_IDLE:			
-		ys = 30;
-		break;
-	case ACT_RUN:			
-	case ACT_WALK:			
-		ys = 20;
-		break;
-	case ACT_TURN_LEFT:
-	case ACT_TURN_RIGHT:
-		ys = 60;
-		break;
-	case ACT_RANGE_ATTACK1:	
-		ys = 30;
-		break;
-	default:
-		ys = 30;
-		break;
-	}
-
-	pev->yaw_speed = ys;
+	pev->yaw_speed = 180;
 }
 
 //=========================================================
@@ -230,14 +232,23 @@ void CHeadCrab :: HandleAnimEvent( MonsterEvent_t *pEvent )
 					gravity = 1;
 
 				// How fast does the headcrab need to travel to reach that height given gravity?
-				float height = (m_hEnemy->pev->origin.z + m_hEnemy->pev->view_ofs.z - pev->origin.z);
+				float height;
+
+				if ( m_hEnemy->IsBSPModel() )
+					height = m_hEnemy->pev->absmax.z - pev->origin.z;
+				else
+					height = (m_hEnemy->pev->origin.z + m_hEnemy->pev->view_ofs.z - pev->origin.z);
+
 				if (height < 16)
 					height = 16;
 				float speed = sqrt( 2 * gravity * height );
 				float time = speed / gravity;
 
 				// Scale the sideways velocity to get there at the right time
-				vecJumpDir = (m_hEnemy->pev->origin + m_hEnemy->pev->view_ofs - pev->origin);
+				if ( m_hEnemy->IsBSPModel() )
+					vecJumpDir = m_hEnemy->Center() - pev->origin;
+				else
+					vecJumpDir = (m_hEnemy->pev->origin + m_hEnemy->pev->view_ofs - pev->origin);
 				vecJumpDir = vecJumpDir * ( 1.0 / time );
 
 				// Speed to offset gravity at the desired height
@@ -245,8 +256,8 @@ void CHeadCrab :: HandleAnimEvent( MonsterEvent_t *pEvent )
 
 				// Don't jump too far/fast
 				float distance = vecJumpDir.Length();
-				
-				if (distance > 650)
+
+				if ( distance > 650 * pev->scale )
 				{
 					vecJumpDir = vecJumpDir * ( 650.0 / distance );
 				}
@@ -254,12 +265,11 @@ void CHeadCrab :: HandleAnimEvent( MonsterEvent_t *pEvent )
 			else
 			{
 				// jump hop, don't care where
-				vecJumpDir = Vector( gpGlobals->v_forward.x, gpGlobals->v_forward.y, gpGlobals->v_up.z ) * 350;
+				vecJumpDir = Vector( gpGlobals->v_forward.x, gpGlobals->v_forward.y, gpGlobals->v_up.z ) * 350 * pev->scale;
 			}
 
-			int iSound = RANDOM_LONG(0,2);
-			if ( iSound != 0 )
-				EMIT_SOUND_DYN( edict(), CHAN_VOICE, pAttackSounds[iSound], GetSoundVolue(), ATTN_IDLE, 0, GetVoicePitch() );
+			int iSound = RANDOM_LONG(0,1);
+			EMIT_SOUND_DYN( edict(), CHAN_VOICE, pAttackSounds[iSound], GetSoundVolue(), ATTN_IDLE, 0, GetVoicePitch() );
 
 			pev->velocity = vecJumpDir;
 			m_flNextAttack = gpGlobals->time + 2;
@@ -279,20 +289,39 @@ void CHeadCrab :: Spawn()
 {
 	Precache( );
 
-	SET_MODEL(ENT(pev), "models/headcrab.mdl");
+	if ( !SetupModel() )
+	{
+		if ( CClassicMode::GetInstance()->IsEnabled() )
+			SET_MODEL( ENT(pev), "models/hlclassic/headcrab.mdl" );
+		else
+			SET_MODEL(ENT(pev), "models/headcrab.mdl");
+	}
 	UTIL_SetSize(pev, Vector(-12, -12, 0), Vector(12, 12, 24));
 
 	pev->solid			= SOLID_SLIDEBOX;
 	pev->movetype		= MOVETYPE_STEP;
 	m_bloodColor		= BLOOD_COLOR_GREEN;
 	pev->effects		= 0;
-	pev->health			= gSkillData.headcrabHealth;
+	if ( !pev->health )
+		pev->health			= sk_headcrab_health.value;
 	pev->view_ofs		= Vector ( 0, 0, 20 );// position of the eyes relative to monster's origin.
 	pev->yaw_speed		= 5;//!!! should we put this in the monster's changeanim function since turn rates may vary with state/anim?
 	m_flFieldOfView		= 0.5;// indicates the width of this monster's forward view cone ( as a dotproduct result )
 	m_MonsterState		= MONSTERSTATE_NONE;
 
+	if ( pev->body < 0 )
+		pev->body = RANDOM_LONG( 0, 11 );
+
+	if ( !m_FormattedName )
+		m_FormattedName = MAKE_STRING( "Head Crab" );
+
 	MonsterInit();
+
+	if ( m_fPlayerAlly && !( pev->spawnflags & SF_MONSTER_PREDISASTER ) )
+	{
+		SetUse( &CBaseMonster::CallFollowerPlayerUse );
+		m_fCanPlayerFollow = true;
+	}
 }
 
 //=========================================================
@@ -300,6 +329,8 @@ void CHeadCrab :: Spawn()
 //=========================================================
 void CHeadCrab :: Precache()
 {
+	CBaseEntity::Precache();
+
 	PRECACHE_SOUND_ARRAY(pIdleSounds);
 	PRECACHE_SOUND_ARRAY(pAlertSounds);
 	PRECACHE_SOUND_ARRAY(pPainSounds);
@@ -307,7 +338,10 @@ void CHeadCrab :: Precache()
 	PRECACHE_SOUND_ARRAY(pDeathSounds);
 	PRECACHE_SOUND_ARRAY(pBiteSounds);
 
-	PRECACHE_MODEL("models/headcrab.mdl");
+	if ( CClassicMode::GetInstance()->IsEnabled() )
+		PRECACHE_MODEL( "models/hlclassic/headcrab.mdl" );
+	else
+		PRECACHE_MODEL( "models/headcrab.mdl" );
 }	
 
 
@@ -401,7 +435,7 @@ void CHeadCrab :: StartTask ( Task_t *pTask )
 //=========================================================
 BOOL CHeadCrab :: CheckRangeAttack1 ( float flDot, float flDist )
 {
-	if ( FBitSet( pev->flags, FL_ONGROUND ) && flDist <= 256 && flDot >= 0.65 )
+	if ( FBitSet( pev->flags, FL_ONGROUND ) && flDist <= 256.0f * pev->scale && flDot >= 0.65 )
 	{
 		return TRUE;
 	}
@@ -484,10 +518,28 @@ Schedule_t* CHeadCrab :: GetScheduleOfType ( int Type )
 class CBabyCrab : public CHeadCrab
 {
 public:
+	void Killed( entvars_t *pevAttacker, int iGib )
+	{
+		CBaseEntity *pOwner = pev->owner ? CBaseEntity::Instance( pev->owner ) : NULL;
+
+		if ( pOwner && FClassnameIs( pOwner->pev, "monster_bigmomma" ) )
+		{
+			CBaseEntity *pAttacker = CBaseEntity::Instance( pevAttacker );
+
+			if ( pAttacker && IRelationship( pAttacker ) > R_NO )
+				pOwner->MyMonsterPointer()->PushEnemy( pAttacker, pAttacker->pev->origin );
+		}
+
+		CBaseMonster::Killed( pevAttacker, iGib );
+	}
+
+	int Classify( void );
+	float GetPointsForDamage( float flDamage );
+
 	void Spawn( void );
 	void Precache( void );
 	void SetYawSpeed ( void );
-	float GetDamageAmount( void ) { return gSkillData.headcrabDmgBite * 0.3; }
+	float GetDamageAmount( void ) { return sk_headcrab_dmg_bite.value * 0.3; }
 	BOOL CheckRangeAttack1 ( float flDot, float flDist );
 	Schedule_t* GetScheduleOfType ( int Type );
 	virtual int GetVoicePitch( void ) { return PITCH_NORM + RANDOM_LONG(40,50); }
@@ -497,25 +549,45 @@ LINK_ENTITY_TO_CLASS( monster_babycrab, CBabyCrab );
 
 void CBabyCrab :: Spawn( void )
 {
-	CHeadCrab::Spawn();
-	SET_MODEL(ENT(pev), "models/baby_headcrab.mdl");
-	pev->rendermode = kRenderTransTexture;
-	pev->renderamt = 192;
+	Precache( );
+
+	if ( !SetupModel() )
+		SET_MODEL(ENT(pev), "models/baby_headcrab.mdl");
 	UTIL_SetSize(pev, Vector(-12, -12, 0), Vector(12, 12, 24));
-	
-	pev->health	= gSkillData.headcrabHealth * 0.25;	// less health than full grown
+
+	if ( !pev->health )
+		pev->health	= sk_headcrab_health.value * 0.25;
+
+	m_bloodColor		= BLOOD_COLOR_GREEN;
+	pev->solid			= SOLID_SLIDEBOX;
+	pev->movetype		= MOVETYPE_STEP;
+	pev->effects		= 0;
+	pev->rendermode		= kRenderTransTexture;
+	pev->renderamt		= 192;
+	pev->view_ofs		= Vector( 0, 0, 20 );
+	m_flFieldOfView		= 0.5;
+	m_MonsterState		= MONSTERSTATE_NONE;
+	m_afMoveShootCap	= 0;
+
+	if ( !m_FormattedName )
+		m_FormattedName = MAKE_STRING( IsPlayerAlly() ? "Friendly Baby Head Crab" : "Baby Head Crab" );
+
+	MonsterInit();
 }
+
 
 void CBabyCrab :: Precache( void )
 {
-	PRECACHE_MODEL( "models/baby_headcrab.mdl" );
 	CHeadCrab::Precache();
+
+	if ( !pev->model )
+		PRECACHE_MODEL( "models/baby_headcrab.mdl" );
 }
 
 
 void CBabyCrab :: SetYawSpeed ( void )
 {
-	pev->yaw_speed = 120;
+	pev->yaw_speed = 270;
 }
 
 
@@ -552,4 +624,30 @@ Schedule_t* CBabyCrab :: GetScheduleOfType ( int Type )
 	}
 
 	return CHeadCrab::GetScheduleOfType( Type );
+}
+
+int CHeadCrab::ObjectCaps( void )
+{
+	return IsPlayerAlly() ? FCAP_IMPULSE_USE : FCAP_ACROSS_TRANSITION;
+}
+
+float CHeadCrab::GetPointsForDamage( float flDamage )
+{
+	float points = pev->max_health / sk_headcrab_health.value;
+
+	return points * ( flDamage / pev->max_health );
+}
+
+int CBabyCrab::Classify( void )
+{
+	return GetClassification( CLASS_ALIEN_PREY );
+}
+
+float CBabyCrab::GetPointsForDamage( float flDamage )
+{
+	double health = (double) sk_headcrab_health.value * 0.25;
+	double points = (double) pev->max_health / health;
+	float damageScale = flDamage / pev->max_health;
+
+	return points * 0.5 * damageScale;
 }

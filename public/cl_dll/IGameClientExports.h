@@ -20,12 +20,12 @@ class IGameClientExports : public IBaseInterface
 {
 public:
 	// returns the name of the server the user is connected to, if any
-	virtual const char *GetServerHostName() = 0;
+	virtual const char* GetServerHostName() = 0;
 
 	// ingame voice manipulation
-	virtual bool IsPlayerGameVoiceMuted(int playerIndex) = 0;
-	virtual void MutePlayerGameVoice(int playerIndex) = 0;
-	virtual void UnmutePlayerGameVoice(int playerIndex) = 0;
+	virtual bool IsPlayerGameVoiceMuted( int playerIndex ) = 0;
+	virtual void MutePlayerGameVoice( int playerIndex ) = 0;
+	virtual void UnmutePlayerGameVoice( int playerIndex ) = 0;
 };
 
 #define GAMECLIENTEXPORTS_INTERFACE_VERSION "GameClientExports001"

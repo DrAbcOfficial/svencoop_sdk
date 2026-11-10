@@ -37,7 +37,6 @@ typedef vec_t vec4_t[4];	// x,y,z,w
 extern vec3_t vec3_origin;
 
 // Use this definition globally
-#define	ON_EPSILON		0.01
 #define	EQUAL_EPSILON	0.001
 
 int VectorCompare (vec3_t v1, vec3_t v2);

@@ -150,7 +150,12 @@ CSysModule	*Sys_LoadModule( const char *pModuleName )
 		char szCwd[1024];
 		char szAbsoluteModuleName[1024];
 
-		getcwd( szCwd, sizeof( szCwd ) );
+		//Prevent loading from garbage paths if the path is too large for the buffer
+		if (!getcwd(szCwd, sizeof(szCwd)))
+		{
+			exit(-1);
+		}
+
 		if ( szCwd[ strlen( szCwd ) - 1 ] == '/' )
 			szCwd[ strlen( szCwd ) - 1 ] = 0;
 
@@ -202,6 +207,15 @@ void Sys_UnloadModule( CSysModule *pModule )
 	dlclose((void *)hDLL);
 #endif
 
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Gets module handle
+// Use this is the module is already loaded, so you don't load it twice -Enko
+//-----------------------------------------------------------------------------
+CSysModule* Sys_GetModuleHandle( const char* pszModuleName )
+{
+	return reinterpret_cast<CSysModule*>(GetModuleHandle(pszModuleName));
 }
 
 //-----------------------------------------------------------------------------

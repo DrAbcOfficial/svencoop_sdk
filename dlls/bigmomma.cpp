@@ -22,12 +22,17 @@
 #include	"cbase.h"
 #include	"monsters.h"
 #include	"schedule.h"
+#include "animation.h"
 #include	"decals.h"
 #include	"weapons.h"
 #include	"game.h"
+#include	"soundent.h"
+#include	"CCVarSystem.h"
 
 #define SF_INFOBM_RUN		0x0001
 #define SF_INFOBM_WAIT		0x0002
+
+#define SF_BIGMOMMA_NOBABIES	0x0400
 
 // AI Nodes for Big Momma
 class CInfoBM : public CPointEntity
@@ -179,6 +184,11 @@ public:
 	void Precache( void );
 	void KeyValue( KeyValueData *pkvd );
 	void Activate( void );
+	int ObjectCaps( void );
+	void RunAI( void );
+	void SetActivity( Activity NewActivity );
+	void GibMonster( void );
+	void SpawnRandomGibs( entvars_t *pevVictim, int cGibs, int human );
 	int TakeDamage( entvars_t *pevInflictor, entvars_t *pevAttacker, float flDamage, int bitsDamageType );
 
 	void		RunTask( Task_t *pTask );
@@ -193,6 +203,7 @@ public:
 
 	void SetYawSpeed( void );
 	int  Classify ( void );
+	float GetPointsForDamage( float flDamage );
 	void HandleAnimEvent( MonsterEvent_t *pEvent );
 	void LayHeadcrab( void );
 
@@ -385,7 +396,159 @@ const char *CBigMomma::pFootSounds[] =
 	"gonarch/gon_step3.wav",
 };
 
+int CBigMomma::ObjectCaps( void )
+{
+	return m_fPlayerAlly ? FCAP_IMPULSE_USE : FCAP_ACROSS_TRANSITION;
+}
 
+void CBigMomma::RunAI( void )
+{
+	edict_t *ground = pev->groundentity;
+
+	if ( ground && !ground->free )
+	{
+		CBaseEntity *entity = static_cast<CBaseEntity *>( ground->pvPrivateData );
+
+		if ( entity && ( entity->pev->flags & ( FL_CLIENT | FL_MONSTER ) ) )
+		{
+			entity->TakeDamage( pev, pev, 500.0f, DMG_CRUSH );
+			pev->groundentity = NULL;
+			pev->flags &= ~FL_ONGROUND;
+			pev->velocity.z -= 1.0f;
+		}
+	}
+
+	CBaseMonster::RunAI();
+}
+
+void CBigMomma::SetActivity( Activity NewActivity )
+{
+	int sequence;
+
+	switch ( NewActivity )
+	{
+		case ACT_DIESIMPLE:
+		case ACT_DIEBACKWARD:
+		case ACT_DIEFORWARD:
+		case ACT_DIEVIOLENT:
+			sequence = RANDOM_LONG( 0, 1 ) ? LookupSequence( "falldeath" ) : LookupActivity( NewActivity );
+			pev->solid = SOLID_BBOX;
+			break;
+
+		default:
+			sequence = LookupActivity( NewActivity );
+			break;
+	}
+
+	m_Activity = NewActivity;
+	m_IdealActivity = NewActivity;
+
+	if ( sequence <= ACTIVITY_NOT_AVAILABLE )
+	{
+		ALERT( at_console, "%s has no sequence for act:%d\n", STRING( pev->classname ), NewActivity );
+		pev->sequence = 0;
+		return;
+	}
+
+	if ( pev->sequence != sequence || !m_fSequenceLoops )
+		pev->frame = 0;
+
+	pev->sequence = sequence;
+	ResetSequenceInfo();
+	SetYawSpeed();
+}
+
+void CBigMomma::SpawnRandomGibs( entvars_t *pevVictim, int cGibs, int human )
+{
+	if ( !pevVictim )
+		return;
+
+	for ( int i = 0; i <= cGibs; ++i )
+	{
+		CGib *gib = GetClassPtr( (CGib *) NULL );
+
+		gib->Spawn( "models/big_momgibs.mdl" );
+
+		if ( i == 0 )
+			gib->pev->body = 1;
+		else if ( i == 1 )
+			gib->pev->body = 3;
+		else if ( i >= 2 && i <= 5 )
+			gib->pev->body = 2;
+
+		Vector bloodOrigin( pevVictim->absmin.x, pevVictim->absmin.y, pevVictim->absmin.z + 200.0f );
+
+		SpawnBlood( bloodOrigin, BloodColor(), 400.0f );
+
+		if ( gib->pev->body == 3 )
+		{
+			gib->pev->origin.x = pevVictim->absmin.x;
+			gib->pev->origin.y = pevVictim->absmin.y;
+			gib->pev->origin.z = pevVictim->absmin.z + 150.0f;
+		}
+		else
+		{
+			float fraction = RANDOM_FLOAT( 0, 1 ) * pevVictim->size.x;
+
+			gib->pev->origin.x = fraction + pevVictim->absmin.x;
+			fraction = RANDOM_FLOAT( 0, 1 ) * pevVictim->size.y;
+			gib->pev->origin.y = fraction + pevVictim->absmin.y;
+			fraction = RANDOM_FLOAT( 0, 1 ) * pevVictim->size.z;
+			gib->pev->origin.z = fraction + pevVictim->absmin.z + 1.0f;
+		}
+
+		gib->pev->velocity = g_vecAttackDir * -1.0f;
+
+		float noise = RANDOM_FLOAT( -0.15f, 0.15f );
+
+		gib->pev->velocity.x += noise;
+		noise = RANDOM_FLOAT( -0.25f, 0.15f );
+		gib->pev->velocity.y += noise;
+		noise = RANDOM_FLOAT( -0.2f, 1.9f );
+		gib->pev->velocity.z += noise;
+
+		float speed = gib->pev->body == 3 ? RANDOM_FLOAT( 100, 200 ) : RANDOM_FLOAT( 150, 200 );
+
+		gib->pev->velocity = gib->pev->velocity * speed;
+		gib->pev->avelocity.x = RANDOM_FLOAT( 70, 200 );
+		gib->pev->avelocity.y = RANDOM_FLOAT( 70, 200 );
+
+		edict_t *victimEdict = pevVictim->pContainingEntity;
+
+		if ( !victimEdict )
+			victimEdict = INDEXENT( 0 );
+
+		CBaseEntity *victim = victimEdict && !victimEdict->free
+		                          ? static_cast<CBaseEntity *>( victimEdict->pvPrivateData )
+		                          : NULL;
+
+		gib->m_bloodColor = victim->BloodColor();
+
+		if ( !( pevVictim->health > -50.0f ) )
+		{
+			if ( pevVictim->health > -200.0f )
+			{
+				gib->pev->velocity.x += gib->pev->velocity.x;
+				gib->pev->velocity.y += gib->pev->velocity.y;
+				gib->pev->velocity.z += gib->pev->velocity.z;
+			}
+			else
+			{
+				gib->pev->velocity = gib->pev->velocity * 3.0f;
+			}
+		}
+
+		gib->pev->solid = SOLID_SLIDEBOX;
+		UTIL_SetSize( gib->pev, g_vecZero, g_vecZero );
+		gib->LimitVelocity();
+	}
+}
+
+void CBigMomma::GibMonster( void )
+{
+	SpawnRandomGibs( pev, 5, 1 );
+	CBaseMonster::GibMonster();
+}
 
 void CBigMomma :: KeyValue( KeyValueData *pkvd )
 {
@@ -406,7 +569,15 @@ void CBigMomma :: KeyValue( KeyValueData *pkvd )
 //=========================================================
 int	CBigMomma :: Classify ( void )
 {
-	return	CLASS_ALIEN_MONSTER;
+	return GetClassification( CLASS_ALIEN_MONSTER );
+}
+
+extern cvar_t sk_bigmomma_health_factor;
+
+float CBigMomma::GetPointsForDamage( float flDamage )
+{
+	return ( pev->max_health / ( sk_bigmomma_health_factor.value * 150.0f ) ) * 20.0f
+	       * ( flDamage / pev->max_health );
 }
 
 //=========================================================
@@ -420,10 +591,10 @@ void CBigMomma :: SetYawSpeed ( void )
 	switch ( m_Activity )
 	{
 	case ACT_IDLE:
-		ys = 100;
+		ys = 200;
 		break;
 	default:
-		ys = 90;
+		ys = 270;
 	}
 	pev->yaw_speed = ys;
 }
@@ -466,23 +637,28 @@ void CBigMomma :: HandleAnimEvent( MonsterEvent_t *pEvent )
 			if ( pHurt )
 			{
 				pHurt->TakeDamage( pev, pev, gSkillData.bigmommaDmgSlash, DMG_CRUSH | DMG_SLASH );
-				pHurt->pev->punchangle.x = 15;
-				switch( pEvent->event )
+
+				if ( ( pHurt->pev->flags & FL_CLIENT ) || ( ( pHurt->pev->flags & FL_MONSTER ) && pHurt->pev->movetype != MOVETYPE_FLY ) )
 				{
-					case BIG_AE_MELEE_ATTACKBR:
-						pHurt->pev->velocity = pHurt->pev->velocity + (forward * 150) + Vector(0,0,250) - (right * 200);
-					break;
+					pHurt->pev->punchangle.x = 15;
+					switch( pEvent->event )
+					{
+						case BIG_AE_MELEE_ATTACKBR:
+							pHurt->pev->velocity = pHurt->pev->velocity + (forward * 150) + Vector(0,0,250) - (right * 200);
+						break;
 
-					case BIG_AE_MELEE_ATTACKBL:
-						pHurt->pev->velocity = pHurt->pev->velocity + (forward * 150) + Vector(0,0,250) + (right * 200);
-					break;
+						case BIG_AE_MELEE_ATTACKBL:
+							pHurt->pev->velocity = pHurt->pev->velocity + (forward * 150) + Vector(0,0,250) + (right * 200);
+						break;
 
-					case BIG_AE_MELEE_ATTACK1:
-						pHurt->pev->velocity = pHurt->pev->velocity + (forward * 220) + Vector(0,0,200);
-					break;
+						case BIG_AE_MELEE_ATTACK1:
+							pHurt->pev->velocity = pHurt->pev->velocity + (forward * 220) + Vector(0,0,200);
+						break;
+					}
+
+					pHurt->pev->flags &= ~FL_ONGROUND;
 				}
 
-				pHurt->pev->flags &= ~FL_ONGROUND;
 				EMIT_SOUND_DYN( edict(), CHAN_WEAPON, RANDOM_SOUND_ARRAY(pAttackHitSounds), 1.0, ATTN_NORM, 0, 100 + RANDOM_LONG(-5,5) );
 			}
 		}
@@ -490,6 +666,7 @@ void CBigMomma :: HandleAnimEvent( MonsterEvent_t *pEvent )
 		
 		case BIG_AE_SCREAM:
 			EMIT_SOUND_ARRAY_DYN( CHAN_VOICE, pAlertSounds );
+			CSoundEnt::InsertSound( bits_SOUND_COMBAT, pev->origin, 1024, 0.3, this );
 			break;
 		
 		case BIG_AE_PAIN_SOUND:
@@ -498,6 +675,7 @@ void CBigMomma :: HandleAnimEvent( MonsterEvent_t *pEvent )
 		
 		case BIG_AE_ATTACK_SOUND:
 			EMIT_SOUND_ARRAY_DYN( CHAN_WEAPON, pAttackSounds );
+			CSoundEnt::InsertSound( bits_SOUND_COMBAT, pev->origin, 1024, 0.3, this );
 			break;
 
 		case BIG_AE_BIRTH_SOUND:
@@ -516,6 +694,7 @@ void CBigMomma :: HandleAnimEvent( MonsterEvent_t *pEvent )
 		case BIG_AE_STEP1:		// Footstep left
 		case BIG_AE_STEP3:		// Footstep back left
 			EMIT_SOUND_ARRAY_DYN( CHAN_ITEM, pFootSounds );
+			CSoundEnt::InsertSound( bits_SOUND_COMBAT, pev->origin, 200, 0.3, this );
 			break;
 
 		case BIG_AE_STEP4:		// Footstep back right
@@ -528,7 +707,8 @@ void CBigMomma :: HandleAnimEvent( MonsterEvent_t *pEvent )
 			break;
 
 		case BIG_AE_LAY_CRAB:
-			LayHeadcrab();
+			if ( !( pev->spawnflags & SF_BIGMOMMA_NOBABIES ) )
+				LayHeadcrab();
 			break;
 
 		case BIG_AE_JUMP_FORWARD:
@@ -569,10 +749,18 @@ void CBigMomma :: TraceAttack( entvars_t *pevAttacker, float flDamage, Vector ve
 
 		flDamage = 0.1;// don't hurt the monster much, but allow bits_COND_LIGHT_DAMAGE to be generated
 	}
-	else if ( gpGlobals->time > m_painSoundTime )
+	else
 	{
-		m_painSoundTime = gpGlobals->time + RANDOM_LONG(1, 3);
-		EMIT_SOUND_ARRAY_DYN( CHAN_VOICE, pPainSounds );
+		if ( flDamage >= 10 )
+			flDamage -= 5;
+
+		flDamage *= 0.2;
+
+		if ( gpGlobals->time > m_painSoundTime )
+		{
+			m_painSoundTime = gpGlobals->time + RANDOM_LONG(1, 3);
+			EMIT_SOUND_ARRAY_DYN( CHAN_VOICE, pPainSounds );
+		}
 	}
 
 
@@ -586,11 +774,16 @@ int CBigMomma :: TakeDamage( entvars_t *pevInflictor, entvars_t *pevAttacker, fl
 	if ( bitsDamageType & DMG_ACID )
 		flDamage = 0;
 
+	if ( HasConditions( bits_COND_NEW_ENEMY ) )
+		Forget( bits_MEMORY_FLINCHED );
+
 	if ( !HasMemory(bits_MEMORY_PATH_FINISHED) )
 	{
-		if ( pev->health <= flDamage )
+		float scaledDamage = g_plCountBalance * flDamage;
+
+		if ( pev->health <= scaledDamage )
 		{
-			pev->health = flDamage + 1;
+			pev->health = scaledDamage + 1;
 			Remember( bits_MEMORY_ADVANCE_NODE | bits_MEMORY_COMPLETED_NODE );
 			ALERT( at_aiconsole, "BM: Finished node health!!!\n" );
 		}
@@ -601,7 +794,7 @@ int CBigMomma :: TakeDamage( entvars_t *pevInflictor, entvars_t *pevAttacker, fl
 
 void CBigMomma :: LayHeadcrab( void )
 {
-	CBaseEntity *pChild = CBaseEntity::Create( BIG_CHILDCLASS, pev->origin, pev->angles, edict() );
+	CBaseEntity *pChild = CBaseEntity::Create( BIG_CHILDCLASS, pev->origin, pev->angles, false, edict() );
 
 	pChild->pev->spawnflags |= SF_MONSTER_FALL_TO_GROUND;
 
@@ -659,18 +852,29 @@ void CBigMomma :: Spawn()
 {
 	Precache( );
 
-	SET_MODEL(ENT(pev), "models/big_mom.mdl");
+	if ( !SetupModel() )
+		UTIL_SetModel( this, "models/big_mom.mdl");
 	UTIL_SetSize( pev, Vector( -32, -32, 0 ), Vector( 32, 32, 64 ) );
 
 	pev->solid			= SOLID_SLIDEBOX;
 	pev->movetype		= MOVETYPE_STEP;
 	m_bloodColor		= BLOOD_COLOR_GREEN;
-	pev->health			= 150 * gSkillData.bigmommaHealthFactor;
+	if ( pev->health == 0.0f )
+		pev->health			= sk_bigmomma_health_factor.value * 1500.0f;
 	pev->view_ofs		= Vector ( 0, 0, 128 );// position of the eyes relative to monster's origin.
 	m_flFieldOfView		= 0.3;// indicates the width of this monster's forward view cone ( as a dotproduct result )
 	m_MonsterState		= MONSTERSTATE_NONE;
 
+	if ( !m_FormattedName )
+		m_FormattedName = MAKE_STRING( "Big Momma" );
+
 	MonsterInit();
+
+	if ( m_fPlayerAlly && !( pev->spawnflags & SF_MONSTER_PREDISASTER ) )
+	{
+		SetUse( &CBaseMonster::CallFollowerPlayerUse );
+		m_fCanPlayerFollow = true;
+	}
 }
 
 //=========================================================
@@ -678,30 +882,51 @@ void CBigMomma :: Spawn()
 //=========================================================
 void CBigMomma :: Precache()
 {
-	PRECACHE_MODEL("models/big_mom.mdl");
+	CBaseEntity::Precache();
 
-	PRECACHE_SOUND_ARRAY( pChildDieSounds );
-	PRECACHE_SOUND_ARRAY( pSackSounds );
-	PRECACHE_SOUND_ARRAY( pDeathSounds );
-	PRECACHE_SOUND_ARRAY( pAttackSounds );
-	PRECACHE_SOUND_ARRAY( pAttackHitSounds );
-	PRECACHE_SOUND_ARRAY( pBirthSounds );
-	PRECACHE_SOUND_ARRAY( pAlertSounds );
-	PRECACHE_SOUND_ARRAY( pPainSounds );
-	PRECACHE_SOUND_ARRAY( pFootSounds );
+	if ( pev->model == 0 )
+		UTIL_PrecacheModel( this, "models/big_mom.mdl");
+
+	UTIL_PrecacheModel( this, "models/big_momgibs.mdl" );
+
+	for ( size_t i = 0; i < ARRAYSIZE( pChildDieSounds ); ++i )
+		PrecacheSound_Intercept( this, pChildDieSounds[i] );
+
+	for ( size_t i = 0; i < ARRAYSIZE( pSackSounds ); ++i )
+		PrecacheSound_Intercept( this, pSackSounds[i] );
+
+	for ( size_t i = 0; i < ARRAYSIZE( pDeathSounds ); ++i )
+		PrecacheSound_Intercept( this, pDeathSounds[i] );
+
+	for ( size_t i = 0; i < ARRAYSIZE( pAttackSounds ); ++i )
+		PrecacheSound_Intercept( this, pAttackSounds[i] );
+
+	for ( size_t i = 0; i < ARRAYSIZE( pAttackHitSounds ); ++i )
+		PrecacheSound_Intercept( this, pAttackHitSounds[i] );
+
+	for ( size_t i = 0; i < ARRAYSIZE( pBirthSounds ); ++i )
+		PrecacheSound_Intercept( this, pBirthSounds[i] );
+
+	for ( size_t i = 0; i < ARRAYSIZE( pAlertSounds ); ++i )
+		PrecacheSound_Intercept( this, pAlertSounds[i] );
+
+	for ( size_t i = 0; i < ARRAYSIZE( pPainSounds ); ++i )
+		PrecacheSound_Intercept( this, pPainSounds[i] );
+
+	for ( size_t i = 0; i < ARRAYSIZE( pFootSounds ); ++i )
+		PrecacheSound_Intercept( this, pFootSounds[i] );
 
 	UTIL_PrecacheOther( BIG_CHILDCLASS );
 
 	// TEMP: Squid
-	PRECACHE_MODEL("sprites/mommaspit.spr");// spit projectile.
-	gSpitSprite = PRECACHE_MODEL("sprites/mommaspout.spr");// client side spittle.
-	gSpitDebrisSprite = PRECACHE_MODEL("sprites/mommablob.spr" );
+	UTIL_PrecacheModel( this, "sprites/mommaspit.spr");// spit projectile.
+	gSpitSprite = UTIL_PrecacheModel( this, "sprites/mommaspout.spr");// client side spittle.
+	gSpitDebrisSprite = UTIL_PrecacheModel( this, "sprites/mommablob.spr" );
 
-	PRECACHE_SOUND( "bullchicken/bc_acid1.wav" );
-	PRECACHE_SOUND( "bullchicken/bc_spithit1.wav" );
-	PRECACHE_SOUND( "bullchicken/bc_spithit2.wav" );
-}	
-
+	PrecacheSound_Intercept( this, "bullchicken/bc_acid1.wav" );
+	PrecacheSound_Intercept( this, "bullchicken/bc_spithit1.wav" );
+	PrecacheSound_Intercept( this, "bullchicken/bc_spithit2.wav" );
+}
 
 void CBigMomma::Activate( void )
 {
@@ -867,10 +1092,30 @@ Schedule_t	slNodeFail[] =
 	},
 };
 
+Task_t	tlBigMommaFlinch[] =
+{
+	{ TASK_STOP_MOVING,			(float)0		},
+	{ TASK_FACE_IDEAL,			(float)0		},
+	{ TASK_REMEMBER,			(float)bits_MEMORY_FLINCHED },
+	{ TASK_SMALL_FLINCH,		(float)0		},
+};
+
+Schedule_t	slBigMommaFlinch[] =
+{
+	{
+		tlBigMommaFlinch,
+		ARRAYSIZE ( tlBigMommaFlinch ),
+		0,
+		0,
+		"Bigmomma Guard"
+	},
+};
+
 DEFINE_CUSTOM_SCHEDULES( CBigMomma )
 {
 	slBigNode,
 	slNodeFail,
+	slBigMommaFlinch,
 };
 
 IMPLEMENT_CUSTOM_SCHEDULES( CBigMomma, CBaseMonster );
@@ -889,6 +1134,10 @@ Schedule_t *CBigMomma::GetScheduleOfType( int Type )
 		case SCHED_NODE_FAIL:
 			return slNodeFail;
 		break;
+
+		case SCHED_ALERT_SMALL_FLINCH:
+		case SCHED_SMALL_FLINCH:
+			return slBigMommaFlinch;
 	}
 
 	return CBaseMonster::GetScheduleOfType( Type );
@@ -918,10 +1167,21 @@ Schedule_t *CBigMomma::GetSchedule( void )
 }
 
 
+#define BM_RETARGET_DIST	1024
+#define BM_RETARGET_MOVED	80
+#define BM_TARGET_RANGE		512
+
 void CBigMomma::StartTask( Task_t *pTask )
 {
 	switch ( pTask->iTask )
 	{
+	case TASK_SMALL_FLINCH:
+		if ( RANDOM_LONG( 0, 1 ) )
+			m_IdealActivity = ACT_GUARD;
+		else
+			m_IdealActivity = GetSmallFlinchActivity();
+		break;
+
 	case TASK_FIND_NODE:
 		{
 			CBaseEntity *pTarget = m_hTargetEnt;
@@ -963,6 +1223,8 @@ void CBigMomma::StartTask( Task_t *pTask )
 				sequence = LookupSequence( STRING( sequence ) );
 				if ( sequence != -1 )
 				{
+					m_Activity = ACT_RESET;
+					m_IdealActivity = ACT_RESET;
 					pev->sequence = sequence;
 					pev->frame = 0;
 					ResetSequenceInfo( );
@@ -1034,6 +1296,40 @@ void CBigMomma::RunTask( Task_t *pTask )
 {
 	switch ( pTask->iTask )
 	{
+	case TASK_MOVE_TO_TARGET_RANGE:
+		{
+			if ( m_hTargetEnt == NULL )
+			{
+				TaskFail();
+				break;
+			}
+
+			float distance = ( m_vecMoveGoal - pev->origin ).Length2D();
+
+			// Re-evaluate when the target has moved too far from the goal
+			if ( distance > BM_RETARGET_DIST && !( m_Route[ m_iRouteIndex ].iType & bits_MF_TO_DETOUR )
+				&& ( m_vecMoveGoal - m_hTargetEnt->pev->origin ).Length() > BM_RETARGET_MOVED )
+			{
+				m_vecMoveGoal = m_hTargetEnt->pev->origin;
+				m_movementGoal = MOVEGOAL_TARGETENT;
+				FRefreshRoute();
+			}
+
+			if ( distance < BM_TARGET_RANGE )
+			{
+				TaskComplete();
+				RouteClear();		// Stop moving
+			}
+			else if ( m_movementActivity != ACT_RUN )
+			{
+				if ( LookupActivity( ACT_RUN ) != ACTIVITY_NOT_AVAILABLE )
+					m_movementActivity = ACT_RUN;
+				else
+					m_movementActivity = ACT_WALK;
+			}
+		}
+		break;
+
 	case TASK_MOVE_TO_NODE_RANGE:
 		{
 			float distance;
@@ -1060,9 +1356,11 @@ void CBigMomma::RunTask( Task_t *pTask )
 		if ( m_hTargetEnt != NULL && (m_hTargetEnt->pev->spawnflags & SF_INFOBM_WAIT) )
 			return;
 
-		if ( gpGlobals->time > m_flWaitFinished )
+		if ( gpGlobals->time > m_flWait )
+		{
 			TaskComplete();
-		ALERT( at_aiconsole, "BM: The WAIT is over!\n" );
+			ALERT( at_aiconsole, "BM: The WAIT is over!\n" );
+		}
 		break;
 
 	case TASK_PLAY_NODE_PRESEQUENCE:
@@ -1177,6 +1475,8 @@ void CBMortar::Animate( void )
 
 	if ( gpGlobals->time > pev->dmgtime )
 	{
+		CSoundEnt::InsertSound( bits_SOUND_DANGER, pev->origin + pev->velocity * 0.7, (int) pev->velocity.Length(), 0.2, this );
+
 		pev->dmgtime = gpGlobals->time + 0.2;
 		MortarSpray( pev->origin, -pev->velocity.Normalize(), gSpitSprite, 3 );
 	}

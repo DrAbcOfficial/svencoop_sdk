@@ -92,6 +92,11 @@ void CCineMonster :: KeyValue( KeyValueData *pkvd )
 		m_iFinishSchedule = atoi( pkvd->szValue );
 		pkvd->fHandled = TRUE;
 	}
+	else if ( FStrEq( pkvd->szKeyName, "moveto_radius" ) )
+	{
+		m_flMoveToRadius = atof( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
 	else
 	{
 		CBaseMonster::KeyValue( pkvd );
@@ -106,6 +111,7 @@ TYPEDESCRIPTION	CCineMonster::m_SaveData[] =
 	DEFINE_FIELD( CCineMonster, m_fMoveTo, FIELD_INTEGER ),
 	DEFINE_FIELD( CCineMonster, m_flRepeat, FIELD_FLOAT ),
 	DEFINE_FIELD( CCineMonster, m_flRadius, FIELD_FLOAT ),
+	DEFINE_FIELD( CCineMonster, m_flMoveToRadius, FIELD_FLOAT ),
 
 	DEFINE_FIELD( CCineMonster, m_iDelay, FIELD_INTEGER ),
 	DEFINE_FIELD( CCineMonster, m_startTime, FIELD_TIME ),
@@ -287,7 +293,7 @@ int CCineMonster :: FindEntity( void )
 				m_hTargetEnt = pTarget;
 				return TRUE;
 			}
-			ALERT( at_console, "Found %s, but can't play!\n", STRING(m_iszEntity) );
+			ALERT( at_warning, "[%s] %s: Found NPC %s, but can't play!\n", STRING( pev->classname ), STRING( pev->targetname ), STRING(m_iszEntity) );
 		}
 		pentTarget = FIND_ENTITY_BY_TARGETNAME(pentTarget, STRING(m_iszEntity));
 		pTarget = NULL;
@@ -296,7 +302,7 @@ int CCineMonster :: FindEntity( void )
 	if ( !pTarget )
 	{
 		CBaseEntity *pEntity = NULL;
-		while ((pEntity = UTIL_FindEntityInSphere( pEntity, pev->origin, m_flRadius )) != NULL)
+		while ((pEntity = UTIL_FindEntityInSphere( pEntity, pev->origin, m_flRadius, NULL, "targetname" )) != NULL)
 		{
 			if (FClassnameIs( pEntity->pev, STRING(m_iszEntity)))
 			{
@@ -340,6 +346,7 @@ void CCineMonster :: PossessEntity( void )
 		pTarget->m_pGoalEnt = this;
 		pTarget->m_pCine = this;
 		pTarget->m_hTargetEnt = this;
+		pTarget->m_flMoveToRadius = m_flMoveToRadius;
 
 		m_saved_movetype = pTarget->pev->movetype;
 		m_saved_solid = pTarget->pev->solid;
@@ -411,6 +418,8 @@ void CCineAI :: PossessEntity( void )
 		pTarget->m_pGoalEnt = this;
 		pTarget->m_pCine = this;
 		pTarget->m_hTargetEnt = this;
+		pTarget->m_fInAIScript = true;
+		pTarget->m_flMoveToRadius = m_flMoveToRadius;
 
 		m_saved_movetype = pTarget->pev->movetype;
 		m_saved_solid = pTarget->pev->solid;
@@ -419,7 +428,7 @@ void CCineAI :: PossessEntity( void )
 
 		switch (m_fMoveTo)
 		{
-		case 0: 
+		case 0:
 		case 5:
 			pTarget->m_scriptState = SCRIPT_WAIT; 
 			break;
@@ -701,6 +710,16 @@ void ScriptEntityCancel( edict_t *pentCine )
 
 
 // find all the cinematic entities with my targetname and stop them from playing
+void CCineMonster::UpdateOnRemove( void )
+{
+	CBaseEntity::UpdateOnRemove();
+
+	CBaseMonster *pTarget = m_hTargetEnt != NULL ? m_hTargetEnt->MyMonsterPointer() : NULL;
+
+	if ( pTarget && pTarget->m_pCine == this )
+		pTarget->CineCleanup();
+}
+
 void CCineMonster :: CancelScript( void )
 {
 	ALERT( at_aiconsole, "Cancelling script: %s\n", STRING(m_iszPlay) );
@@ -793,6 +812,9 @@ void CCineMonster :: Activate( void )
 }
 
 		
+#define CINE_CORPSE_FADE_DELAY			15
+#define SF_SCRIPT_CONTINUOUS_ACTIVITY	256
+
 BOOL CBaseMonster :: CineCleanup( )
 {
 	CCineMonster *pOldCine = m_pCine;
@@ -813,7 +835,6 @@ BOOL CBaseMonster :: CineCleanup( )
 		pev->solid = SOLID_SLIDEBOX;
 	}
 	m_pCine = NULL;
-	m_hTargetEnt = NULL;
 	m_pGoalEnt = NULL;
 	if (pev->deadflag == DEAD_DYING)
 	{
@@ -827,12 +848,25 @@ BOOL CBaseMonster :: CineCleanup( )
 
 		if ( pOldCine && FBitSet( pOldCine->pev->spawnflags, SF_SCRIPT_LEAVECORPSE ) )
 		{
-			SetUse( NULL );		// BUGBUG -- This doesn't call Killed()
+			// BUGBUG -- This doesn't call Killed()
 			SetThink( NULL );	// This will probably break some stuff
 			SetTouch( NULL );
 		}
 		else
-			SUB_StartFadeOut(); // SetThink( SUB_DoNothing );
+		{
+			UTIL_SetOrigin( pev, pev->origin );
+
+			if ( pev->rendermode == kRenderNormal )
+			{
+				pev->renderamt = 255;
+				pev->rendermode = kRenderTransTexture;
+			}
+
+			pev->avelocity = g_vecZero;
+			pev->solid = SOLID_NOT;
+			pev->nextthink = gpGlobals->time + CINE_CORPSE_FADE_DELAY;
+			SetThink( &CBaseEntity::SUB_FadeOut ); // SetThink( SUB_DoNothing );
+		}
 		// This turns off animation & physics in case their origin ends up stuck in the world or something
 		StopAnimation();
 		pev->movetype = MOVETYPE_NONE;
@@ -887,12 +921,15 @@ BOOL CBaseMonster :: CineCleanup( )
 			// pEntity->pev->origin.z = new_origin.z + 5.0; // damn, got to fix this
 
 			UTIL_SetOrigin( pev, pev->origin );
-			pev->effects |= EF_NOINTERP;
+
+			if ( !( pOldCine->pev->spawnflags & SF_SCRIPT_CONTINUOUS_ACTIVITY ) )
+				pev->effects |= EF_NOINTERP;
 		}
 
 		// We should have some animation to put these guys in, but for now it's idle.
 		// Due to NOINTERP above, there won't be any blending between this anim & the sequence
-		m_Activity = ACT_RESET;
+		if ( !( pOldCine->pev->spawnflags & SF_SCRIPT_CONTINUOUS_ACTIVITY ) )
+			m_Activity = ACT_RESET;
 	}
 	// set them back into a normal state
 	pev->enemy = NULL;
@@ -902,6 +939,11 @@ BOOL CBaseMonster :: CineCleanup( )
 	{
 		// Dropping out because he got killed
 		// Can't call killed() no attacker and weirdness (late gibbing) may result
+		CBaseEntity *pOwner = CBaseEntity::Instance( pev->owner );
+
+		if ( pOwner )
+			pOwner->DeathNotice( pev );
+
 		m_IdealMonsterState = MONSTERSTATE_DEAD;
 		SetConditions( bits_COND_LIGHT_DAMAGE );
 		pev->deadflag = DEAD_DYING;
@@ -912,6 +954,7 @@ BOOL CBaseMonster :: CineCleanup( )
 
 	//	SetAnimation( m_MonsterState );
 	ClearBits(pev->spawnflags, SF_MONSTER_WAIT_FOR_SCRIPT );
+	m_fInAIScript = false;
 
 	return TRUE;
 }
@@ -1078,7 +1121,7 @@ void CScriptedSentence :: FindThink( void )
 		StartSentence( pMonster );
 		if ( pev->spawnflags & SF_SENTENCE_ONCE )
 			UTIL_Remove( this );
-		SetThink( &CScriptedSentence::DelayThink );
+		SetThink( &CScriptedSentence::CallDelayThink );
 		pev->nextthink = gpGlobals->time + m_flDuration + m_flRepeat;
 		m_active = FALSE;
 //		ALERT( at_console, "%s: found monster %s\n", STRING(m_iszSentence), STRING(m_iszEntity) );
@@ -1165,7 +1208,7 @@ BOOL CScriptedSentence :: StartSentence( CBaseMonster *pTarget )
 	if ( !pTarget )
 	{
 		ALERT( at_aiconsole, "Not Playing sentence %s\n", STRING(m_iszSentence) );
-		return NULL;
+		return FALSE;
 	}
 
 	BOOL bConcurrent = FALSE;
@@ -1204,6 +1247,8 @@ BOOL CScriptedSentence :: StartSentence( CBaseMonster *pTarget )
 class CFurniture : public CBaseMonster
 {
 public:
+	int ShowHUDInfo( void ) { return 0; }
+	int TakeDamage( entvars_t *, entvars_t *, float, int ) { return 0; }
 	void Spawn ( void );
 	void Die( void );
 	int	 Classify ( void );

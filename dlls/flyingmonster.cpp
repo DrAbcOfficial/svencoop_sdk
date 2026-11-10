@@ -25,10 +25,10 @@
 
 extern DLL_GLOBAL edict_t		*g_pBodyQueueHead;
 
-int CFlyingMonster :: CheckLocalMove ( const Vector &vecStart, const Vector &vecEnd, CBaseEntity *pTarget, float *pflDist )
+int CFlyingMonster :: CheckLocalMove ( const Vector &vecStart, const Vector &vecEnd, CBaseEntity *pTarget, float *pflDist, Vector *pvecEndPosition, bool fWalkMoveCheck )
 {
 	// UNDONE: need to check more than the endpoint
-	if (FBitSet(pev->flags, FL_SWIM) && (UTIL_PointContents(vecEnd) != CONTENTS_WATER))
+	if (FBitSet(pev->flags, FL_SWIM) && UTIL_PointContents(vecEnd - Vector( 0, 0, 32 ) ) != CONTENTS_WATER )
 	{
 		// ALERT(at_aiconsole, "can't swim out of water\n");
 		return FALSE;
@@ -47,9 +47,13 @@ int CFlyingMonster :: CheckLocalMove ( const Vector &vecStart, const Vector &vec
 	}
 
 	// ALERT( at_console, "check %d %d %f\n", tr.fStartSolid, tr.fAllSolid, tr.flFraction );
-	if (tr.fStartSolid || tr.flFraction < 1.0)
+	if ( pvecEndPosition )
+		*pvecEndPosition = tr.vecEndPos;
+
+	// ALERT( at_console, "check %d %d %f\n", tr.fStartSolid, tr.fAllSolid, tr.flFraction );
+	if ( tr.fStartSolid || tr.flFraction < 0.7 )
 	{
-		if ( pTarget && pTarget->edict() == gpGlobals->trace_ent )
+		if ( pTarget && ( pTarget->pev ? pTarget->edict() : NULL ) == tr.pHit )
 			return LOCALMOVE_VALID;
 		return LOCALMOVE_INVALID;
 	}
@@ -58,9 +62,9 @@ int CFlyingMonster :: CheckLocalMove ( const Vector &vecStart, const Vector &vec
 }
 
 
-BOOL CFlyingMonster :: FTriangulate ( const Vector &vecStart , const Vector &vecEnd, float flDist, CBaseEntity *pTargetEnt, Vector *pApex )
+BOOL CFlyingMonster :: FTriangulate ( const Vector &vecStart , const Vector &vecEnd, float flDist, CBaseEntity *pTargetEnt, Vector *pApex, Vector *pApex2, bool fNoExtension )
 {
-	return CBaseMonster::FTriangulate( vecStart, vecEnd, flDist, pTargetEnt, pApex );
+	return CBaseMonster::FTriangulate( vecStart, vecEnd, flDist, pTargetEnt, pApex, pApex2, fNoExtension );
 }
 
 
@@ -147,14 +151,7 @@ void CFlyingMonster :: Move( float flInterval )
 
 BOOL CFlyingMonster:: ShouldAdvanceRoute( float flWaypointDist )
 {
-	// Get true 3D distance to the goal so we actually reach the correct height
-	if ( m_Route[ m_iRouteIndex ].iType & bits_MF_IS_GOAL )
-		flWaypointDist = ( m_Route[ m_iRouteIndex ].vecLocation - pev->origin ).Length();
-
-	if ( flWaypointDist <= 64 + (m_flGroundSpeed * gpGlobals->frametime) )
-		return TRUE;
-
-	return FALSE;
+	return ( m_Route[ m_iRouteIndex ].vecLocation - pev->origin ).Length() <= 64.0f;
 }
 
 
@@ -162,6 +159,10 @@ void CFlyingMonster::MoveExecute( CBaseEntity *pTargetEnt, const Vector &vecDir,
 {
 	if ( pev->movetype == MOVETYPE_FLY )
 	{
+		// CBaseMonster::Move no longer turns toward the waypoint
+		MakeIdealYaw ( m_Route[ m_iRouteIndex ].vecLocation );
+		ChangeYaw ( pev->yaw_speed );
+
 		if ( gpGlobals->time - m_stopTime > 1.0 )
 		{
 			if ( m_IdealActivity != m_movementActivity )

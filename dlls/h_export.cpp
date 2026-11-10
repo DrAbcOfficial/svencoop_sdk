@@ -24,6 +24,11 @@
 #include "util.h"
 
 #include "cbase.h"
+#include "server_filesystem.h"
+#include "server_support.h"
+#include <stddef.h>
+
+enum { SVEN_ENGINE_FUNCTIONS_SIZE = offsetof(enginefuncs_t, pfnPEntityOfEntIndexAllEntities) };
 
 // Holds engine functionality callbacks
 enginefuncs_t g_engfuncs;
@@ -56,8 +61,11 @@ BOOL WINAPI DllMain(
 
 extern "C" void DLLEXPORT GiveFnptrsToDll(	enginefuncs_t* pengfuncsFromEngine, globalvars_t *pGlobals )
 {
-	memcpy(&g_engfuncs, pengfuncsFromEngine, sizeof(enginefuncs_t));
+	memcpy(&g_engfuncs, pengfuncsFromEngine, SVEN_ENGINE_FUNCTIONS_SIZE);
 	gpGlobals = pGlobals;
+
+	if (!InitializeFileSystem())
+		UTIL_HostError("Unable to initialize Steam file system.\n", -1);
 }
 
 

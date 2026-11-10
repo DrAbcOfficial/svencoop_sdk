@@ -24,7 +24,9 @@
 #include "util.h"
 #include "cbase.h"
 #include "animation.h"
+#include "studio.h"
 #include "saverestore.h"
+#include "ModelUtils.h"
 
 TYPEDESCRIPTION	CBaseAnimating::m_SaveData[] = 
 {
@@ -110,13 +112,62 @@ int CBaseAnimating :: LookupSequence ( const char *label )
 void CBaseAnimating :: ResetSequenceInfo ( )
 {
 	void *pmodel = GET_MODEL_PTR( ENT(pev) );
+	float flGroundSpeed;
 
-	GetSequenceInfo( pmodel, pev, &m_flFrameRate, &m_flGroundSpeed );
+	// Only moving sequences replace the gait ground speed
+	switch ( GetSequenceActivityName( pev->sequence ) )
+	{
+	case ACT_WALK:
+	case ACT_RUN:
+	case ACT_WALK_HURT:
+	case ACT_RUN_HURT:
+	case ACT_WALK_SCARED:
+	case ACT_RUN_SCARED:
+		GetSequenceInfo( pmodel, pev, &m_flFrameRate, &m_flGroundSpeed );
+		break;
+
+	default:
+		GetSequenceInfo( pmodel, pev, &m_flFrameRate, &flGroundSpeed );
+		break;
+	}
+
 	m_fSequenceLoops = ((GetSequenceFlags() & STUDIO_LOOPING) != 0);
 	pev->animtime = gpGlobals->time;
-	pev->framerate = 1.0;
 	m_fSequenceFinished = FALSE;
 	m_flLastEventCheck = gpGlobals->time;
+
+	if ( !FClassnameIs( pev, "monster_furniture" ) )
+		pev->framerate = 1.0;
+}
+
+int CBaseAnimating :: GetSequenceActivityName( int iSequence )
+{
+	return ::GetSequenceActivityName( GET_MODEL_PTR( ENT( pev ) ), iSequence );
+}
+
+// Update gait speed and reset the animation clock in fuser2
+void CBaseAnimating :: ResetGaitSequenceInfo( void )
+{
+	void *pmodel = GET_MODEL_PTR( ENT( pev ) );
+
+	switch ( GetSequenceActivityName( pev->gaitsequence ) )
+	{
+	case ACT_WALK:
+	case ACT_RUN:
+	case ACT_WALK_HURT:
+	case ACT_RUN_HURT:
+	case ACT_WALK_SCARED:
+	case ACT_RUN_SCARED:
+	{
+		float flFrameRate;
+
+		GetGaitSequenceInfo( pmodel, pev, &flFrameRate, &m_flGroundSpeed );
+		break;
+	}
+	}
+
+	pev->fuser2 = gpGlobals->time;
+	m_flLastGaitEventCheck = gpGlobals->time;
 }
 
 
@@ -210,6 +261,13 @@ void CBaseAnimating :: GetAttachment ( int iAttachment, Vector &origin, Vector &
 	GET_ATTACHMENT( ENT(pev), iAttachment, origin, angles );
 }
 
+int CBaseAnimating::GetAttachmentCount( void )
+{
+	void *pmodel = GET_MODEL_PTR( pev ? ENT( pev ) : NULL );
+
+	return ( (studiohdr_t *) pmodel )->numattachments;
+}
+
 //=========================================================
 //=========================================================
 int CBaseAnimating :: FindTransition( int iEndingSequence, int iGoalSequence, int *piDir )
@@ -239,6 +297,11 @@ void CBaseAnimating :: GetAutomovement( Vector &origin, Vector &angles, float fl
 void CBaseAnimating :: SetBodygroup( int iGroup, int iValue )
 {
 	::SetBodygroup( GET_MODEL_PTR( ENT(pev) ), pev, iGroup, iValue );
+}
+
+int CBaseAnimating::GetBodygroupSubmodelCount( int iGroup )
+{
+	return GetBodygroupSubmodelCountInt( GET_MODEL_PTR( edict() ), iGroup );
 }
 
 int CBaseAnimating :: GetBodygroup( int iGroup )

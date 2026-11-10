@@ -22,6 +22,7 @@ extern void ClientKill( edict_t *pEntity );
 extern void ClientPutInServer( edict_t *pEntity );
 extern void ClientCommand( edict_t *pEntity );
 extern void ClientUserInfoChanged( edict_t *pEntity, char *infobuffer );
+extern int DispatchShouldCollide( edict_t *touched, edict_t *other );
 extern void ServerActivate( edict_t *pEdictList, int edictCount, int clientMax );
 extern void ServerDeactivate( void );
 extern void StartFrame( void );
@@ -31,6 +32,7 @@ extern void ParmsNewLevel( void );
 extern void ParmsChangeLevel( void );
 
 extern void ClientPrecache( void );
+extern void LinkUserMessages( void );
 
 extern const char *GetGameDescription( void );
 extern void PlayerCustomization( edict_t *pEntity, customization_t *pCust );
@@ -42,7 +44,7 @@ extern void SpectatorThink ( edict_t *pEntity );
 extern void Sys_Error( const char *error_string );
 
 extern void SetupVisibility( edict_t *pViewEntity, edict_t *pClient, unsigned char **pvs, unsigned char **pas );
-extern void	UpdateClientData ( const struct edict_s *ent, int sendweapons, struct clientdata_s *cd );
+extern void	UpdateClientData( const struct edict_s *ent, int sendweapons, struct clientdata_s *cd );
 extern int AddToFullPack( struct entity_state_s *state, int e, edict_t *ent, edict_t *host, int hostflags, int player, unsigned char *pSet );
 extern void CreateBaseline( int player, int eindex, struct entity_state_s *baseline, struct edict_s *entity, int playermodelindex, vec3_t player_mins, vec3_t player_maxs );
 extern void RegisterEncoders( void );

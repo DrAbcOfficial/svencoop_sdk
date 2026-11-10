@@ -35,7 +35,7 @@
 class CCycler : public CBaseMonster
 {
 public:
-	void GenericCyclerSpawn(char *szModel, Vector vecMin, Vector vecMax);
+	void GenericCyclerSpawn(const char *szModel, Vector vecMin, Vector vecMax);
 	virtual int	ObjectCaps( void ) { return (CBaseEntity :: ObjectCaps() | FCAP_IMPULSE_USE); }
 	int TakeDamage( entvars_t* pevInflictor, entvars_t* pevAttacker, float flDamage, int bitsDamageType );
 	void Spawn( void );
@@ -67,7 +67,7 @@ IMPLEMENT_SAVERESTORE( CCycler, CBaseMonster );
 class CGenericCycler : public CCycler
 {
 public:
-	void Spawn( void ) { GenericCyclerSpawn( (char *)STRING(pev->model), Vector(-16, -16, 0), Vector(16, 16, 72) ); }
+	void Spawn( void ) { GenericCyclerSpawn( STRING(pev->model), Vector(-16, -16, 0), Vector(16, 16, 72) ); }
 };
 LINK_ENTITY_TO_CLASS( cycler, CGenericCycler );
 
@@ -93,7 +93,7 @@ void CCyclerProbe :: Spawn( void )
 
 // Cycler member functions
 
-void CCycler :: GenericCyclerSpawn(char *szModel, Vector vecMin, Vector vecMax)
+void CCycler :: GenericCyclerSpawn(const char *szModel, Vector vecMin, Vector vecMax)
 {
 	if (!szModel || !*szModel)
 	{
@@ -103,7 +103,7 @@ void CCycler :: GenericCyclerSpawn(char *szModel, Vector vecMin, Vector vecMax)
 	}
 
 	pev->classname		= MAKE_STRING("cycler");
-	PRECACHE_MODEL( szModel );
+	PRECACHE_MODEL( (char*)szModel );
 	SET_MODEL(ENT(pev),	szModel);
 
 	CCycler::Spawn( );
@@ -310,11 +310,11 @@ class CWeaponCycler : public CBasePlayerWeapon
 public:
 	void Spawn( void );
 	int iItemSlot( void ) { return 1; }
-	int GetItemInfo(ItemInfo *p) {return 0; }
+	bool GetItemInfo(ItemInfo *p) {return 0; }
 
 	void PrimaryAttack( void );
 	void SecondaryAttack( void );
-	BOOL Deploy( void );
+	bool Deploy( void );
 	void Holster( int skiplocal = 0 );
 	int m_iszModel;
 	int m_iModel;
@@ -339,10 +339,10 @@ void CWeaponCycler::Spawn( )
 
 
 
-BOOL CWeaponCycler::Deploy( )
+bool CWeaponCycler::Deploy( )
 {
-	m_pPlayer->pev->viewmodel = m_iszModel;
-	m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 1.0;
+	m_hPlayer->pev->viewmodel = m_iszModel;
+	m_hPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 1.0;
 	SendWeaponAnim( 0 );
 	m_iClip = 0;
 	return TRUE;
@@ -351,7 +351,7 @@ BOOL CWeaponCycler::Deploy( )
 
 void CWeaponCycler::Holster( int skiplocal /* = 0 */ )
 {
-	m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 0.5;
+	m_hPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 0.5;
 }
 
 

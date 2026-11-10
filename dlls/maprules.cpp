@@ -29,8 +29,9 @@
 #include "maprules.h"
 #include "cbase.h"
 #include "player.h"
+#include "CStartInventory.h"
 
-class CRuleEntity : public CBaseEntity
+class CRuleEntity : public CBaseDelay
 {
 public:
 	void	Spawn( void );
@@ -72,7 +73,7 @@ void CRuleEntity::KeyValue( KeyValueData *pkvd )
 		pkvd->fHandled = TRUE;
 	}
 	else
-		CBaseEntity::KeyValue( pkvd );
+		CBaseDelay::KeyValue( pkvd );
 }
 
 BOOL CRuleEntity::CanFireForActivator( CBaseEntity *pActivator )
@@ -102,6 +103,97 @@ void CRulePointEntity::Spawn( void )
 	CRuleEntity::Spawn();
 	pev->frame			= 0;
 	pev->model			= 0;
+}
+
+class CGameSlotCounter : public CRulePointEntity
+{
+public:
+	void Spawn( void ) override;
+	void Think( void ) override;
+
+private:
+	void HitValue( void );
+};
+
+class CGamePlayerCounter : public CRulePointEntity
+{
+public:
+	void Spawn( void ) override;
+	void Use( CBaseEntity *activator, CBaseEntity *caller, USE_TYPE useType, float value ) override;
+};
+
+LINK_ENTITY_TO_CLASS( game_slot_counter, CGameSlotCounter );
+LINK_ENTITY_TO_CLASS( game_player_counter, CGamePlayerCounter );
+
+void CGameSlotCounter::Spawn( void )
+{
+	CRulePointEntity::Spawn();
+	SetThink( NULL );
+	pev->nextthink = gpGlobals->time;
+	pev->targetname = 0;
+}
+
+void CGameSlotCounter::HitValue( void )
+{
+	CBaseEntity *entity = NULL;
+
+	while ( ( entity = UTIL_FindEntityByTargetname( entity, STRING( pev->target ) ) ) != NULL )
+		entity->Use( NULL, NULL, USE_ON, 0 );
+}
+
+void CGameSlotCounter::Think( void )
+{
+	if ( (int) pev->health == gpGlobals->maxClients )
+		HitValue();
+
+	SetThink( NULL );
+	UTIL_Remove( this );
+}
+
+void CGamePlayerCounter::Spawn( void )
+{
+	CRulePointEntity::Spawn();
+}
+
+int CountConnectedPlayers( void )
+{
+	int count = 0;
+
+	for ( int index = 1; index <= gpGlobals->maxClients; ++index )
+	{
+		CBaseEntity *entity = UTIL_PlayerByIndex( index );
+
+		if ( !entity || !entity->IsPlayer() )
+			continue;
+
+		CBasePlayer *player = dynamic_cast<CBasePlayer *>( entity );
+
+		if ( player && player->IsConnected() )
+			++count;
+	}
+
+	return count;
+}
+
+void CGamePlayerCounter::Use( CBaseEntity *activator, CBaseEntity *caller, USE_TYPE useType, float value )
+{
+	pev->dmg = CountConnectedPlayers();
+
+	if ( pev->dmg == pev->frags )
+	{
+		CBaseEntity *entity = NULL;
+
+		while ( ( entity = UTIL_FindEntityByTargetname( entity, STRING( pev->target ) ) ) != NULL )
+			entity->Use( NULL, NULL, USE_ON, 0 );
+	}
+
+	if ( pev->dmg == pev->health )
+	{
+		CBaseEntity *entity = NULL;
+
+		while ( ( entity = UTIL_FindEntityByTargetname( entity, STRING( pev->netname ) ) ) != NULL )
+			entity->Use( NULL, NULL, USE_ON, 0 );
+	}
 }
 
 // 
@@ -217,6 +309,7 @@ void CGameEnd::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useT
 
 
 #define SF_ENVTEXT_ALLPLAYERS			0x0001
+#define SF_ENVTEXT_NO_CONSOLE_ECHO		0x0002
 
 
 class CGameText : public CRulePointEntity
@@ -320,19 +413,35 @@ void CGameText::KeyValue( KeyValueData *pkvd )
 void CGameText::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
 {
 	if ( !CanFireForActivator( pActivator ) )
+	{
+		SUB_UseTargets( pActivator, USE_TOGGLE, 0 );
 		return;
+	}
 
 	if ( MessageToAll() )
 	{
 		UTIL_HudMessageAll( m_textParms, MessageGet() );
+
+		if ( !( pev->spawnflags & SF_ENVTEXT_NO_CONSOLE_ECHO ) )
+			UTIL_ClientPrintAll( HUD_PRINTCONSOLE, "HUD-MSG: \"%s\"\n", MessageGet() );
+
+		ALERT( at_aiconsole, "HUD-MSG to all: \"%s\"\n", MessageGet() );
 	}
-	else
+	else if ( !pActivator || FNullEnt( pActivator->edict() ) )
 	{
-		if ( pActivator->IsNetClient() )
-		{
-			UTIL_HudMessage( pActivator, m_textParms, MessageGet() );
-		}
+		ALERT( at_console, "Game_text \"%s\" got no activator for activator-only message.\n", STRING( pev->targetname ) );
 	}
+	else if ( pActivator->IsNetClient() )
+	{
+		UTIL_HudMessage( pActivator, m_textParms, MessageGet() );
+
+		if ( !( pev->spawnflags & SF_ENVTEXT_NO_CONSOLE_ECHO ) )
+			ClientPrint( pActivator->pev, HUD_PRINTCONSOLE, "HUD-MSG: \"%s\"\n", MessageGet() );
+
+		ALERT( at_aiconsole, "HUD-MSG to \"%s\": \"%s\"\n", STRING( pActivator->pev->netname ), MessageGet() );
+	}
+
+	SUB_UseTargets( pActivator, USE_TOGGLE, 0 );
 }
 
 
@@ -552,6 +661,32 @@ void CGamePlayerZone::KeyValue( KeyValueData *pkvd )
 		CRuleBrushEntity::KeyValue( pkvd );
 }
 
+class CGameZonePlayerVolumeListener : public IPlayerInVolumeListener
+{
+public:
+	CGameZonePlayerVolumeListener( string_t inTarget, string_t outTarget, CBaseEntity *activator, USE_TYPE useType, float value )
+		: m_iszInTarget( inTarget ), m_iszOutTarget( outTarget ), m_pActivator( activator ), m_UseType( useType ), m_flValue( value )
+	{
+	}
+
+	virtual ~CGameZonePlayerVolumeListener() {}
+
+	virtual void PlayerDetected( bool inVolume, CBasePlayer *player )
+	{
+		string_t target = inVolume ? m_iszInTarget : m_iszOutTarget;
+
+		if ( target )
+			FireTargets( STRING( target ), player, m_pActivator, m_UseType, m_flValue );
+	}
+
+private:
+	string_t     m_iszInTarget;
+	string_t     m_iszOutTarget;
+	CBaseEntity *m_pActivator;
+	USE_TYPE     m_UseType;
+	float        m_flValue;
+};
+
 void CGamePlayerZone::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
 {
 	int playersInCount = 0;
@@ -560,42 +695,9 @@ void CGamePlayerZone::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TY
 	if ( !CanFireForActivator( pActivator ) )
 		return;
 
-	CBaseEntity *pPlayer = NULL;
+	CGameZonePlayerVolumeListener listener( m_iszInTarget, m_iszOutTarget, pActivator, useType, value );
 
-	for ( int i = 1; i <= gpGlobals->maxClients; i++ )
-	{
-		pPlayer = UTIL_PlayerByIndex( i );
-		if ( pPlayer )
-		{
-			TraceResult trace;
-			int			hullNumber;
-
-			hullNumber = human_hull;
-			if ( pPlayer->pev->flags & FL_DUCKING )
-			{
-				hullNumber = head_hull;
-			}
-
-			UTIL_TraceModel( pPlayer->pev->origin, pPlayer->pev->origin, hullNumber, edict(), &trace );
-
-			if ( trace.fStartSolid )
-			{
-				playersInCount++;
-				if ( m_iszInTarget )
-				{
-					FireTargets( STRING(m_iszInTarget), pPlayer, pActivator, useType, value );
-				}
-			}
-			else
-			{
-				playersOutCount++;
-				if ( m_iszOutTarget )
-				{
-					FireTargets( STRING(m_iszOutTarget), pPlayer, pActivator, useType, value );
-				}
-			}
-		}
-	}
+	UTIL_CountPlayersInBrushVolume( false, this, playersInCount, playersOutCount, &listener );
 
 	if ( m_iszInCount )
 	{
@@ -765,23 +867,30 @@ void CGameCounterSet::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TY
 // Flag: USE Only
 
 #define SF_PLAYEREQUIP_USEONLY			0x0001
+#define SF_PLAYEREQUIP_TARGET_FILTER	0x0002
+#define SF_PLAYEREQUIP_ACTIVATOR_ONLY	0x0004
+#define SF_PLAYEREQUIP_NON_EXCLUSIVE	0x0008
 #define MAX_EQUIP		32
 
 class CGamePlayerEquip : public CRulePointEntity
 {
 public:
-	void		KeyValue( KeyValueData *pkvd );
-	void		Touch( CBaseEntity *pOther );
-	void		Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
+	bool EquipOnSpawn( CBasePlayer *player );
+	void ReEquipPlayers( void );
+	void KeyValue( KeyValueData *pkvd );
+	void Touch( CBaseEntity *pOther );
+	void Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
 
-	inline BOOL	UseOnly( void ) { return (pev->spawnflags & SF_PLAYEREQUIP_USEONLY) ? TRUE : FALSE; }
+	inline BOOL UseOnly( void ) { return ( pev->spawnflags & SF_PLAYEREQUIP_USEONLY ) ? TRUE : FALSE; }
 
 private:
-
-	void		EquipPlayer( CBaseEntity *pPlayer );
+	void EquipPlayer( CBaseEntity *pPlayer, bool reEquip );
 
 	string_t	m_weaponNames[MAX_EQUIP];
 	int			m_weaponCount[MAX_EQUIP];
+
+	int m_iEquipMode;
+	int m_iInventoryMode;
 };
 
 LINK_ENTITY_TO_CLASS( game_player_equip, CGamePlayerEquip );
@@ -791,6 +900,23 @@ void CGamePlayerEquip::KeyValue( KeyValueData *pkvd )
 {
 	CRulePointEntity::KeyValue( pkvd );
 
+	if ( pkvd->fHandled )
+		return;
+
+	if ( !stricmp( pkvd->szKeyName, "equipmode" ) )
+	{
+		m_iEquipMode = atoi( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+		return;
+	}
+
+	if ( !stricmp( pkvd->szKeyName, "inventorymode" ) )
+	{
+		m_iInventoryMode = atoi( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+		return;
+	}
+
 	if ( !pkvd->fHandled )
 	{
 		for ( int i = 0; i < MAX_EQUIP; i++ )
@@ -799,11 +925,11 @@ void CGamePlayerEquip::KeyValue( KeyValueData *pkvd )
 			{
 				char tmp[128];
 
-				UTIL_StripToken( pkvd->szKeyName, tmp );
+				UTIL_StripToken( pkvd->szKeyName, tmp, sizeof( tmp ) );
 
 				m_weaponNames[i] = ALLOC_STRING(tmp);
 				m_weaponCount[i] = atoi(pkvd->szValue);
-				m_weaponCount[i] = max(1,m_weaponCount[i]);
+				m_weaponCount[i] = V_max(1,m_weaponCount[i]);
 				pkvd->fHandled = TRUE;
 				break;
 			}
@@ -811,6 +937,20 @@ void CGamePlayerEquip::KeyValue( KeyValueData *pkvd )
 	}
 }
 
+bool GamePlayerEquipOnSpawn( CBaseEntity *entity, CBasePlayer *player )
+{
+	return ( (CGamePlayerEquip *) entity )->EquipOnSpawn( player );
+}
+
+bool CGamePlayerEquip::EquipOnSpawn( CBasePlayer *player )
+{
+	if ( !CanFireForActivator( player ) || UseOnly() || m_iEquipMode != 0 )
+		return true;
+
+	Touch( player );
+
+	return ( pev->spawnflags & SF_PLAYEREQUIP_NON_EXCLUSIVE ) != 0;
+}
 
 void CGamePlayerEquip::Touch( CBaseEntity *pOther )
 {
@@ -820,38 +960,140 @@ void CGamePlayerEquip::Touch( CBaseEntity *pOther )
 	if ( UseOnly() )
 		return;
 
-	EquipPlayer( pOther );
+	EquipPlayer( pOther, false );
 }
 
-void CGamePlayerEquip::EquipPlayer( CBaseEntity *pEntity )
+void CGamePlayerEquip::EquipPlayer( CBaseEntity *entity, bool reEquip )
 {
-	CBasePlayer *pPlayer = NULL;
+	if ( m_iEquipMode != 0 )
+		return;
 
-	if ( pEntity->IsPlayer() )
-	{
-		pPlayer = (CBasePlayer *)pEntity;
-	}
+	CBasePlayer *pPlayer;
+
+	if ( entity->IsPlayer() )
+		pPlayer = (CBasePlayer *) entity;
+	else
+		pPlayer = NULL;
 
 	if ( !pPlayer )
 		return;
 
-	for ( int i = 0; i < MAX_EQUIP; i++ )
+	if ( ( pev->spawnflags & SF_PLAYEREQUIP_TARGET_FILTER ) && pev->target )
 	{
-		if ( !m_weaponNames[i] )
-			break;
-		for ( int j = 0; j < m_weaponCount[i]; j++ )
+		if ( !pPlayer->pev->targetname || !FStrEq( STRING( pev->target ), STRING( pPlayer->pev->targetname ) ) )
+			return;
+	}
+
+	if ( reEquip )
+	{
+		pPlayer->RemoveAllItems( false, true );
+		pPlayer->SetItemPickupTimes( gpGlobals->time );
+	}
+
+	for ( int i = 0; i < MAX_EQUIP && m_weaponNames[i]; ++i )
+	{
+		for ( int count = 0; count < m_weaponCount[i]; ++count )
+			pPlayer->GiveNamedItem( STRING(m_weaponNames[i]) );
+		}
+	}
+
+void CGamePlayerEquip::ReEquipPlayers( void )
+{
+	if ( m_iEquipMode != 0 )
+		return;
+
+	for ( int index = 1; index <= gpGlobals->maxClients; ++index )
+	{
+		CBasePlayer *player = (CBasePlayer *) UTIL_PlayerByIndex( index );
+
+		if ( !player )
+			continue;
+
+		if ( ( pev->spawnflags & SF_PLAYEREQUIP_TARGET_FILTER ) && pev->target )
 		{
- 			pPlayer->GiveNamedItem( STRING(m_weaponNames[i]) );
+			if ( !player->pev->targetname || !FStrEq( STRING( pev->target ), STRING( player->pev->targetname ) ) )
+				continue;
+		}
+
+		player->RemoveAllItems( false, true );
+		player->SetItemPickupTimes( gpGlobals->time );
+
+		for ( int item = 0; item < MAX_EQUIP && m_weaponNames[item]; ++item )
+		{
+			for ( int count = 0; count < m_weaponCount[item]; ++count )
+				player->GiveNamedItem( STRING( m_weaponNames[item] ) );
 		}
 	}
 }
 
-
 void CGamePlayerEquip::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
 {
-	EquipPlayer( pActivator );
-}
+	if ( m_iEquipMode == 0 )
+	{
+		if ( !pActivator )
+			return;
 
+		if ( pev->spawnflags & SF_PLAYEREQUIP_ACTIVATOR_ONLY )
+		{
+			if ( pActivator->IsPlayer() )
+				EquipPlayer( pActivator, true );
+			else
+				ReEquipPlayers();
+}
+		else
+			EquipPlayer( pActivator, false );
+
+		return;
+	}
+
+	if ( m_iEquipMode != 1 )
+		return;
+
+	for ( int index = 0; index < MAX_EQUIP && m_weaponNames[index]; ++index )
+	{
+		const char *name = STRING( m_weaponNames[index] );
+		int count = m_weaponCount[index];
+
+		unsigned long amount;
+
+		if ( count < 0 )
+			amount = 0UL - (unsigned long) count;
+		else
+			amount = (unsigned long) count;
+
+		switch ( m_iInventoryMode )
+		{
+			case 0:
+				if ( count > 0 )
+					CStartInventory::GetInstance()->Set( name, count );
+				break;
+
+			case 1:
+				CStartInventory::GetInstance()->Add( name, amount, count >= 0 );
+				break;
+
+			case 2:
+				CStartInventory::GetInstance()->Add( name, amount, count < 0 );
+				break;
+
+			case 3:
+				CStartInventory::GetInstance()->Remove( name );
+				break;
+
+			case 4:
+				CStartInventory::GetInstance()->Restock( name, amount );
+				break;
+
+			case 5:
+				CStartInventory::GetInstance()->Limit( name, amount );
+				break;
+
+			default:
+				ALERT( at_error, "game_player_equip(%s): unknown inventory mode %d!\n", STRING( pev->targetname ), m_iInventoryMode );
+				break;
+		}
+	}
+}
 
 //
 // CGamePlayerTeam / game_player_team	-- Changes the team of the player who fired it
@@ -916,3 +1158,74 @@ void CGamePlayerTeam::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TY
 }
 
 
+class CGamePlayerRespawnZone : public CRuleBrushEntity
+{
+public:
+	void KeyValue( KeyValueData *data );
+	void Use( CBaseEntity *activator, CBaseEntity *caller, USE_TYPE useType, float value );
+	int Save( CSave &save );
+	int Restore( CRestore &restore );
+
+	static TYPEDESCRIPTION m_SaveData[];
+
+private:
+	int m_iZoneType;
+};
+
+LINK_ENTITY_TO_CLASS( player_respawn_zone, CGamePlayerRespawnZone );
+
+TYPEDESCRIPTION CGamePlayerRespawnZone::m_SaveData[] =
+{
+	DEFINE_FIELD( CGamePlayerRespawnZone, m_iZoneType, FIELD_INTEGER ),
+};
+
+IMPLEMENT_SAVERESTORE( CGamePlayerRespawnZone, CRuleBrushEntity );
+
+void CGamePlayerRespawnZone::KeyValue( KeyValueData *data )
+{
+	if ( FStrEq( data->szKeyName, "zonetype" ) )
+	{
+		m_iZoneType = atoi( data->szValue );
+		data->fHandled = TRUE;
+	}
+	else
+	{
+		CRuleBrushEntity::KeyValue( data );
+	}
+}
+
+void CGamePlayerRespawnZone::Use( CBaseEntity *activator, CBaseEntity *caller, USE_TYPE useType, float value )
+{
+	if ( !CanFireForActivator( activator ) )
+		return;
+
+	for ( int index = 1; index <= gpGlobals->maxClients; ++index )
+	{
+		CBaseEntity *entity = UTIL_PlayerByIndex( index );
+
+		if ( !entity )
+			continue;
+
+		TraceResult trace;
+		int hull = ( entity->pev->flags & FL_DUCKING ) ? head_hull : human_hull;
+
+		trace.vecEndPos = g_vecZero;
+		trace.vecPlaneNormal = g_vecZero;
+
+		UTIL_TraceModel( entity->pev->origin, entity->pev->origin, hull, edict(), &trace );
+
+		int respawnDelay = (int) CVAR_GET_FLOAT( "mp_respawndelay" );
+
+		if ( trace.fStartSolid ? m_iZoneType == 0 : m_iZoneType != 0 )
+			continue;
+
+		CBasePlayer *player = (CBasePlayer *) entity;
+		EntityHandle<CBaseEntity> point = g_pGameRules->GetPlayerSpawnSpot( player );
+
+		if ( respawnDelay > 0 )
+			player->m_flRespawnDelayTime -= (float) respawnDelay;
+
+		if ( !point )
+			ALERT( at_console, "Error: player_respawn_zone: could not find any spawnspot in map!" );
+	}
+}

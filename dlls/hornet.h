@@ -36,7 +36,7 @@ public:
 	void Spawn( void );
 	void Precache( void );
 	int	 Classify ( void );
-	int  IRelationship ( CBaseEntity *pTarget );
+	int  IRelationship ( CBaseEntity *pTarget, bool ignoreNoTarget = false );
 	virtual int		Save( CSave &save );
 	virtual int		Restore( CRestore &restore );
 	static	TYPEDESCRIPTION m_SaveData[];

@@ -1,9 +1,9 @@
 /***
 *
 *	Copyright (c) 1996-2001, Valve LLC. All rights reserved.
-*	
-*	This product contains software technology licensed from Id 
-*	Software, Inc. ("Id Technology").  Id Technology (c) 1996 Id Software, Inc. 
+*
+*	This product contains software technology licensed from Id
+*	Software, Inc. ("Id Technology").  Id Technology (c) 1996 Id Software, Inc.
 *	All Rights Reserved.
 *
 *   Use, distribution, and modification of this source code and/or resulting
@@ -20,22 +20,27 @@
 #include "player.h"
 #include "monsters.h"
 #include "weapons.h"
-#include "nodes.h"
 #include "effects.h"
-#include "customentity.h"
 #include "gamerules.h"
+#include "CClassicMode.h"
+#include "egon.h"
+#include "portal_trace.h"
 
-#define	EGON_PRIMARY_VOLUME		450
-#define EGON_BEAM_SPRITE		"sprites/xbeam1.spr"
-#define EGON_FLARE_SPRITE		"sprites/XSpark1.spr"
-#define EGON_SOUND_OFF			"weapons/egon_off1.wav"
-#define EGON_SOUND_RUN			"weapons/egon_run3.wav"
-#define EGON_SOUND_STARTUP		"weapons/egon_windup2.wav"
+#include "playerammo.h"
+#include "customentity.h"
 
-#define EGON_SWITCH_NARROW_TIME			0.75			// Time it takes to switch fire modes
-#define EGON_SWITCH_WIDE_TIME			1.5
+extern cvar_t sk_plr_egon_wide;
 
-enum egon_e {
+#define EGON_PRIMARY_VOLUME 450
+#define EGON_BEAM_SPRITE "sprites/xbeam1.spr"
+#define EGON_FLARE_SPRITE "sprites/XSpark1.spr"
+#define EGON_SOUND_OFF "weapons/egon_off1.wav"
+#define EGON_SOUND_RUN "weapons/egon_run3.wav"
+#define EGON_SOUND_STARTUP "weapons/egon_windup2.wav"
+#define EGON_BEAM_FLAGS BEAM_FSINE
+
+enum egon_e
+{
 	EGON_IDLE1 = 0,
 	EGON_FIDGET1,
 	EGON_ALTFIREON,
@@ -51,77 +56,54 @@ enum egon_e {
 
 LINK_ENTITY_TO_CLASS( weapon_egon, CEgon );
 
-void CEgon::Spawn( )
+void CEgon::Spawn( void )
 {
 	Precache( );
-	m_iId = WEAPON_EGON;
-	SET_MODEL(ENT(pev), "models/w_egon.mdl");
+
+	const char *model;
+
+	if ( CClassicMode::GetInstance()->IsEnabled() )
+		model = "models/hlclassic/w_egon.mdl";
+	else
+		model = "models/w_egon.mdl";
+
+	SetModel_Intercept( edict(), GetW_Model( model ) );
 
 	m_iDefaultAmmo = EGON_DEFAULT_GIVE;
-
-	FallInit();// get ready to fall down.
+	m_iId = WEAPON_EGON;
+	m_flCustomDmg = pev->dmg;
+	CBasePhysicsObject::Spawn();// get ready to fall down.
 }
-
 
 void CEgon::Precache( void )
 {
-	PRECACHE_MODEL("models/w_egon.mdl");
-	PRECACHE_MODEL("models/v_egon.mdl");
-	PRECACHE_MODEL("models/p_egon.mdl");
+	PrecacheCustomModels();
 
-	PRECACHE_MODEL("models/w_9mmclip.mdl");
-	PRECACHE_SOUND("items/9mmclip1.wav");
+	bool classic = CClassicMode::GetInstance()->IsEnabled();
 
-	PRECACHE_SOUND( EGON_SOUND_OFF );
-	PRECACHE_SOUND( EGON_SOUND_RUN );
-	PRECACHE_SOUND( EGON_SOUND_STARTUP );
-
-	PRECACHE_MODEL( EGON_BEAM_SPRITE );
-	PRECACHE_MODEL( EGON_FLARE_SPRITE );
-
-	PRECACHE_SOUND ("weapons/357_cock1.wav");
-
-	m_usEgonFire = PRECACHE_EVENT ( 1, "events/egon_fire.sc" );
-	m_usEgonStop = PRECACHE_EVENT ( 1, "events/egon_stop.sc" );
+	UTIL_PrecacheModel( this, classic ? "models/hlclassic/w_egon.mdl" : "models/w_egon.mdl");
+	UTIL_PrecacheModel( this, classic ? "models/hlclassic/v_egon.mdl" : "models/v_egon.mdl");
+	UTIL_PrecacheModel( this, classic ? "models/hlclassic/p_egon.mdl" : "models/p_egon.mdl");
+	UTIL_PrecacheModel( this, EGON_BEAM_SPRITE );
+	UTIL_PrecacheModel( this, EGON_FLARE_SPRITE );
+	PrecacheSound_Intercept( this, "items/9mmclip1.wav");
+	PrecacheSound_Intercept( this, EGON_SOUND_OFF );
+	PrecacheSound_Intercept( this, EGON_SOUND_RUN );
+	PrecacheSound_Intercept( this, EGON_SOUND_STARTUP );
+	PrecacheSound_Intercept( this, "weapons/357_cock1.wav");
 }
 
-
-BOOL CEgon::Deploy( void )
-{
-	m_deployed = FALSE;
-	m_fireState = FIRE_OFF;
-	return DefaultDeploy( "models/v_egon.mdl", "models/p_egon.mdl", EGON_DRAW, "egon" );
-}
-
-int CEgon::AddToPlayer( CBasePlayer *pPlayer )
-{
-	if ( CBasePlayerWeapon::AddToPlayer( pPlayer ) )
-	{
-		MESSAGE_BEGIN( MSG_ONE, gmsgWeapPickup, NULL, pPlayer->pev );
-			WRITE_BYTE( m_iId );
-		MESSAGE_END();
-		return TRUE;
-	}
-	return FALSE;
-}
-
-
-
-void CEgon::Holster( int skiplocal /* = 0 */ )
-{
-	m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 0.5;
-	SendWeaponAnim( EGON_HOLSTER );
-
-    EndAttack();
-}
-
-int CEgon::GetItemInfo(ItemInfo *p)
+bool CEgon::GetItemInfo(ItemInfo *p)
 {
 	p->pszName = STRING(pev->classname);
 	p->pszAmmo1 = "uranium";
 	p->iMaxAmmo1 = URANIUM_MAX_CARRY;
+	p->pszAmmo1Entity = "ammo_gaussclip";
+	p->iAmmo1Drop = 20;
 	p->pszAmmo2 = NULL;
 	p->iMaxAmmo2 = -1;
+	p->pszAmmo2Entity = NULL;
+	p->iAmmo2Drop = AMMO_DROP_NONE;
 	p->iMaxClip = WEAPON_NOCLIP;
 	p->iSlot = 3;
 	p->iPosition = 2;
@@ -129,440 +111,389 @@ int CEgon::GetItemInfo(ItemInfo *p)
 	p->iFlags = 0;
 	p->iWeight = EGON_WEIGHT;
 
-	return 1;
+	return true;
 }
 
-#define EGON_PULSE_INTERVAL			0.1
-#define EGON_DISCHARGE_INTERVAL		0.1
+bool CEgon::AddToPlayer( CBasePlayer *pPlayer )
+{
+	if ( !CBasePlayerWeapon::AddToPlayer( pPlayer ) )
+		return false;
+
+	AddToPlayerMessage();
+		return TRUE;
+	}
+
+bool CEgon::Deploy( void )
+{
+	m_deployed = FALSE;
+
+	bool classic = CClassicMode::GetInstance()->IsEnabled();
+	return DefaultDeploy( GetV_Model( classic ? "models/hlclassic/v_egon.mdl" : "models/v_egon.mdl" ),
+	                      GetP_Model( classic ? "models/hlclassic/p_egon.mdl" : "models/p_egon.mdl" ), EGON_DRAW, "egon" );
+}
+
+void CEgon::Holster( int skiplocal /* = 0 */ )
+{
+	m_fInReload = false;
+	m_hPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 0.5;
+
+	if ( m_fireState != FIRE_OFF )
+		EndAttack();
+
+	m_hPlayer->pev->viewmodel = 0;
+}
 
 float CEgon::GetPulseInterval( void )
 {
-	return EGON_PULSE_INTERVAL;
+	return 0.1f;
 }
 
 float CEgon::GetDischargeInterval( void )
 {
-	return EGON_DISCHARGE_INTERVAL;
+	g_pGameRules->IsMultiplayer();
+	return 0.1f;
+}
+
+float CEgon::GetTimeDist( void )
+{
+	float time = ( pev->dmgtime - gpGlobals->time ) / GetDischargeInterval();
+
+	if ( time < 0 )
+		time = 0;
+	else if ( time > 1 )
+		time = 1;
+
+	return 1.0f - time;
 }
 
 BOOL CEgon::HasAmmo( void )
 {
-	if ( m_pPlayer->ammo_uranium <= 0 )
-		return FALSE;
-
-	return TRUE;
+	return m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType] > 0;
 }
 
 void CEgon::UseAmmo( int count )
 {
-	if ( m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] >= count )
-		m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] -= count;
+	if ( m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType] < count )
+		m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType] = 0;
 	else
-		m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] = 0;
+		m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType] -= count;
+}
+
+void CEgon::PrimaryAttack( void )
+{
+	Attack();
+
+}
+
+void CEgon::SecondaryAttack( void )
+{
+	WeaponIdle();
+}
+
+void CEgon::TertiaryAttack( void )
+{
+	WeaponIdle();
 }
 
 void CEgon::Attack( void )
 {
 	// don't fire underwater
-	if ( m_pPlayer->pev->waterlevel == 3 )
+	if ( m_hPlayer->pev->waterlevel == 3 )
 	{
-		
-		if ( m_fireState != FIRE_OFF || m_pBeam )
-		{
-			EndAttack();
-		}
+
+		if ( m_Beams.empty() )
+			PlayEmptySound();
 		else
-		{
-			PlayEmptySound( );
-		}
+			EndAttack();
+
 		return;
 	}
 
-	UTIL_MakeVectors( m_pPlayer->pev->v_angle + m_pPlayer->pev->punchangle );
+	UTIL_MakeVectors( m_hPlayer->pev->v_angle + m_hPlayer->pev->punchangle );
 	Vector vecAiming = gpGlobals->v_forward;
-	Vector vecSrc	 = m_pPlayer->GetGunPosition( );
+	Vector vecSrc	 = m_hPlayer->GetGunPosition( );
 
-	int flags;
-#if defined( CLIENT_WEAPONS )
-	flags = FEV_NOTHOST;
-#else
-	flags = 0;
-#endif
-
-	switch( m_fireState )
+	if ( m_fireState == FIRE_OFF )
 	{
-		case FIRE_OFF:
-		{
 			if ( !HasAmmo() )
 			{
-				m_flNextPrimaryAttack = m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 0.25;
+				m_flNextPrimaryAttack = m_flNextSecondaryAttack = gpGlobals->time + 0.25;
 				PlayEmptySound( );
 				return;
 			}
 
-			m_flAmmoUseTime = gpGlobals->time;// start using ammo ASAP.
+			m_flAmmoUseTime = gpGlobals->time;
+		SendWeaponAnim( EGON_FIRE1 + RANDOM_LONG( 0, 3 ), 0, 0 );
 
-			PLAYBACK_EVENT_FULL( flags, m_pPlayer->edict(), m_usEgonFire, 0.0, (float *)&g_vecZero, (float *)&g_vecZero, 0.0, 0.0, m_fireState, m_fireMode, 1, 0 );
-						
 			m_shakeTime = 0;
 
-			m_pPlayer->m_iWeaponVolume = EGON_PRIMARY_VOLUME;
-			m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 0.1;
-			pev->fuser1	= UTIL_WeaponTimeBase() + 2;
+			m_hPlayer->m_iWeaponVolume = EGON_PRIMARY_VOLUME;
+			m_flTimeWeaponIdle = gpGlobals->time + 0.1;
+		m_shootTime = gpGlobals->time + 2.0f;
+		EMIT_SOUND_DYN( m_hPlayer->edict(), CHAN_WEAPON, EGON_SOUND_STARTUP, 0.98f, ATTN_NORM,
+		                0, 125, 0, false, g_vecZero );
 
-			pev->dmgtime = gpGlobals->time + GetPulseInterval();
+			pev->dmgtime = gpGlobals->time + GetDischargeInterval();
 			m_fireState = FIRE_CHARGE;
 		}
-		break;
-
-		case FIRE_CHARGE:
-		{
+	else if ( m_fireState == FIRE_CHARGE )
+	{
 			Fire( vecSrc, vecAiming );
-			m_pPlayer->m_iWeaponVolume = EGON_PRIMARY_VOLUME;
-		
-			if ( pev->fuser1 <= UTIL_WeaponTimeBase() )
-			{
-				PLAYBACK_EVENT_FULL( flags, m_pPlayer->edict(), m_usEgonFire, 0, (float *)&g_vecZero, (float *)&g_vecZero, 0.0, 0.0, m_fireState, m_fireMode, 0, 0 );
-				pev->fuser1 = 1000;
+			m_hPlayer->m_iWeaponVolume = EGON_PRIMARY_VOLUME;
+
+			if ( m_shootTime != 0 && gpGlobals->time > m_shootTime )
+		{
+			EMIT_SOUND_DYN( m_hPlayer->edict(), CHAN_STATIC, EGON_SOUND_RUN, 0.98f, ATTN_NORM, 0, 125, 0, false, g_vecZero );
+			m_shootTime = 0;
 			}
 
 			if ( !HasAmmo() )
 			{
 				EndAttack();
-				m_flNextPrimaryAttack = m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 1.0;
+			m_fireState = FIRE_OFF;
+			m_flNextPrimaryAttack = m_flNextSecondaryAttack = gpGlobals->time + 1.0;
 			}
 
 		}
-		break;
-	}
-}
 
-void CEgon::PrimaryAttack( void )
-{
-	m_fireMode = FIRE_WIDE;
-	Attack();
-
+	if ( m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 )
+		m_hPlayer->SetSuitUpdate( "!HEV_AMO0", FALSE, 0 );
 }
 
 void CEgon::Fire( const Vector &vecOrigSrc, const Vector &vecDir )
 {
-	Vector vecDest = vecOrigSrc + vecDir * 2048;
-	edict_t		*pentIgnore;
-	TraceResult tr;
+	PortalTraceResult tr;
 
-	pentIgnore = m_pPlayer->edict();
-	Vector tmpSrc = vecOrigSrc + gpGlobals->v_up * -8 + gpGlobals->v_right * 3;
-
-	// ALERT( at_console, "." );
-	
-	UTIL_TraceLine( vecOrigSrc, vecDest, dont_ignore_monsters, pentIgnore, &tr );
+	UTIL_TracePortal( vecOrigSrc, vecDir, 2048, dont_ignore_monsters, dont_ignore_glass,
+	                  m_hPlayer->edict(), m_hPlayer, &tr, NULL );
 
 	if (tr.fAllSolid)
-		return;
-
-#ifndef CLIENT_DLL
-	CBaseEntity *pEntity = CBaseEntity::Instance(tr.pHit);
-
-	if (pEntity == NULL)
-		return;
-
-	if ( g_pGameRules->IsMultiplayer() )
 	{
-		if ( m_pSprite && pEntity->pev->takedamage )
-		{
-			m_pSprite->pev->effects &= ~EF_NODRAW;
-		}
-		else if ( m_pSprite )
-		{
-			m_pSprite->pev->effects |= EF_NODRAW;
-		}
+		DestroyEffect();
+		return;
 	}
 
+	UpdateEffect( tr );
 
-#endif
+	CBaseEntity *pEntity = CBaseEntity::Instance(tr.pHit);
 
-	float timedist;
+	if ( !( gpGlobals->time > pev->dmgtime ) )
+		return;
 
-	switch ( m_fireMode )
-	{
-	case FIRE_NARROW:
-#ifndef CLIENT_DLL
-		if ( pev->dmgtime < gpGlobals->time )
-		{
-			// Narrow mode only does damage to the entity it hits
-			ClearMultiDamage();
-			if (pEntity->pev->takedamage)
-			{
-				pEntity->TraceAttack( m_pPlayer->pev, gSkillData.plrDmgEgonNarrow, vecDir, &tr, DMG_ENERGYBEAM );
-			}
-			ApplyMultiDamage(m_pPlayer->pev, m_pPlayer->pev);
+	float damage = tr.m_flScale * ( m_flCustomDmg > 0.0f ? m_flCustomDmg * 2.4f : sk_plr_egon_wide.value );
 
-			if ( g_pGameRules->IsMultiplayer() )
-			{
-				// multiplayer uses 1 ammo every 1/10th second
-				if ( gpGlobals->time >= m_flAmmoUseTime )
-				{
-					UseAmmo( 1 );
-					m_flAmmoUseTime = gpGlobals->time + 0.1;
-				}
-			}
-			else
-			{
-				// single player, use 3 ammo/second
-				if ( gpGlobals->time >= m_flAmmoUseTime )
-				{
-					UseAmmo( 1 );
-					m_flAmmoUseTime = gpGlobals->time + 0.166;
-				}
-			}
+	ClearMultiDamage();
 
-			pev->dmgtime = gpGlobals->time + GetPulseInterval();
-		}
-#endif
-		timedist = ( pev->dmgtime - gpGlobals->time ) / GetPulseInterval();
-		break;
-	
-	case FIRE_WIDE:
-#ifndef CLIENT_DLL
-		if ( pev->dmgtime < gpGlobals->time )
-		{
-			// wide mode does damage to the ent, and radius damage
-			ClearMultiDamage();
-			if (pEntity->pev->takedamage)
-			{
-				pEntity->TraceAttack( m_pPlayer->pev, gSkillData.plrDmgEgonWide, vecDir, &tr, DMG_ENERGYBEAM | DMG_ALWAYSGIB);
-			}
-			ApplyMultiDamage(m_pPlayer->pev, m_pPlayer->pev);
+	if ( pEntity && pEntity->pev->takedamage )
+		pEntity->TraceAttack( m_hPlayer->pev, damage, tr.m_vecDirection, &tr, DMG_ENERGYBEAM | DMG_ALWAYSGIB );
 
-			if ( g_pGameRules->IsMultiplayer() )
-			{
-				// radius damage a little more potent in multiplayer.
-				::RadiusDamage( tr.vecEndPos, pev, m_pPlayer->pev, gSkillData.plrDmgEgonWide/4, 128, CLASS_NONE, DMG_ENERGYBEAM | DMG_BLAST | DMG_ALWAYSGIB );
-			}
+	ApplyMultiDamage(m_hPlayer->pev, m_hPlayer->pev);
 
-			if ( !m_pPlayer->IsAlive() )
+			if ( tr.flFraction < 1.0f )
+		::RadiusDamage( tr.vecEndPos, pev, m_hPlayer->pev, damage * 0.25f, 128, CLASS_NONE, DMG_ENERGYBEAM | DMG_BLAST | DMG_ALWAYSGIB );
+
+	if ( !m_hPlayer->IsAlive() )
 				return;
 
-			if ( g_pGameRules->IsMultiplayer() )
-			{
-				//multiplayer uses 5 ammo/second
-				if ( gpGlobals->time >= m_flAmmoUseTime )
+	if ( gpGlobals->time >= m_flAmmoUseTime )
 				{
 					UseAmmo( 1 );
 					m_flAmmoUseTime = gpGlobals->time + 0.2;
 				}
-			}
-			else
-			{
-				// Wide mode uses 10 charges per second in single player
-				if ( gpGlobals->time >= m_flAmmoUseTime )
-				{
-					UseAmmo( 1 );
-					m_flAmmoUseTime = gpGlobals->time + 0.1;
-				}
-			}
+
+	if ( tr.flFraction < 1.0f && gpGlobals->time > m_shakeTime )
+	{
+		UTIL_ScreenShake( tr.vecEndPos, 5, 150, 0.75f, 250 );
+		m_shakeTime = gpGlobals->time + 1.5f;
+	}
 
 			pev->dmgtime = gpGlobals->time + GetDischargeInterval();
-			if ( m_shakeTime < gpGlobals->time )
-			{
-				UTIL_ScreenShake( tr.vecEndPos, 5.0, 150.0, 0.75, 250.0 );
-				m_shakeTime = gpGlobals->time + 1.5;
-			}
+}
+
+void CEgon::CreateBeams( unsigned int count )
+{
+	while ( m_Beams.size() < count )
+	{
+		CBeam *beam = CBeam::BeamCreate( EGON_BEAM_SPRITE, 40 );
+
+		if ( m_Beams.empty() )
+		{
+			beam->PointEntInit( pev->origin, m_hPlayer->entindex() );
+			beam->SetEndAttachment( 1 );
 		}
-#endif
-		timedist = ( pev->dmgtime - gpGlobals->time ) / GetDischargeInterval();
-		break;
-	}
-
-	if ( timedist < 0 )
-		timedist = 0;
-	else if ( timedist > 1 )
-		timedist = 1;
-	timedist = 1-timedist;
-
-	UpdateEffect( tmpSrc, tr.vecEndPos, timedist );
-}
-
-
-void CEgon::UpdateEffect( const Vector &startPoint, const Vector &endPoint, float timeBlend )
-{
-#ifndef CLIENT_DLL
-	if ( !m_pBeam )
-	{
-		CreateEffect();
-	}
-
-	m_pBeam->SetStartPos( endPoint );
-	m_pBeam->SetBrightness( 255 - (timeBlend*180) );
-	m_pBeam->SetWidth( 40 - (timeBlend*20) );
-
-	if ( m_fireMode == FIRE_WIDE )
-		m_pBeam->SetColor( 30 + (25*timeBlend), 30 + (30*timeBlend), 64 + 80*ffabs(sin(gpGlobals->time*10)) );
-	else
-		m_pBeam->SetColor( 60 + (25*timeBlend), 120 + (30*timeBlend), 64 + 80*ffabs(sin(gpGlobals->time*10)) );
-
-
-	UTIL_SetOrigin( m_pSprite->pev, endPoint );
-	m_pSprite->pev->frame += 8 * gpGlobals->frametime;
-	if ( m_pSprite->pev->frame > m_pSprite->Frames() )
-		m_pSprite->pev->frame = 0;
-
-	m_pNoise->SetStartPos( endPoint );
-
-#endif
-
-}
-
-void CEgon::CreateEffect( void )
-{
-
-#ifndef CLIENT_DLL
-	DestroyEffect();
-
-	m_pBeam = CBeam::BeamCreate( EGON_BEAM_SPRITE, 40 );
-	m_pBeam->PointEntInit( pev->origin, m_pPlayer->entindex() );
-	m_pBeam->SetFlags( BEAM_FSINE );
-	m_pBeam->SetEndAttachment( 1 );
-	m_pBeam->pev->spawnflags |= SF_BEAM_TEMPORARY;	// Flag these to be destroyed on save/restore or level transition
-	m_pBeam->pev->flags |= FL_SKIPLOCALHOST;
-	m_pBeam->pev->owner = m_pPlayer->edict();
-
-	m_pNoise = CBeam::BeamCreate( EGON_BEAM_SPRITE, 55 );
-	m_pNoise->PointEntInit( pev->origin, m_pPlayer->entindex() );
-	m_pNoise->SetScrollRate( 25 );
-	m_pNoise->SetBrightness( 100 );
-	m_pNoise->SetEndAttachment( 1 );
-	m_pNoise->pev->spawnflags |= SF_BEAM_TEMPORARY;
-	m_pNoise->pev->flags |= FL_SKIPLOCALHOST;
-	m_pNoise->pev->owner = m_pPlayer->edict();
-
-	m_pSprite = CSprite::SpriteCreate( EGON_FLARE_SPRITE, pev->origin, FALSE );
-	m_pSprite->pev->scale = 1.0;
-	m_pSprite->SetTransparency( kRenderGlow, 255, 255, 255, 255, kRenderFxNoDissipation );
-	m_pSprite->pev->spawnflags |= SF_SPRITE_TEMPORARY;
-	m_pSprite->pev->flags |= FL_SKIPLOCALHOST;
-	m_pSprite->pev->owner = m_pPlayer->edict();
-
-	if ( m_fireMode == FIRE_WIDE )
-	{
-		m_pBeam->SetScrollRate( 50 );
-		m_pBeam->SetNoise( 20 );
-		m_pNoise->SetColor( 50, 50, 255 );
-		m_pNoise->SetNoise( 8 );
-	}
-	else
-	{
-		m_pBeam->SetScrollRate( 110 );
-		m_pBeam->SetNoise( 5 );
-		m_pNoise->SetColor( 80, 120, 255 );
-		m_pNoise->SetNoise( 2 );
-	}
-#endif
-
-}
-
-
-void CEgon::DestroyEffect( void )
-{
-
-#ifndef CLIENT_DLL
-	if ( m_pBeam )
-	{
-		UTIL_Remove( m_pBeam );
-		m_pBeam = NULL;
-	}
-	if ( m_pNoise )
-	{
-		UTIL_Remove( m_pNoise );
-		m_pNoise = NULL;
-	}
-	if ( m_pSprite )
-	{
-		if ( m_fireMode == FIRE_WIDE )
-			m_pSprite->Expand( 10, 500 );
 		else
-			UTIL_Remove( m_pSprite );
-		m_pSprite = NULL;
-	}
-#endif
+		{
+			beam->PointsInit( pev->origin, pev->origin );
+		}
 
+		beam->SetFlags( EGON_BEAM_FLAGS );
+		beam->pev->spawnflags |= SF_BEAM_TEMPORARY;
+		beam->SetScrollRate( 50 );
+		beam->SetNoise( 20 );
+
+		CEntityHandle<CBeam> handle;
+
+		handle = beam;
+		m_Beams.push_back( handle );
+	}
+
+	while ( m_Noise.size() < count )
+	{
+		CBeam *beam = CBeam::BeamCreate( EGON_BEAM_SPRITE, 55 );
+
+		if ( m_Noise.empty() )
+		{
+			beam->PointEntInit( pev->origin, m_hPlayer->entindex() );
+			beam->SetEndAttachment( 1 );
+		}
+		else
+		{
+			beam->PointsInit( pev->origin, pev->origin );
+		}
+
+		beam->SetScrollRate( 25 );
+		beam->SetBrightness( 150 );
+		beam->pev->spawnflags |= SF_BEAM_TEMPORARY;
+		beam->SetColor( 80, 80, 255 );
+		beam->SetNoise( 8 );
+
+		CEntityHandle<CBeam> handle;
+
+		handle = beam;
+		m_Noise.push_back( handle );
+	}
+
+	if ( count && !m_Sprite )
+	{
+		m_Sprite = CSprite::SpriteCreate( EGON_FLARE_SPRITE, pev->origin, FALSE );
+		m_Sprite->SetScale( 1.0f );
+		m_Sprite->SetTransparency( kRenderGlow, 255, 255, 255, 255, kRenderFxNoDissipation );
+		m_Sprite->pev->spawnflags |= SF_SPRITE_TEMPORARY;
+	}
 }
 
+void CEgon::DestroyEffect( unsigned int count )
+{
+	while ( count < m_Beams.size() )
+	{
+		UTIL_Remove( m_Beams.back() );
+		m_Beams.pop_back();
+	}
 
+	while ( count < m_Noise.size() )
+	{
+		UTIL_Remove( m_Noise.back() );
+		m_Noise.pop_back();
+	}
+	if ( count == 0 && m_Sprite )
+	{
+		m_Sprite->Expand( 6, 550 );
+		m_Sprite = NULL;
+	}
+}
+
+void CEgon::UpdateEffect( PortalTraceResult &trace )
+{
+	unsigned int count = (unsigned int) trace.m_Steps.size();
+
+	CreateBeams( count );
+	DestroyEffect( count );
+
+	float blend = GetTimeDist();
+
+	for ( unsigned int i = 0; i < count; ++i )
+	{
+		PortalTraceStep *step = trace.m_Steps[i];
+		CBeam *beam = m_Beams[step->m_iStep];
+
+		if ( beam )
+		{
+			beam->SetStartPos( step->m_vecEnd );
+
+			if ( step->m_iStep > 0 )
+				beam->SetEndPos( step->m_vecStart );
+
+			beam->SetBrightness( (int) ( 255 - blend *180) );
+			beam->SetWidth( (int) ( ( 40 - blend * 20 ) * step->m_flScale ) );
+			beam->SetNoise( (int) ( (float) sqrt( (double) step->m_flScale ) *20) );
+			beam->SetColor( (int) ( blend * 32 + 64 ), (int) ( blend * 38 + 64 ),
+			                (int) ( fabs( (float) sin(gpGlobals->time* 10.0f ) ) * 92 + 100 ) );
+		}
+
+		beam = m_Noise[step->m_iStep];
+
+		if ( beam )
+		{
+			beam->SetStartPos( step->m_vecEnd );
+
+			if ( step->m_iStep > 0 )
+				beam->SetEndPos( step->m_vecStart );
+
+			beam->SetWidth( (int) ( step->m_flScale * 55 ) );
+			beam->SetNoise( (int) ( (float) sqrt( (double) step->m_flScale ) * 8 ) );
+		}
+	}
+
+	if ( m_Sprite )
+	{
+		UTIL_SetOrigin( m_Sprite->pev, trace.vecEndPos );
+		m_Sprite->SetScale( trace.m_flScale );
+		m_Sprite->pev->frame += gpGlobals->frametime * 8;
+	if ( m_Sprite->pev->frame >= m_Sprite->Frames() + 1 )
+			m_Sprite->pev->frame = 0;
+	}
+}
+
+void CEgon::EndAttack( void )
+{
+	EMIT_SOUND_DYN( m_hPlayer->edict(), CHAN_STATIC, EGON_SOUND_RUN, 0, 0,
+	                SND_STOP, PITCH_NORM, 0, false, g_vecZero );
+	EMIT_SOUND_DYN( m_hPlayer->edict(), CHAN_WEAPON, EGON_SOUND_OFF, 0.98f, ATTN_NORM,
+	                0, PITCH_NORM, 0, false, g_vecZero );
+	m_fireState = FIRE_OFF;
+	SendWeaponAnim( EGON_IDLE1, 0, 0 );
+
+	m_flTimeWeaponIdle = gpGlobals->time + 2.0;
+	m_flNextPrimaryAttack = m_flNextSecondaryAttack = gpGlobals->time + 0.5f;
+
+	DestroyEffect();
+}
 
 void CEgon::WeaponIdle( void )
 {
 	ResetEmptySound( );
 
-	if ( m_flTimeWeaponIdle > gpGlobals->time )
+	if ( !( m_flTimeWeaponIdle <= gpGlobals->time ) )
 		return;
 
 	if ( m_fireState != FIRE_OFF )
 		 EndAttack();
-	
+
 	int iAnim;
 
-	float flRand = RANDOM_FLOAT(0,1);
-
-	if ( flRand <= 0.5 )
-	{
-		iAnim = EGON_IDLE1;
-		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_pPlayer->random_seed, 10, 15 );
-	}
-	else 
+	if ( RANDOM_FLOAT(0,1) <= 0.3 )
 	{
 		iAnim = EGON_FIDGET1;
-		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 3;
+		m_flTimeWeaponIdle = gpGlobals->time + 3.0f;
+	}
+	else
+	{
+		iAnim = EGON_IDLE1;
+		m_flTimeWeaponIdle = RANDOM_FLOAT( 10, 15 ) + gpGlobals->time;
 	}
 
-	SendWeaponAnim( iAnim );
+	SendWeaponAnim( iAnim, 0, 0 );
 	m_deployed = TRUE;
 }
 
-
-
-void CEgon::EndAttack( void )
+class CEgonAmmo : public CPlayerAmmo
 {
-	bool bMakeNoise = false;
-		
-	if ( m_fireState != FIRE_OFF ) //Checking the button just in case!.
-		 bMakeNoise = true;
+public:
+	CEgonAmmo() : CPlayerAmmo( AMMO_URANIUMBOX_GIVE, "uranium", URANIUM_MAX_CARRY ) {}
 
-	PLAYBACK_EVENT_FULL( FEV_GLOBAL | FEV_RELIABLE, m_pPlayer->edict(), m_usEgonStop, 0, (float *)&m_pPlayer->pev->origin, (float *)&m_pPlayer->pev->angles, 0.0, 0.0, bMakeNoise, 0, 0, 0 );
-
-	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 2.0;
-	m_flNextPrimaryAttack = m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 0.5;
-
-	m_fireState = FIRE_OFF;
-
-	DestroyEffect();
-}
-
-
-
-class CEgonAmmo : public CBasePlayerAmmo
-{
-	void Spawn( void )
-	{ 
-		Precache( );
-		SET_MODEL(ENT(pev), "models/w_chainammo.mdl");
-		CBasePlayerAmmo::Spawn( );
-	}
-	void Precache( void )
-	{
-		PRECACHE_MODEL ("models/w_chainammo.mdl");
-		PRECACHE_SOUND("items/9mmclip1.wav");
-	}
-	BOOL AddAmmo( CBaseEntity *pOther ) 
-	{ 
-		if (pOther->GiveAmmo( AMMO_URANIUMBOX_GIVE, "uranium", URANIUM_MAX_CARRY ) != -1)
-		{
-			EMIT_SOUND(ENT(pev), CHAN_ITEM, "items/9mmclip1.wav", 1, ATTN_NORM);
-			return TRUE;
-		}
-		return FALSE;
-	}
+	const char *GetDefaultModel( void ) { return "models/w_chainammo.mdl"; }
 };
+
 LINK_ENTITY_TO_CLASS( ammo_egonclip, CEgonAmmo );
 
 #endif

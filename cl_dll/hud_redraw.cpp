@@ -18,20 +18,386 @@
 #include <math.h>
 #include "hud.h"
 #include "cl_util.h"
-#include "bench.h"
-#include "port.h"
 
 #include "vgui_TeamFortressViewport.h"
+#include "vgui_ScorePanel.h"
+#include "vgui_CameraPanel.h"
+#include "client_media.h"
+#include "vgui_MediaSelect.h"
+#include "IClient.h"
 
-#define MAX_LOGO_FRAMES 56
+#ifndef M_PI
+#define M_PI		3.14159265358979323846	// matches value in gcc v2 math.h
+#endif
 
-int grgLogoFrame[MAX_LOGO_FRAMES] = 
+void CHud::CheckGetSpriteSize(HSPRITE sprite, int frame, wrect_t &rect)
 {
-	1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 13, 13, 13, 13, 13, 12, 11, 10, 9, 8, 14, 15,
-	16, 17, 18, 19, 20, 20, 20, 20, 20, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 
-	29, 29, 29, 29, 29, 28, 27, 26, 25, 24, 30, 31 
-};
+	if (rect.right - rect.left <= 0)
+		rect.right = SPR_Width(sprite, frame);
 
+	if (rect.bottom - rect.top <= 0)
+		rect.bottom = SPR_Height(sprite, frame);
+}
+
+void ScaleColors(RGBA &color)
+{
+	float scale = color.a / 255.0f;
+
+	color.r *= scale;
+	color.g *= scale;
+	color.b *= scale;
+}
+
+RGBA ColorGrad(const RGBA &first, const RGBA &second, float fraction, bool reverse)
+{
+	float blend = reverse ? (float)(1.0 - fraction) : fraction;
+	RGBA result;
+
+	result.r = (second.r - first.r) * blend + first.r;
+	result.g = (second.g - first.g) * blend + first.g;
+	result.b = (second.b - first.b) * blend + first.b;
+	result.a = (second.a - first.a) * blend + first.a;
+	return result;
+}
+
+RGBA CHud::GetEffectColor(int effect, const RGBA &first, const RGBA &second, float period, float time)
+{
+	static const RGBA transparent = {0, 0, 0, 0};
+
+	switch (effect)
+	{
+	case HUD_EFFECT_RAMP_UP:
+	case HUD_EFFECT_RAMP_DOWN:
+		return ColorGrad(first, second, (float)fmod(time, period) / period, effect == HUD_EFFECT_RAMP_DOWN);
+	case HUD_EFFECT_TRIANGLE:
+		return GetEffectColor((float)fmod(time, period) > period * 0.5 ? HUD_EFFECT_RAMP_DOWN : HUD_EFFECT_RAMP_UP,
+			first, second, period * 0.5, time);
+	case HUD_EFFECT_COSINE_UP:
+	case HUD_EFFECT_COSINE_DOWN:
+	{
+		float phase = fmod((double)((float)fmod(time, period) / period) * M_PI - M_PI / 2, M_PI);
+		float wave = sin(phase);
+
+		// Both sine modes use the same direction
+		return ColorGrad(first, second, (wave + 1.0) * 0.5, false);
+	}
+	case HUD_EFFECT_COSINE:
+		return GetEffectColor((float)fmod(time, period) > period * 0.5 ? HUD_EFFECT_COSINE_DOWN : HUD_EFFECT_COSINE_UP,
+			first, second, period * 0.5, time);
+	case HUD_EFFECT_TOGGLE:
+		return (float)fmod(time, period) > period * 0.5 ? second : first;
+	case HUD_EFFECT_SINE_PULSE:
+	{
+		float phase = (float)fmod(time, period) / period;
+		float wave = sin((double)(phase + phase) * M_PI);
+
+		return ColorGrad(transparent, wave > 0 ? first : second, fabs(wave), false);
+	}
+	}
+
+	return first;
+}
+
+int CHud::CalcPosition(float position, int size, int screenSize, bool absolute, bool centered, bool ignoreBorder)
+{
+	int border = ignoreBorder ? 0 : GetBorderSize();
+	int available = screenSize - 2 * border;
+
+	if (absolute)
+	{
+		if (centered)
+			return (int)((float)((screenSize - size) >> 1) + position);
+
+		return (int)((float)(position >= 0 ? border : screenSize - border - size) + position);
+	}
+
+	int result;
+
+	if (centered)
+		result = (int)((float)((screenSize - size) >> 1) + available * position);
+	else if (position < 0)
+		result = (int)((position + 1.0) * available + border - size);
+	else
+		result = (int)(available * position + border);
+
+	if (result + size > screenSize - border)
+		return screenSize - border - size;
+
+	if (result < border)
+		return border;
+
+	return result;
+}
+
+int CHud::CalcXPosition(float position, int width, bool absolute, bool centered, bool ignoreBorder)
+{
+	return CalcPosition(position, width, ScreenWidth, absolute, centered, ignoreBorder);
+}
+
+int CHud::CalcYPosition(float position, int height, bool absolute, bool centered, bool ignoreBorder)
+{
+	return CalcPosition(position, height, ScreenHeight, absolute, centered, ignoreBorder);
+}
+
+int CHud::CalcXPositionLegacy(float position, int width)
+{
+	bool centered = position == -1;
+
+	return CalcPosition(centered ? 0 : position, width, ScreenWidth, false, centered, false);
+}
+
+int CHud::CalcYPositionLegacy(float position, int height)
+{
+	bool centered = position == -1;
+
+	return CalcPosition(centered ? 0 : position, height, ScreenHeight, false, centered, false);
+}
+
+HSPRITE CHud::LoadSprite(const char *name, wrect_t &rect)
+{
+	if (!name || !*name)
+		return -1;
+
+	if (strstr(name, ".spr"))
+	{
+		char path[260];
+
+		snprintf(path, sizeof(path), "sprites/%s", name);
+		return SPR_Load(path);
+	}
+
+	int index = GetSpriteIndex(name);
+
+	if (!rect.left && !rect.top && !rect.right && !rect.bottom)
+		rect = GetSpriteRect(index);
+
+	return GetSprite(index);
+}
+
+int CHud::DrawSprite( int x, int y, HSPRITE sprite, const wrect_t *rect, int r, int g, int b, int frame, SPR_MODE mode )
+{
+	SPR_Set( sprite, r, g, b );
+	if ( mode == SPR_NORMAL )
+		SPR_Draw( frame, x, y, rect );
+	else if ( mode == SPR_TRANSPARENT )
+		SPR_DrawHoles( frame, x, y, rect );
+	else
+		SPR_DrawAdditive( frame, x, y, rect );
+
+	DRAW_DEBUG_CROSS( x, y );
+	if ( !rect )
+		return x;
+
+	DRAW_DEBUG_RECT( x, y, rect->right - rect->left, rect->bottom - rect->top );
+	return x + rect->right - rect->left;
+}
+
+int CHud::GetDigitWidth( void )
+{
+	wrect_t &rect = GetSpriteRect( m_HUD_number_0 );
+	return rect.right - rect.left;
+}
+
+int CHud::GetNumDigits( int number, int flags )
+{
+	if ( !number )
+		return !(flags & DN_HIDEZERO);
+
+	unsigned int value = number < 0 ? 0u - (unsigned int)number : (unsigned int)number;
+	int digits = 0;
+	while ( value )
+	{
+		digits++;
+		value /= 10;
+	}
+	return digits;
+}
+
+bool CHud::ShowSign( int number, int flags )
+{
+	return ((flags & DN_NEGATIVE) && number < 0) || ((flags & DN_PLUSSIGN) && number != 0);
+}
+
+int CHud::GetSpaceWidthForDigits( int digits, int minDigits, int maxDigits, bool sign )
+{
+	if ( digits < minDigits )
+		return (minDigits - digits) * GetDigitWidth();
+
+	return 0;
+}
+
+int CHud::GetWidthForDigits( int digits, int minDigits, int maxDigits, bool sign )
+{
+	int width = (digits > maxDigits ? maxDigits : V_max( digits, minDigits )) * GetDigitWidth();
+	wrect_t &rect = GetSpriteRect( m_HUD_plus );
+	int signWidth = rect.right - rect.left + 4;
+
+	if ( digits > maxDigits )
+		width += signWidth;
+	if ( sign )
+		width += signWidth;
+
+	return width;
+}
+
+int CHud::GetNumberWidth( int number, int minDigits, int maxDigits, int flags )
+{
+	int digits = GetNumDigits( number, flags );
+
+	return GetWidthForDigits( digits, minDigits, maxDigits, ShowSign( number, flags ) );
+}
+
+int CHud::DrawNumber( int x, int y, int number, int r, int g, int b, int minDigits, int maxDigits, int flags )
+{
+	DRAW_DEBUG_CROSS( x, y );
+
+	unsigned int magnitude = number < 0 ? 0u - (unsigned int)number : (unsigned int)number;
+	unsigned int value = number < 0 && !(flags & DN_NEGATIVE) ? 0 : magnitude;
+	unsigned int limit = (unsigned int)pow( 10.0, maxDigits ) - 1;
+	value = V_min( value, limit );
+
+	int digits[10];
+	int count = 0;
+	do
+	{
+		digits[count++] = value % 10;
+		value /= 10;
+	} while ( value );
+
+	int padding = (flags & DN_LEADINGZEROS) ? V_max( minDigits - count, 0 ) : 0;
+	bool sign = ShowSign( number, flags );
+
+	x += GetSpaceWidthForDigits( count + padding, minDigits, maxDigits, sign );
+
+	wrect_t &plus = GetSpriteRect( m_HUD_plus );
+	int signY = y - ((plus.bottom - plus.top - m_iFontHeight) >> 1);
+	if ( sign )
+	{
+		int index = number > 0 ? m_HUD_plus : m_HUD_minus;
+		x = DrawSprite( x + 4, signY, GetSprite( index ), &GetSpriteRect( index ), r, g, b );
+	}
+
+	while ( padding-- > 0 )
+		x = DrawSprite( x, y, GetSprite( m_HUD_number_0 ), &GetSpriteRect( m_HUD_number_0 ), r, g, b );
+
+	while ( count )
+	{
+		int index = m_HUD_number_0 + digits[--count];
+		x = DrawSprite( x, y, GetSprite( index ), &GetSpriteRect( index ), r, g, b );
+	}
+
+	if ( magnitude > limit )
+		x = DrawSprite( x + 4, signY, GetSprite( m_HUD_plus ), &plus, r, g, b );
+
+	return x;
+}
+
+int CHud::GetSpaceWidth( void )
+{
+	return GetDigitWidth() >> 1;
+}
+
+int CHud::GetBorderSize( void )
+{
+	return V_min( V_max( (int)m_pCvarBorderSize->value, 0 ), 100 );
+}
+
+int CHud::GetWidth( void )
+{
+	return ScreenWidth - 2 * GetBorderSize();
+}
+
+int CHud::GetHeight( void )
+{
+	return ScreenHeight - 2 * GetBorderSize();
+}
+
+int CHud::GetSeparatorWidth( void )
+{
+	return GetDigitWidth() / 10;
+}
+
+int CHud::DrawSeparator( int x, int y, int r, int g, int b, int a )
+{
+	DRAW_DEBUG_CROSS( x, y );
+	int width = GetSeparatorWidth();
+	FillRGBA( x, y, width, m_iFontHeight, r, g, b, a );
+	return width;
+}
+
+int CHud::GetLineSeparatorHeight( void )
+{
+	return m_iFontHeight >> 1;
+}
+
+int CHud::GetLineY( int line )
+{
+	return ScreenHeight - GetBorderSize() - (line - 1) * GetLineSeparatorHeight() - line * m_iFontHeight;
+}
+
+int CHud::GetDefaultAlpha( void )
+{
+	return V_min( V_max( (int)m_pCvarDefaultAlpha->value, 0 ), 255 );
+}
+
+int CHud::GetMaxAlpha( void )
+{
+	return V_min( V_max( (int)m_pCvarMaxAlpha->value, GetDefaultAlpha() ), 255 );
+}
+
+void CHud::UpdateFade( float &fade )
+{
+	if ( fade != 0 )
+	{
+		if ( fade > FADE_TIME )
+			fade = FADE_TIME;
+
+		fade -= m_flTimeDelta * 20;
+		if ( fade <= 0 )
+			fade = 0;
+	}
+}
+
+byte CHud::GetFadeAlpha( float fade )
+{
+	int alpha = GetDefaultAlpha();
+	if ( fade > 0 )
+		return alpha + (GetMaxAlpha() - alpha) * (fade / FADE_TIME);
+
+	return alpha;
+}
+
+void DRAW_DEBUG_LINE_V( int x, int y )
+{
+	if ( gHUD.m_pCvarDebug->value >= 1 )
+		FillRGBA( x, y - 4, 1, 9, 0, 255, 0, 255 );
+}
+
+void DRAW_DEBUG_LINE_H( int x, int y )
+{
+	if ( gHUD.m_pCvarDebug->value >= 1 )
+		FillRGBA( x - 4, y, 9, 1, 0, 255, 0, 255 );
+}
+
+void DRAW_DEBUG_CROSS( int x, int y )
+{
+	if ( gHUD.m_pCvarDebug->value >= 1 )
+	{
+		DRAW_DEBUG_LINE_V( x, y );
+		DRAW_DEBUG_LINE_H( x, y );
+	}
+}
+
+void DRAW_DEBUG_RECT( int x, int y, int width, int height )
+{
+	if ( gHUD.m_pCvarDebug->value >= 2 && width > 0 && height > 0 )
+	{
+		FillRGBA( x, y, 1, height, 0, 255, 0, 255 );
+		FillRGBA( x + width - 1, y, 1, height, 0, 255, 0, 255 );
+		FillRGBA( x, y, width, 1, 0, 255, 0, 255 );
+		FillRGBA( x, y + height - 1, width, 1, 0, 255, 0, 255 );
+	}
+}
 
 extern int g_iVisibleMouse;
 
@@ -39,54 +405,10 @@ float HUD_GetFOV( void );
 
 extern cvar_t *sensitivity;
 
-// Debug
-
-#define DEBUG_LINE_THICKNESS 1
-#define DEBUG_LINE_LENGTH 9
-#define DEBUG_LINE_OFFSET 4
-
-void DRAW_DEBUG_LINE_V(int x, int y)
-{
-	if (gHUD.m_pCvarDebug->value >= 1.0)
-		gEngfuncs.pfnFillRGBA(x, y - DEBUG_LINE_OFFSET, DEBUG_LINE_THICKNESS, DEBUG_LINE_LENGTH, 0, 255, 0, 255);
-}
-
-void DRAW_DEBUG_LINE_H(int x, int y)
-{
-	if (gHUD.m_pCvarDebug->value >= 1.0)
-		gEngfuncs.pfnFillRGBA(x - DEBUG_LINE_OFFSET, y, DEBUG_LINE_LENGTH, DEBUG_LINE_THICKNESS, 0, 255, 0, 255);
-}
-
-void DRAW_DEBUG_CROSS(int x, int y)
-{
-	if (gHUD.m_pCvarDebug->value >= 1.0)
-	{
-		DRAW_DEBUG_LINE_V(x, y);
-		DRAW_DEBUG_LINE_H(x, y);
-	}
-}
-
-void DRAW_DEBUG_RECT(int x, int y, int w, int h)
-{
-	if (w < 0 && h < 0)
-		return;
-
-	if (gHUD.m_pCvarDebug->value >= 2.0)
-	{
-		gEngfuncs.pfnFillRGBA(x, y, DEBUG_LINE_THICKNESS, h, 0, 255, 0, 255);
-		gEngfuncs.pfnFillRGBA(x + w - DEBUG_LINE_THICKNESS, y, DEBUG_LINE_THICKNESS, h, 0, 255, 0, 255);
-		gEngfuncs.pfnFillRGBA(x, y, w, DEBUG_LINE_THICKNESS, 0, 255, 0, 255);
-		gEngfuncs.pfnFillRGBA(x, y + h - DEBUG_LINE_THICKNESS, w, 1, 0, 255, 0, 255);
-	}
-}
-
 // Think
 void CHud::Think(void)
 {
-	m_scrinfo.iSize = sizeof(m_scrinfo);
-	GetScreenInfo(&m_scrinfo);
-
-	int newfov;
+	int newfov = HUD_GetFOV();
 	HUDLIST *pList = m_pHudList;
 
 	while (pList)
@@ -96,14 +418,13 @@ void CHud::Think(void)
 		pList = pList->pNext;
 	}
 
-	newfov = HUD_GetFOV();
 	if ( newfov == 0 )
 	{
-		m_iFOV = default_fov->value;
+		m_iFOV = V_min( default_fov->value, 110 );
 	}
 	else
 	{
-		m_iFOV = newfov;
+		m_iFOV = V_min( newfov, 180 );
 	}
 
 	// the clients fov is actually set in the client data update section of the hud
@@ -117,21 +438,31 @@ void CHud::Think(void)
 	else
 	{  
 		// set a new sensitivity that is proportional to the change from the FOV default
-		m_flMouseSensitivity = sensitivity->value * ((float)newfov / (float)default_fov->value) * CVAR_GET_FLOAT("zoom_sensitivity_ratio");
+		m_flMouseSensitivity = sensitivity->value * ((double)newfov / V_max( default_fov->value, 0.1 )) * CVAR_GET_FLOAT("zoom_sensitivity_ratio");
 	}
 
 	// think about default fov
 	if ( m_iFOV == 0 )
 	{  // only let players adjust up in fov,  and only if they are not overriden by something else
-		m_iFOV = max( default_fov->value, 90 );  
-	}
-	
-	if ( gEngfuncs.IsSpectateOnly() )
-	{
-		m_iFOV = gHUD.m_Spectator.GetFOV();	// default_fov->value;
+		m_iFOV = V_min( default_fov->value, 110 );
 	}
 
-	Bench_CheckStart();
+}
+
+void CHud::DrawElements(void)
+{
+	if (ScreenWidth < 640 || m_pCvarDraw->value == 0 || (m_iHideHUDDisplay & HIDEHUD_ALL))
+		return;
+
+	int border = GetBorderSize();
+
+	DRAW_DEBUG_RECT(border, border, ScreenWidth - 2 * border, ScreenHeight - 2 * border);
+
+	for (HUDLIST *list = m_pHudList; list; list = list->pNext)
+	{
+		if (list->p->m_iFlags & (m_iIntermission ? HUD_INTERMISSION : HUD_ACTIVE))
+			list->p->Draw(m_flTime);
+	}
 }
 
 // Redraw
@@ -139,11 +470,28 @@ void CHud::Think(void)
 // returns 1 if they've changed, 0 otherwise
 int CHud :: Redraw( float flTime, int intermission )
 {
+	MediaPlayer.UpdateMedia();
+	MediaPlayer.DrawHUDIcon();
+	gViewPort->m_pMediaSelect->UpdateTime();
+
+	static int m_flShotTime = 0;
+	int oldWidth = ScreenWidth;
+	int oldHeight = ScreenHeight;
+
+	GetScreenInfo(&m_scrinfo);
+
+	if (gViewPort && (oldWidth != ScreenWidth || oldHeight != ScreenHeight))
+	{
+		gViewPort->setSize(ScreenWidth, ScreenHeight);
+		gViewPort->GetScoreBoard()->setSize(
+			(int)(ScreenWidth - 2 * (ScreenWidth / 640.0f * 80)),
+			(int)(ScreenHeight - 2 * (ScreenHeight / 480.0f * 40)));
+	}
+
 	m_fOldTime = m_flTime;	// save time of previous redraw
 	m_flTime = flTime;
 	m_flTimeDelta = (double)m_flTime - m_fOldTime;
-	static float m_flShotTime = 0;
-	
+
 	// Clock was reset, reset delta
 	if ( m_flTimeDelta < 0 )
 		m_flTimeDelta = 0;
@@ -154,26 +502,22 @@ int CHud :: Redraw( float flTime, int intermission )
 		if ( m_iIntermission && !intermission )
 		{
 			// Have to do this here so the scoreboard goes away
-			m_iIntermission = intermission;
+			m_iIntermission = 0;
 			gViewPort->HideCommandMenu();
 			gViewPort->HideScoreBoard();
-			gViewPort->UpdateSpectatorPanel();
 		}
 		else if ( !m_iIntermission && intermission )
 		{
-			m_iIntermission = intermission;
 			gViewPort->HideCommandMenu();
-			gViewPort->HideVGUIMenu();
 			gViewPort->ShowScoreBoard();
-			gViewPort->UpdateSpectatorPanel();
 
 			// Take a screenshot if the client's got the cvar set
 			if ( CVAR_GET_FLOAT( "hud_takesshots" ) != 0 )
-				m_flShotTime = flTime + 1.0;	// Take a screenshot in a second
+				m_flShotTime = (int)(flTime + 1.0);	// Take a screenshot in a second
 		}
 	}
 
-	if (m_flShotTime && m_flShotTime < flTime)
+	if (m_flShotTime && flTime > (float)m_flShotTime)
 	{
 		gEngfuncs.pfnClientCmd("snapshot\n");
 		m_flShotTime = 0;
@@ -181,41 +525,14 @@ int CHud :: Redraw( float flTime, int intermission )
 
 	m_iIntermission = intermission;
 
-	// if no redrawing is necessary
-	// return 0;
-	
-	// draw all registered HUD elements
-	if ( m_pCvarDraw->value )
-	{
-		HUDLIST *pList = m_pHudList;
+	DrawElements();
 
-		while (pList)
-		{
-			if ( !Bench_Active() )
+	if (gViewPort && gViewPort->m_pCameraPanel
+		&& gViewPort->m_pCurrentMenu == gViewPort->m_pCameraPanel
+		&& gViewPort->m_pCameraPanel->isVisible()
+		&& gViewPort->m_pCameraPanel->HasOverrideCursor() )
 			{
-				if ( !intermission )
-				{
-					if ( (pList->p->m_iFlags & HUD_ACTIVE) && !(m_iHideHUDDisplay & HIDEHUD_ALL) )
-						pList->p->Draw(flTime);
-				}
-				else
-				{  // it's an intermission,  so only draw hud elements that are set to draw during intermissions
-					if ( pList->p->m_iFlags & HUD_INTERMISSION )
-						pList->p->Draw( flTime );
-				}
-			}
-			else
-			{
-				if ( ( pList->p == &m_Benchmark ) &&
-					 ( pList->p->m_iFlags & HUD_ACTIVE ) &&
-					 !( m_iHideHUDDisplay & HIDEHUD_ALL ) )
-				{
-					pList->p->Draw(flTime);
-				}
-			}
-
-			pList = pList->pNext;
-		}
+		gViewPort->m_pCameraPanel->DrawOverrideCursor(flTime);
 	}
 
 	/*
@@ -225,7 +542,7 @@ int CHud :: Redraw( float flTime, int intermission )
 		int mx, my;
 
 		IN_GetMousePos( &mx, &my );
-		
+
 		if (m_hsprCursor == 0)
 		{
 			char sz[256];
@@ -234,7 +551,7 @@ int CHud :: Redraw( float flTime, int intermission )
 		}
 
 		SPR_Set(m_hsprCursor, 250, 250, 250 );
-		
+
 		// Draw the logo at 20 fps
 		SPR_DrawAdditive( 0, mx, my, NULL );
 	}
@@ -251,74 +568,54 @@ void ScaleColors( int &r, int &g, int &b, int a )
 	b = (int)(b * x);
 }
 
-int CHud::DrawSprite(int x, int y, HSPRITE sprite, wrect_t* rc, int r, int g, int b, int frame, SPR_MODE mode)
+int CHud::DrawString(int x, int y, int maxX, char *string, int r, int g, int b, int font)
 {
-	gEngfuncs.pfnSPR_Set(sprite, r, g, b);
-	
-	switch (mode)
-	{
-		default:
-		case SPR_ADDITIVE:
-			gEngfuncs.pfnSPR_DrawAdditive(frame, x, y, rc);
-			break;
-		case SPR_NORMAL:
-			gEngfuncs.pfnSPR_Draw(frame, x, y, rc);
-			break;
-		case SPR_TRANSPARENT:
-			gEngfuncs.pfnSPR_DrawHoles(frame, x, y, rc);
-			break;
-	}
-
 	DRAW_DEBUG_CROSS(x, y);
 
-	if (!rc)
-		return x;
-
-	DRAW_DEBUG_RECT(x, y, rc->right - rc->left, rc->bottom - rc->top);
-	return x + rc->right - rc->left;
-}
-
-int CHud :: DrawConsoleString(int xpos, int ypos, char* szString)
-{
-	if (gHUD.m_pCvarDebug->value > 0.0)
+	for (char *text = string; *text && *text != '\n'; ++text)
 	{
-		DRAW_DEBUG_CROSS(xpos, ypos);
+		int next = x + m_scrinfo.charWidths[*text];
 
-		int length, height;
-		gEngfuncs.pfnDrawConsoleStringLen(szString, &length, &height);
-		DRAW_DEBUG_RECT(xpos, ypos, length, height);
+		if (next > maxX)
+			break;
+
+		g_pEngineClient->DrawCharacterOpq(x, y, *text, r, g, b, font);
+		x = next;
 	}
 
-	return gEngfuncs.pfnDrawConsoleString(xpos, ypos, szString);
+	return x;
 }
 
-int CHud :: DrawString(int xpos, int ypos, int iMaxX, char *szIt, int r, int g, int b )
+int CHud::DrawNumberString(int x, int y, int minX, int number, int r, int g, int b)
 {
-	DRAW_DEBUG_CROSS(xpos, ypos);
-	return xpos + gEngfuncs.pfnDrawString( xpos, ypos, szIt, r, g, b);
-}
+	char string[32];
 
-int CHud :: DrawHudNumberString( int xpos, int ypos, int iMinX, int iNumber, int r, int g, int b )
-{
-	DRAW_DEBUG_CROSS(xpos, ypos);
-
-	char szString[32];
-	sprintf( szString, "%d", iNumber );
-	return DrawStringReverse( xpos, ypos, iMinX, szString, r, g, b );
-
+	UTIL_FormatString(string, "%d", number);
+	return DrawStringReverse(x, y, minX, string, r, g, b, 0);
 }
 
 // draws a string from right to left (right-aligned)
-int CHud :: DrawStringReverse( int xpos, int ypos, int iMinX, char *szString, int r, int g, int b )
+int CHud::DrawStringReverse(int x, int y, int minX, char *string, int r, int g, int b, int font)
 {
-	DRAW_DEBUG_CROSS(xpos, ypos);
-	return xpos - gEngfuncs.pfnDrawStringReverse( xpos, ypos, szString, r, g, b);
+	DRAW_DEBUG_CROSS(x, y);
+
+	for (int i = strlen(string) - 1; i >= 0; --i)
+	{
+		char ch = string[i];
+		int next = x - m_scrinfo.charWidths[ch];
+
+		if (next < minX)
+			break;
+
+		x = next;
+		g_pEngineClient->DrawCharacterOpq(x, y, ch, r, g, b, font);
+	}
+
+	return x;
 }
 
 int CHud :: DrawHudNumber( int x, int y, int iFlags, int iNumber, int r, int g, int b)
 {
-	DRAW_DEBUG_CROSS(x, y);
-
 	int iWidth = GetSpriteRect(m_HUD_number_0).right - GetSpriteRect(m_HUD_number_0).left;
 	int k;
 	
@@ -327,8 +624,9 @@ int CHud :: DrawHudNumber( int x, int y, int iFlags, int iNumber, int r, int g, 
 		// SPR_Draw 100's
 		if (iNumber >= 100)
 		{
-			k = iNumber/100;
-			DrawSprite(x, y, GetSprite(m_HUD_number_0 + k), &GetSpriteRect(m_HUD_number_0 + k), r, g, b, 0, SPR_ADDITIVE);
+			 k = iNumber/100;
+			SPR_Set(GetSprite(m_HUD_number_0 + k), r, g, b );
+			SPR_DrawAdditive( 0, x, y, &GetSpriteRect(m_HUD_number_0 + k));
 			x += iWidth;
 		}
 		else if (iFlags & (DHN_3DIGITS))
@@ -341,7 +639,8 @@ int CHud :: DrawHudNumber( int x, int y, int iFlags, int iNumber, int r, int g, 
 		if (iNumber >= 10)
 		{
 			k = (iNumber % 100)/10;
-			DrawSprite(x, y, GetSprite(m_HUD_number_0 + k), &GetSpriteRect(m_HUD_number_0 + k), r, g, b, 0, SPR_ADDITIVE);
+			SPR_Set(GetSprite(m_HUD_number_0 + k), r, g, b );
+			SPR_DrawAdditive( 0, x, y, &GetSpriteRect(m_HUD_number_0 + k));
 			x += iWidth;
 		}
 		else if (iFlags & (DHN_3DIGITS | DHN_2DIGITS))
@@ -352,11 +651,14 @@ int CHud :: DrawHudNumber( int x, int y, int iFlags, int iNumber, int r, int g, 
 
 		// SPR_Draw ones
 		k = iNumber % 10;
-		DrawSprite(x, y, GetSprite(m_HUD_number_0 + k), &GetSpriteRect(m_HUD_number_0 + k), r, g, b, 0, SPR_ADDITIVE);
+		SPR_Set(GetSprite(m_HUD_number_0 + k), r, g, b );
+		SPR_DrawAdditive(0,  x, y, &GetSpriteRect(m_HUD_number_0 + k));
 		x += iWidth;
 	} 
 	else if (iFlags & DHN_DRAWZERO) 
 	{
+		SPR_Set(GetSprite(m_HUD_number_0), r, g, b );
+
 		// SPR_Draw 100's
 		if (iFlags & (DHN_3DIGITS))
 		{
@@ -371,7 +673,8 @@ int CHud :: DrawHudNumber( int x, int y, int iFlags, int iNumber, int r, int g, 
 		}
 
 		// SPR_Draw ones
-		DrawSprite(x, y, GetSprite(m_HUD_number_0), &GetSpriteRect(m_HUD_number_0), r, g, b, 0, SPR_ADDITIVE);
+		
+		SPR_DrawAdditive( 0,  x, y, &GetSpriteRect(m_HUD_number_0));
 		x += iWidth;
 	}
 
@@ -405,84 +708,4 @@ int CHud::GetNumWidth( int iNumber, int iFlags )
 
 }	
 
-int CHud::GetDefaultAlpha()
-{
-	int alpha = m_pCvarAlphaDefault->value;
 
-	if (alpha > 255)
-		return 255;
-
-	if (alpha < 0)
-		return 0;
-
-	return alpha;
-}
-
-int CHud::GetMaxAlpha()
-{
-	int alpha = GetDefaultAlpha();
-
-	if (alpha <= m_pCvarAlphaMax->value)
-	{
-		alpha = m_pCvarAlphaMax->value;
-
-		if (m_pCvarAlphaMax->value > 255)
-			return 255;
-	}
-
-	return alpha;
-}
-
-void CHud::UpdateFade(float& fFade)
-{
-	if (fFade > MIN_ALPHA)
-		fFade = MIN_ALPHA;
-
-	fFade -= gHUD.m_flTimeDelta * 20;
-
-	if (fFade < 0.0)
-		fFade = 0.0;
-}
-
-int CHud::GetFadeAlpha(float a)
-{
-	int DefaultAlpha = GetDefaultAlpha();
-	int MaxAlpha = GetMaxAlpha();
-
-	if (a <= 0.0)
-		return DefaultAlpha;
-	else
-		return (a / 100.0 * (MaxAlpha - DefaultAlpha) + DefaultAlpha);
-}
-
-int CHud::GetDigitWidth()
-{
-	return (m_rgrcRects->right - gHUD.m_rgrcRects->left);
-}
-
-HSPRITE CHud::LoadSprite(char* name, wrect_t& rect)
-{
-	HSPRITE SpriteIndex;
-	char path[MAX_PATH];
-
-	if (!name || !*name)
-		return -1;
-
-	if (strstr(name, ".spr"))
-	{
-		sprintf(path, "sprites/%s", name);
-		return gEngfuncs.pfnSPR_Load(path);
-	}
-	else
-	{
-		SpriteIndex = gHUD.GetSpriteIndex(name);
-
-		if (!rect.left && !rect.top && !rect.right && !rect.bottom)
-			rect = gHUD.GetSpriteRect(SpriteIndex);
-
-		if (SpriteIndex >= 0)
-			return SpriteIndex;
-	}
-
-	return 0;
-}

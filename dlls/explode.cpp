@@ -24,6 +24,8 @@
 #include "cbase.h"
 #include "decals.h"
 #include "explode.h"
+#include "server_sound.h"
+#include "weapons.h"
 
 // Spark Shower
 class CShower : public CBaseEntity
@@ -87,6 +89,7 @@ public:
 	void Spawn( );
 	void EXPORT Smoke ( void );
 	void KeyValue( KeyValueData *pkvd );
+	void *GetKeyValue( const char *keyName, entvartype_s &type );
 	void Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
 
 	virtual int		Save( CSave &save );
@@ -105,6 +108,17 @@ TYPEDESCRIPTION	CEnvExplosion::m_SaveData[] =
 
 IMPLEMENT_SAVERESTORE( CEnvExplosion, CBaseMonster );
 LINK_ENTITY_TO_CLASS( env_explosion, CEnvExplosion );
+
+void *CEnvExplosion::GetKeyValue( const char *keyName, entvartype_s &type )
+{
+	if ( FStrEq( keyName, "iMagnitude" ) )
+	{
+		type = VAR_INTEGER;
+		return &m_iMagnitude;
+	}
+
+	return CBaseEntity::GetKeyValue( keyName, type );
+}
 
 void CEnvExplosion::KeyValue( KeyValueData *pkvd )
 {
@@ -191,10 +205,13 @@ void CEnvExplosion::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE
 			WRITE_COORD( pev->origin.x );
 			WRITE_COORD( pev->origin.y );
 			WRITE_COORD( pev->origin.z );
-			WRITE_SHORT( g_sModelIndexFireball );
+			if ( UTIL_PointContents( pev->origin ) == CONTENTS_WATER )
+				WRITE_SHORT( g_sModelIndexWExplosion );
+			else
+				WRITE_SHORT( g_sModelIndexFireball );
 			WRITE_BYTE( (BYTE)m_spriteScale ); // scale * 10
 			WRITE_BYTE( 15  ); // framerate
-			WRITE_BYTE( TE_EXPLFLAG_NONE );
+			WRITE_BYTE( TE_EXPLFLAG_NOSOUND );
 		MESSAGE_END();
 	}
 	else
@@ -207,14 +224,42 @@ void CEnvExplosion::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE
 			WRITE_SHORT( g_sModelIndexFireball );
 			WRITE_BYTE( 0 ); // no sprite
 			WRITE_BYTE( 15  ); // framerate
-			WRITE_BYTE( TE_EXPLFLAG_NONE );
+			WRITE_BYTE( TE_EXPLFLAG_NOSOUND );
 		MESSAGE_END();
 	}
+
+	// the message plays no sound of its own
+	const char *pszSound = NULL;
+
+	switch ( RANDOM_LONG( 0, 2 ) )
+	{
+	case 0:
+		pszSound = "weapons/explode3.wav";
+		break;
+	case 1:
+		pszSound = "weapons/explode4.wav";
+		break;
+	case 2:
+		pszSound = "weapons/explode5.wav";
+		break;
+	}
+
+	CServer_SoundEngine::GetSoundEngine()->PlaySound( NULL, CHAN_AUTO, (char *) pszSound,
+	                                                  1.0f, 0.3f, 0, PITCH_NORM, 0, true, pev->origin, 0 );
 
 	// do damage
 	if ( !( pev->spawnflags & SF_ENVEXPLOSION_NODAMAGE ) )
 	{
-		RadiusDamage ( pev, pev, m_iMagnitude, CLASS_NONE, DMG_BLAST );
+		// the owner gets the credit, but must not be skipped by the damage
+		edict_t *pOwner = pev->owner;
+		entvars_t *pevAttacker = pev;
+
+		if ( pOwner )
+			pevAttacker = VARS( pOwner );
+
+		pev->owner = NULL;
+		RadiusDamage ( pev, pevAttacker, m_iMagnitude, CLASS_NONE, DMG_BLAST );
+		pev->owner = pOwner;
 	}
 
 	SetThink( &CEnvExplosion::Smoke );
@@ -227,7 +272,7 @@ void CEnvExplosion::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE
 
 		for ( int i = 0; i < sparkCount; i++ )
 		{
-			Create( "spark_shower", pev->origin, tr.vecPlaneNormal, NULL );
+			Create( "spark_shower", pev->origin, tr.vecPlaneNormal, false, NULL );
 		}
 	}
 }
@@ -253,21 +298,34 @@ void CEnvExplosion::Smoke( void )
 	}
 }
 
-
-// HACKHACK -- create one of these and fake a keyvalue to get the right explosion setup
-void ExplosionCreate( const Vector &center, const Vector &angles, edict_t *pOwner, int magnitude, BOOL doDamage )
+void ExplosionCreate( const Vector &center, const Vector &angles, edict_t *pOwner, int magnitude, bool doDamage )
 {
-	KeyValueData	kvd;
-	char			buf[128];
+	CEnvExplosion *pExplosion = GetClassPtr( (CEnvExplosion *) NULL );
 
-	CBaseEntity *pExplosion = CBaseEntity::Create( "env_explosion", center, angles, pOwner );
-	sprintf( buf, "%3d", magnitude );
-	kvd.szKeyName = "iMagnitude";
-	kvd.szValue = buf;
-	pExplosion->KeyValue( &kvd );
+	if ( !pExplosion )
+		return;
+	pExplosion->pev->origin = center;
+	pExplosion->pev->angles = angles;
+	pExplosion->pev->owner = pOwner;
+	pExplosion->m_iMagnitude = magnitude;
 	if ( !doDamage )
 		pExplosion->pev->spawnflags |= SF_ENVEXPLOSION_NODAMAGE;
 
 	pExplosion->Spawn();
 	pExplosion->Use( NULL, NULL, USE_TOGGLE, 0 );
+}
+
+void CreateBreakableExplosion( const Vector &center, const Vector &angles, edict_t *owner, int magnitude )
+{
+	CEnvExplosion *explosion = GetClassPtr( (CEnvExplosion *) NULL );
+
+	if ( !explosion )
+		return;
+
+	explosion->pev->origin = center;
+	explosion->pev->angles = angles;
+	explosion->pev->owner = owner;
+	explosion->m_iMagnitude = magnitude;
+	explosion->Spawn();
+	explosion->Use( NULL, NULL, USE_TOGGLE, 0 );
 }

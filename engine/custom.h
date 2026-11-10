@@ -23,6 +23,7 @@
 #include "const.h"
 
 #define MAX_QPATH 64    // Must match value in quakedefs.h
+#define MAX_RESOURCES		17408
 
 /////////////////
 // Customization
@@ -38,7 +39,6 @@ typedef enum
 	t_eventscript,
 	t_world,		// Fake type for world, is really t_model
 } resourcetype_t;
-
 
 typedef struct
 {
@@ -74,8 +74,12 @@ typedef struct resource_s
 	unsigned char     playernum;           // Which player index this resource is associated with, if it's a custom resource.
 
 	unsigned char	  rguc_reserved[ 32 ]; // For future expansion
-	struct resource_s *pNext;              // Next in chain.
+	struct resource_s*		  pNext;              // Next in chain.
+#if !defined(HLTV)
 	struct resource_s *pPrev;
+#else
+	unsigned char *data;
+#endif // !defined(HLTV)
 } resource_t;
 
 typedef struct customization_s
@@ -88,16 +92,16 @@ typedef struct customization_s
 	int        nUserData2; // Customization specific data
 	void *pInfo;          // Buffer that holds the data structure that references the data (e.g., the cachewad_t)
 	void *pBuffer;       // Buffer that holds the data for the customization (the raw .wad data)
-	struct customization_s *pNext; // Next in chain
+	struct customization_s*	pNext; // Next in chain
 } customization_t;
 
 #define FCUST_FROMHPAK		( 1<<0 )
 #define FCUST_WIPEDATA		( 1<<1 )
 #define FCUST_IGNOREINIT	( 1<<2 )
+#define FCUST_VALIDATED		( 1<<3 )
 
-void		COM_ClearCustomizationList( struct customization_s *pHead, qboolean bCleanDecals);
-qboolean	COM_CreateCustomization( struct customization_s *pListHead, struct resource_s *pResource, int playernumber, int flags, 
-				struct customization_s **pCustomization, int *nLumps ); 
-int			COM_SizeofResourceList ( struct resource_s *pList, struct resourceinfo_s *ri );
+void		COM_ClearCustomizationList( struct customization_s* pHead, qboolean bCleanDecals );
+qboolean	COM_CreateCustomization( struct customization_s* pListHead, resource_t* pResource, int playernumber, int flags, struct customization_s** pCustomization, int* nLumps );
+int			COM_SizeofResourceList( resource_t* pList, resourceinfo_t* ri );
 
 #endif // CUSTOM_H

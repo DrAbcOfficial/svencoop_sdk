@@ -28,6 +28,7 @@ public:
 	inline Vector2D operator-(const Vector2D& v)	const	{ return Vector2D(x-v.x, y-v.y);	}
 	inline Vector2D operator*(float fl)				const	{ return Vector2D(x*fl, y*fl);	}
 	inline Vector2D operator/(float fl)				const	{ return Vector2D(x/fl, y/fl);	}
+	inline Vector2D &operator=(const Vector2D& v)			{ x = v.x; y = v.y; return *this; }
 	
 	inline float Length(void)						const	{ return sqrt(x*x + y*y );		}
 
@@ -50,6 +51,7 @@ public:
 	vec_t	x, y;
 };
 
+inline float DotProduct2D(const Vector2D& a, const Vector2D& b) { return a.x * b.x + a.y * b.y; }
 inline float DotProduct(const Vector2D& a, const Vector2D& b) { return( a.x*b.x + a.y*b.y ); }
 inline Vector2D operator*(float fl, const Vector2D& v)	{ return v * fl; }
 
@@ -75,6 +77,9 @@ public:
 	inline Vector operator-(const Vector& v) const	{ return Vector(x-v.x, y-v.y, z-v.z);	}
 	inline Vector operator*(float fl) const			{ return Vector(x*fl, y*fl, z*fl);		}
 	inline Vector operator/(float fl) const			{ return Vector(x/fl, y/fl, z/fl);		}
+	inline Vector operator*(const Vector& v) const	{ return Vector(x*v.x, y*v.y, z*v.z);	}
+	inline Vector operator/(const Vector& v) const	{ return Vector(x/v.x, y/v.y, z/v.z);	}
+	inline Vector &operator=(const Vector& v)		{ x = v.x; y = v.y; z = v.z; return *this; }
 	
 	// Methods
 	inline void CopyToArray(float* rgfl) const		{ rgfl[0] = x, rgfl[1] = y, rgfl[2] = z; }

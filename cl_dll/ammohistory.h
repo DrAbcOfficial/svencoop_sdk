@@ -17,7 +17,7 @@
 //
 
 // this is the max number of items in each bucket
-#define MAX_WEAPON_POSITIONS		MAX_WEAPON_SLOTS
+#define MAX_WEAPON_POSITIONS		25
 
 class WeaponsResource
 {
@@ -28,6 +28,7 @@ private:
 	// counts of weapons * ammo
 	WEAPON*		rgSlots[MAX_WEAPON_SLOTS+1][MAX_WEAPON_POSITIONS+1];	// The slots currently in use by weapons.  The value is a pointer to the weapon;  if it's NULL, no weapon is there
 	int			riAmmo[MAX_AMMO_TYPES];							// count of each ammo type
+	int			iWeaponCount;
 
 public:
 	void Init( void )
@@ -38,29 +39,43 @@ public:
 
 	void Reset( void )
 	{
-		iOldWeaponBits = 0;
 		memset( rgSlots, 0, sizeof rgSlots );
 		memset( riAmmo, 0, sizeof riAmmo );
 	}
 
 ///// WEAPON /////
-	int			iOldWeaponBits;
-
-	WEAPON *GetWeapon( int iId ) { return &rgWeapons[iId]; }
+	WEAPON *GetWeapon( int iId ) { return (unsigned int)iId < MAX_WEAPONS ? &rgWeapons[iId] : NULL; }
 	void AddWeapon( WEAPON *wp ) 
 	{ 
+		if ( (unsigned int)wp->iId >= MAX_WEAPONS )
+			return;
+
 		rgWeapons[ wp->iId ] = *wp;	
 		LoadWeaponSprites( &rgWeapons[ wp->iId ] );
 	}
 
 	void PickupWeapon( WEAPON *wp )
 	{
-		rgSlots[ wp->iSlot ][ wp->iSlotPos ] = wp;
+		if ( !CheckWeaponSlot(wp) )
+			return;
+
+		if ( !rgSlots[ wp->iSlot ][ wp->iSlotPos ] )
+		{
+			rgSlots[ wp->iSlot ][ wp->iSlotPos ] = wp;
+			iWeaponCount++;
+		}
 	}
 
 	void DropWeapon( WEAPON *wp )
 	{
-		rgSlots[ wp->iSlot ][ wp->iSlotPos ] = NULL;
+		if ( !CheckWeaponSlot(wp) )
+			return;
+
+		if ( rgSlots[ wp->iSlot ][ wp->iSlotPos ] )
+		{
+			rgSlots[ wp->iSlot ][ wp->iSlotPos ] = NULL;
+			iWeaponCount--;
+		}
 	}
 
 	void DropAllWeapons( void )
@@ -80,12 +95,20 @@ public:
 	void SelectSlot( int iSlot, int fAdvance, int iDirection );
 	WEAPON* GetNextActivePos( int iSlot, int iSlotPos );
 
-	int HasAmmo( WEAPON *p );
+	bool CheckWeaponSlot( WEAPON *p );
+	bool UsesAmmo( WEAPON *p );
+	bool HasAmmoLeft( WEAPON *p );
+	bool CanBeSelected( WEAPON *p );
+	bool HasWeapons( void ) { return iWeaponCount > 0; }
 
 ///// AMMO /////
 	AMMO GetAmmo( int iId ) { return iId; }
 
-	void SetAmmo( int iId, int iCount ) { riAmmo[ iId ] = iCount;	}
+	void SetAmmo( int iId, int iCount )
+	{
+		if ( (unsigned int)iId < MAX_AMMO_TYPES )
+			riAmmo[iId] = iCount;
+	}
 
 	int CountAmmo( int iId );
 
@@ -115,6 +138,8 @@ private:
 
 	HIST_ITEM rgAmmoHistory[MAX_HISTORY];
 
+	void AddToHistoryInt( int iType, int iId, int iCount );
+
 public:
 
 	void Init( void )
@@ -125,6 +150,7 @@ public:
 	void Reset( void )
 	{
 		memset( rgAmmoHistory, 0, sizeof rgAmmoHistory );
+		iCurrentHistorySlot = 0;
 	}
 
 	int iHistoryGap;

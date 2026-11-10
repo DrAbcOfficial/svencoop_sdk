@@ -23,6 +23,7 @@
 #include "animation.h"
 #include "saverestore.h"
 #include "squadmonster.h"
+#include "scripted.h"
 #include "plane.h"
 
 //=========================================================
@@ -445,75 +446,6 @@ void CSquadMonster :: StartMonster( void )
 }
 
 //=========================================================
-// NoFriendlyFire - checks for possibility of friendly fire
-//
-// Builds a large box in front of the grunt and checks to see 
-// if any squad members are in that box. 
-//=========================================================
-BOOL CSquadMonster :: NoFriendlyFire( void )
-{
-	if ( !InSquad() )
-	{
-		return TRUE;
-	}
-
-	CPlane	backPlane;
-	CPlane  leftPlane;
-	CPlane	rightPlane;
-
-	Vector	vecLeftSide;
-	Vector	vecRightSide;
-	Vector	v_left;
-
-	//!!!BUGBUG - to fix this, the planes must be aligned to where the monster will be firing its gun, not the direction it is facing!!!
-
-	if ( m_hEnemy != NULL )
-	{
-		UTIL_MakeVectors ( UTIL_VecToAngles( m_hEnemy->Center() - pev->origin ) );
-	}
-	else
-	{
-		// if there's no enemy, pretend there's a friendly in the way, so the grunt won't shoot.
-		return FALSE;
-	}
-
-	//UTIL_MakeVectors ( pev->angles );
-	
-	vecLeftSide = pev->origin - ( gpGlobals->v_right * ( pev->size.x * 1.5 ) );
-	vecRightSide = pev->origin + ( gpGlobals->v_right * ( pev->size.x * 1.5 ) );
-	v_left = gpGlobals->v_right * -1;
-
-	leftPlane.InitializePlane ( gpGlobals->v_right, vecLeftSide );
-	rightPlane.InitializePlane ( v_left, vecRightSide );
-	backPlane.InitializePlane ( gpGlobals->v_forward, pev->origin );
-
-/*
-	ALERT ( at_console, "LeftPlane: %f %f %f : %f\n", leftPlane.m_vecNormal.x, leftPlane.m_vecNormal.y, leftPlane.m_vecNormal.z, leftPlane.m_flDist );
-	ALERT ( at_console, "RightPlane: %f %f %f : %f\n", rightPlane.m_vecNormal.x, rightPlane.m_vecNormal.y, rightPlane.m_vecNormal.z, rightPlane.m_flDist );
-	ALERT ( at_console, "BackPlane: %f %f %f : %f\n", backPlane.m_vecNormal.x, backPlane.m_vecNormal.y, backPlane.m_vecNormal.z, backPlane.m_flDist );
-*/
-
-	CSquadMonster *pSquadLeader = MySquadLeader();
-	for (int i = 0; i < MAX_SQUAD_MEMBERS; i++)
-	{
-		CSquadMonster *pMember = pSquadLeader->MySquadMember(i);
-		if (pMember && pMember != this)
-		{
-
-			if ( backPlane.PointInFront  ( pMember->pev->origin ) &&
-				 leftPlane.PointInFront  ( pMember->pev->origin ) && 
-				 rightPlane.PointInFront ( pMember->pev->origin) )
-			{
-				// this guy is in the check volume! Don't shoot!
-				return FALSE;
-			}
-		}
-	}
-
-	return TRUE;
-}
-
-//=========================================================
 // GetIdealState - surveys the Conditions information available
 // and finds the best new state for a monster.
 //=========================================================
@@ -583,21 +515,17 @@ BOOL CSquadMonster :: SquadEnemySplit ( void )
 }
 
 //=========================================================
-// FValidateCover - determines whether or not the chosen
-// cover location is a good one to move to. (currently based
-// on proximity to others in the squad)
+// SquadMemberInRange - checks for living friendly monsters in a sphere
 //=========================================================
 BOOL CSquadMonster :: SquadMemberInRange ( const Vector &vecLocation, float flDist )
 {
-	if (!InSquad())
-		return FALSE;
+	CBaseEntity *entities[100];
 
-	CSquadMonster *pSquadLeader = MySquadLeader();
+	int count = UTIL_MonstersInSphere( entities, ARRAYSIZE( entities ), vecLocation, flDist );
 
-	for (int i = 0; i < MAX_SQUAD_MEMBERS; i++)
+	for (int i = 0; i < count; ++i )
 	{
-		CSquadMonster *pSquadMember = pSquadLeader->MySquadMember(i);
-		if (pSquadMember && (vecLocation - pSquadMember->pev->origin ).Length2D() <= flDist)
+		if ( entities[i] != this && entities[i]->IsAlive() && IRelationship( entities[i], false ) < R_DL )
 			return TRUE;
 	}
 	return FALSE;

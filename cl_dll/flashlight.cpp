@@ -65,7 +65,7 @@ int CHudFlashlight::VidInit(void)
 	m_prc1 = &gHUD.GetSpriteRect(HUD_flash_empty);
 	m_prc2 = &gHUD.GetSpriteRect(HUD_flash_full);
 	m_prcBeam = &gHUD.GetSpriteRect(HUD_flash_beam);
-	m_iWidth = m_prc2->right - m_prc2->left;
+	m_iWidth = m_prc2->right - m_prc2->left + m_prcBeam->right - m_prcBeam->left;
 
 	return 1;
 };
@@ -96,19 +96,22 @@ int CHudFlashlight:: MsgFunc_Flashlight(const char *pszName,  int iSize, void *p
 
 int CHudFlashlight::Draw(float flTime)
 {
-	if ( gHUD.m_iHideHUDDisplay & ( HIDEHUD_FLASHLIGHT | HIDEHUD_ALL ) )
+	if ( gHUD.m_iHideHUDDisplay & HIDEHUD_FLASHLIGHT)
 		return 1;
 
-	int r, g, b, x, y, a;
-	wrect_t rc;
-
-	if (!(gHUD.m_iWeaponBits & (1<<(WEAPON_SUIT)) ))
+	if (!(gHUD.m_iWeaponBits & (1<< WEAPON_SUIT) ))
 		return 1;
 
-	if (m_fOn)
-		a = 225;
+	int a;
+
+	if ( m_fOn )
+		a = gHUD.GetMaxAlpha();
 	else
-		a = MIN_ALPHA;
+		a = gHUD.GetDefaultAlpha();
+
+	a = (int)(a * 0.66f);
+
+	int r, g, b;
 
 	if (m_flBat < 0.20)
 		UnpackRGB(r,g,b, RGB_REDISH);
@@ -117,30 +120,23 @@ int CHudFlashlight::Draw(float flTime)
 
 	ScaleColors(r, g, b, a);
 
-	y = (m_prc1->bottom - m_prc2->top)/2;
-	x = ScreenWidth - m_iWidth - m_iWidth/2 ;
+	int y = gHUD.GetBorderSize();
+	int x = ScreenWidth - m_iWidth - gHUD.GetBorderSize();
 
-	// Draw the flashlight casing
 	gHUD.DrawSprite(x, y, m_hSprite1, m_prc1, r, g, b, 0, SPR_ADDITIVE);
 
-	if ( m_fOn )
-	{  // draw the flashlight beam
-		x = ScreenWidth - m_iWidth/2;
-
-		gHUD.DrawSprite(x, y, m_hBeam, m_prcBeam, r, g, b, 0, SPR_ADDITIVE);
-	}
-
-	// draw the flashlight energy level
-	x = ScreenWidth - m_iWidth - m_iWidth/2 ;
-	int iOffset = m_iWidth * (1.0 - m_flBat);
-	if (iOffset < m_iWidth)
+	int width = m_prc2->right - m_prc2->left;
+	int iOffset = width * (1.0 - m_flBat);
+	if (iOffset < width)
 	{
-		rc = *m_prc2;
+		wrect_t rc = *m_prc2;
 		rc.left += iOffset;
 
 		gHUD.DrawSprite(x + iOffset, y, m_hSprite2, &rc, r, g, b, 0, SPR_ADDITIVE);
 	}
 
+	if (m_fOn)
+		gHUD.DrawSprite(x + width, y, m_hBeam, m_prcBeam, r, g, b, 0, SPR_ADDITIVE);
 
 	return 1;
 }

@@ -29,9 +29,9 @@
 
 #pragma warning(disable: 4244)
 
-extern "C" int		iJumpSpectator;
-extern "C" float	vJumpOrigin[3];
-extern "C" float	vJumpAngles[3]; 
+extern int		iJumpSpectator;
+extern float	vJumpOrigin[3];
+extern float	vJumpAngles[3]; 
 
 
 extern void V_GetInEyePos(int entity, float * origin, float * angles );
@@ -172,8 +172,8 @@ int CHudSpectator::Init()
 	m_zoomDelta	= 0.0f;
 	m_moveDelta = 0.0f;
 	m_FOV = 90.0f;
-	m_chatEnabled = (gHUD.m_SayText.m_HUD_saytext->value!=0);
-	iJumpSpectator	= 0;
+	m_chatEnabled = (gHUD.m_SayText.m_HUD_saytext->value != 0);
+	iJumpSpectator = 0;
 
 	memset( &m_OverviewData, 0, sizeof(m_OverviewData));
 	memset( &m_OverviewEntities, 0, sizeof(m_OverviewEntities));
@@ -205,18 +205,18 @@ int CHudSpectator::Init()
 // UTIL_StringToVector originally from ..\dlls\util.cpp, slightly changed
 //-----------------------------------------------------------------------------
 
-void UTIL_StringToVector( float * pVector, const char *pString )
+void UTIL_StringToVector( float *pVector, const char *pString )
 {
 	char *pstr, *pfront, tempString[128];
 	int	j;
 
 	strcpy( tempString, pString );
 	pstr = pfront = tempString;
-	
-	for ( j = 0; j < 3; j++ )		
+
+	for ( j = 0; j < 3; j++ )			// lifted from pr_edict.c
 	{
 		pVector[j] = atof( pfront );
-		
+
 		while ( *pstr && *pstr != ' ' )
 			pstr++;
 		if (!*pstr)
@@ -224,15 +224,18 @@ void UTIL_StringToVector( float * pVector, const char *pString )
 		pstr++;
 		pfront = pstr;
 	}
-
 	if (j < 2)
 	{
+		/*
+		ALERT( at_error, "Bad field in entity!! %s:%s == \"%s\"\n",
+			pkvd->szClassName, pkvd->szKeyName, pkvd->szValue );
+		*/
 		for (j = j+1;j < 3; j++)
 			pVector[j] = 0;
 	}
 }
 
-int UTIL_FindEntityInMap(char * name, float * origin, float * angle)
+int UTIL_FindEntityInMap(const char * name, float * origin, float * angle)
 {
 	int				n,found = 0;
 	char			keyname[256];
@@ -802,13 +805,13 @@ void CHudSpectator::DirectorMessage( int iSize, void *pbuf )
 							m_iSpectatorNumber = READ_LONG(); // total number of spectator
 							READ_WORD(); // total number of relay proxies
 
-							gViewPort->UpdateSpectatorPanel();
+							gViewPort->UpdateSpectatorMenu();
 							break;
 
 		case DRC_CMD_BANNER:
 							// gEngfuncs.Con_DPrintf("GUI: Banner %s\n",READ_STRING() ); // name of banner tga eg gfx/temp/7454562234563475.tga
 							gViewPort->m_pSpectatorPanel->m_TopBanner->LoadImage( READ_STRING() );
-							gViewPort->UpdateSpectatorPanel();
+							gViewPort->UpdateSpectatorMenu();
 							break;
 
 		case DRC_CMD_STUFFTEXT:
@@ -977,7 +980,7 @@ void CHudSpectator::FindPlayer(const char *name)
 
 	cl_entity_t * pEnt = NULL;
 
-	for (int i = 1; i < MAX_PLAYERS; i++ )
+	for (int i = 1; i <= MAX_PLAYERS; i++ )
 	{
 		
 		pEnt = gEngfuncs.GetEntityByIndex( i );
@@ -1229,7 +1232,7 @@ void CHudSpectator::SetModes(int iNewMainMode, int iNewInsetMode)
 		gHUD.m_TextMessage.MsgFunc_TextMsg(NULL, strlen(string)+1, string );
 	}
 
-	gViewPort->UpdateSpectatorPanel();
+	gViewPort->UpdateSpectatorMenu();
 
 }
 
@@ -1422,8 +1425,8 @@ void CHudSpectator::DrawOverviewLayer()
 	float screenaspect, xs, ys, xStep, yStep, x,y,z;
 	int ix,iy,i,xTiles,yTiles,frame;
 
-	qboolean	hasMapImage = m_MapSprite?TRUE:FALSE;
-	model_t *   dummySprite = (struct model_s *)gEngfuncs.GetSpritePointer( m_hsprUnkownMap);
+	qboolean	hasMapImage = m_MapSprite ? TRUE : FALSE;
+	model_t* dummySprite = (model_t*)gEngfuncs.GetSpritePointer(m_hsprUnkownMap);
 
 	if ( hasMapImage)
 	{
@@ -1546,7 +1549,7 @@ void CHudSpectator::DrawOverviewLayer()
 void CHudSpectator::DrawOverviewEntities()
 {
 	int				i,ir,ig,ib;
-	struct model_s *hSpriteModel;
+	model_t*		hSpriteModel;
 	vec3_t			origin, angles, point, forward, right, left, up, world, screen, offset;
 	float			x,y,z, r,g,b, sizeScale = 4.0f;
 	cl_entity_t *	ent;
@@ -1557,7 +1560,7 @@ void CHudSpectator::DrawOverviewEntities()
 
 	z = m_OverviewData.layersHeights[0] * zScale;
 	// get yellow/brown HUD color
-	UnpackRGB(ir,ig,ib, RGB_BLUEISH);
+	UnpackRGB(ir,ig,ib, RGB_YELLOWISH);
 	r = (float)ir/255.0f;
 	g = (float)ig/255.0f;
 	b = (float)ib/255.0f;
@@ -1573,7 +1576,7 @@ void CHudSpectator::DrawOverviewEntities()
 		if ( !m_OverviewEntities[i].hSprite )
 			continue;
 
-		hSpriteModel = (struct model_s *)gEngfuncs.GetSpritePointer( m_OverviewEntities[i].hSprite );
+		hSpriteModel = (model_t*)gEngfuncs.GetSpritePointer(m_OverviewEntities[i].hSprite);
 		ent = m_OverviewEntities[i].entity;
 		
 		gEngfuncs.pTriAPI->SpriteTexture( hSpriteModel, 0 );
@@ -1625,9 +1628,9 @@ void CHudSpectator::DrawOverviewEntities()
 
 		gEngfuncs.pTriAPI->RenderMode( kRenderTransAdd );
 		
-		hSpriteModel = (struct model_s *)gEngfuncs.GetSpritePointer( m_hsprBeam );
-		gEngfuncs.pTriAPI->SpriteTexture( hSpriteModel, 0 );
-		
+		hSpriteModel = (model_t*)gEngfuncs.GetSpritePointer(m_hsprBeam);
+		gEngfuncs.pTriAPI->SpriteTexture(hSpriteModel, 0);
+
 		gEngfuncs.pTriAPI->Color4f(r, g, b, 0.3);
 
 		gEngfuncs.pTriAPI->Begin ( TRI_QUADS );
@@ -1709,9 +1712,9 @@ void CHudSpectator::DrawOverviewEntities()
 
 	angles[0] = 0; // always show horizontal camera sprite
 
-	hSpriteModel = (struct model_s *)gEngfuncs.GetSpritePointer( m_hsprCamera );
-	gEngfuncs.pTriAPI->RenderMode( kRenderTransAdd );
-	gEngfuncs.pTriAPI->SpriteTexture( hSpriteModel, 0 );
+	hSpriteModel = (model_t*)gEngfuncs.GetSpritePointer(m_hsprCamera);
+	gEngfuncs.pTriAPI->RenderMode(kRenderTransAdd);
+	gEngfuncs.pTriAPI->SpriteTexture(hSpriteModel, 0);
 	
 	
 	gEngfuncs.pTriAPI->Color4f( r, g, b, 1.0 );
@@ -1777,7 +1780,7 @@ void CHudSpectator::CheckOverviewEntities()
 	}
 }
 
-bool CHudSpectator::AddOverviewEntity( int type, struct cl_entity_s *ent, const char *modelname)
+bool CHudSpectator::AddOverviewEntity( int type, cl_entity_t *ent, const char *modelname)
 {
 	HSPRITE	hSprite = 0;
 	double  duration = -1.0f;	// duration -1 means show it only this frame;

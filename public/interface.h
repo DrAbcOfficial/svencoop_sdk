@@ -14,10 +14,10 @@
 //    for legacy code). In this case, you need to make a new version name for your new interface, and make a wrapper interface and 
 //    expose it for the old interface.
 
-//#if _MSC_VER >= 1300  // VC7
-//#include "tier1/interface.h"
-//#else
-
+#if _MSC_VER >= 1300  // VC7
+// Just in case if normal interface.h is included -Enko
+#include "tier1/interface.h"
+#else
 #ifndef INTERFACE_H
 #define INTERFACE_H
 
@@ -50,20 +50,19 @@ typedef IBaseInterface* (*CreateInterfaceFn)(const char *pName, int *pReturnCode
 
 typedef IBaseInterface* (*InstantiateInterfaceFn)();
 
-
 // Used internally to register classes.
 class InterfaceReg
 {
 public:
-				InterfaceReg(InstantiateInterfaceFn fn, const char *pName);
+	InterfaceReg( InstantiateInterfaceFn fn, const char* pName );
 
 public:
 
 	InstantiateInterfaceFn	m_CreateFn;
-	const char				*m_pName;
+	const char* m_pName;
 
-	InterfaceReg			*m_pNext; // For the global list.
-	static InterfaceReg		*s_pInterfaceRegs;
+	InterfaceReg* m_pNext; // For the global list.
+	static InterfaceReg* s_pInterfaceRegs;
 };
 
 
@@ -86,7 +85,7 @@ public:
 	static IBaseInterface* __Create##className##_interface() {return (interfaceName *)new className;}\
 	static InterfaceReg __g_Create##className##_reg(__Create##className##_interface, versionName );
 
-// Use this to expose a singleton interface with a global variable you've created.
+	// Use this to expose a singleton interface with a global variable you've created.
 #define EXPOSE_SINGLE_INTERFACE_GLOBALVAR(className, interfaceName, versionName, globalVarName) \
 	static IBaseInterface* __Create##className##interfaceName##_interface() {return (IBaseInterface *)&globalVarName;}\
 	static InterfaceReg __g_Create##className##interfaceName##_reg(__Create##className##interfaceName##_interface, versionName);
@@ -116,7 +115,7 @@ enum
 
 extern "C"
 {
-	EXPORT_FUNCTION IBaseInterface* CreateInterface(const char *pName, int *pReturnCode);
+	EXPORT_FUNCTION IBaseInterface* CreateInterface( const char* pName, int* pReturnCode );
 };
 
 
@@ -126,7 +125,7 @@ extern CreateInterfaceFn	Sys_GetFactoryThis( void );
 //-----------------------------------------------------------------------------
 // UNDONE: This is obsolete, use the module load/unload/get instead!!!
 //-----------------------------------------------------------------------------
-extern CreateInterfaceFn	Sys_GetFactory( const char *pModuleName );
+extern CreateInterfaceFn	Sys_GetFactory( const char* pModuleName );
 
 
 // load/unload components
@@ -137,13 +136,13 @@ class CSysModule;
 // The factory for that module should be passed on to dependent components for
 // proper versioning.
 //-----------------------------------------------------------------------------
-extern CSysModule			*Sys_LoadModule( const char *pModuleName );
+extern CSysModule*			Sys_LoadModule( const char *pModuleName );
 extern void					Sys_UnloadModule( CSysModule *pModule );
+CSysModule*					Sys_GetModuleHandle( const char* pszModuleName );
 
 extern CreateInterfaceFn	Sys_GetFactory( CSysModule *pModule );
 
-
 #endif
-//#endif // MSVC 6.0
+#endif // MSVC 6.0
 
 

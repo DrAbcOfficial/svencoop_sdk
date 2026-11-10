@@ -40,7 +40,10 @@
 #include	"util.h"
 #include	"cbase.h"
 #include	"monsters.h"
+#include "game.h"
 
+extern cvar_t sk_leech_dmg_bite;
+extern cvar_t sk_leech_health;
 
 
 
@@ -72,6 +75,8 @@
 class CLeech : public CBaseMonster
 {
 public:
+	float GetPointsForDamage( float flDamage );
+
 	void Spawn( void );
 	void Precache( void );
 
@@ -110,8 +115,8 @@ public:
 	void Killed( entvars_t *pevAttacker, int iGib );
 	void Activate( void );
 	int TakeDamage( entvars_t *pevInflictor, entvars_t *pevAttacker, float flDamage, int bitsDamageType );
-	int	Classify( void ) { return CLASS_INSECT; }
-	int IRelationship( CBaseEntity *pTarget );
+	int	Classify( void ) { return CLASS_ALIEN_MONSTER; }
+	int IRelationship( CBaseEntity *pTarget, bool ignoreNoTarget = false );
 
 	virtual int		Save( CSave &save );
 	virtual int		Restore( CRestore &restore );
@@ -181,7 +186,8 @@ const char *CLeech::pAlertSounds[] =
 void CLeech::Spawn( void )
 {
 	Precache();
-	SET_MODEL(ENT(pev), "models/leech.mdl");
+	if ( !SetupModel() )
+		SET_MODEL(ENT(pev), "models/leech.mdl");
 	// Just for fun
 	//	SET_MODEL(ENT(pev), "models/icky.mdl");
 	
@@ -191,10 +197,14 @@ void CLeech::Spawn( void )
 	pev->solid			= SOLID_SLIDEBOX;
 	pev->movetype		= MOVETYPE_FLY;
 	SetBits(pev->flags, FL_SWIM);
-	pev->health			= gSkillData.leechHealth;
+	if ( !pev->health )
+		pev->health			= sk_leech_health.value;
 
 	m_flFieldOfView		= -0.5;	// 180 degree FOV
 	m_flDistLook		= 750;
+	if ( !m_FormattedName )
+		m_FormattedName = MAKE_STRING( "Leech" );
+
 	MonsterInit();
 	SetThink( &CLeech::SwimThink );
 	SetUse( NULL );
@@ -265,11 +275,14 @@ void CLeech::SwitchLeechState( void )
 }
 
 
-int CLeech::IRelationship( CBaseEntity *pTarget )
+int CLeech::IRelationship( CBaseEntity *pTarget, bool ignoreNoTarget )
 {
+	if ( !pTarget )
+		return R_NO;
+
 	if ( pTarget->IsPlayer() )
 		return R_DL;
-	return CBaseMonster::IRelationship( pTarget );
+	return CBaseMonster::IRelationship( pTarget, ignoreNoTarget );
 }
 
 
@@ -292,6 +305,8 @@ void CLeech::AlertSound( void )
 
 void CLeech::Precache( void )
 {
+	CBaseEntity::Precache();
+
 	int i;
 
 	//PRECACHE_MODEL("models/icky.mdl");
@@ -340,7 +355,7 @@ void CLeech::HandleAnimEvent( MonsterEvent_t *pEvent )
 
 			
 			if ( DotProduct(dir, face) > 0.9 )		// Only take damage if the leech is facing the prey
-				pEnemy->TakeDamage( pev, pev, gSkillData.leechDmgBite, DMG_SLASH );
+				pEnemy->TakeDamage( pev, pev, sk_leech_dmg_bite.value, DMG_SLASH );
 		}
 		m_stateTime -= 2;
 		break;
@@ -720,4 +735,10 @@ void CLeech::Killed(entvars_t *pevAttacker, int iGib)
 	SetThink( &CLeech::DeadThink );
 }
 
+float CLeech::GetPointsForDamage( float flDamage )
+{
+	float healthScale = pev->max_health / sk_leech_health.value;
+	float damageScale = flDamage / pev->max_health;
 
+	return (double) healthScale * 0.1 * damageScale;
+}

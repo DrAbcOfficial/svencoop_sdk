@@ -21,19 +21,47 @@
 #include	"cbase.h"
 #include	"monsters.h"
 #include	"schedule.h"
+#include "game.h"
+#include "CClassicMode.h"
+
+extern cvar_t sk_barnacle_bite;
 
 #define	BARNACLE_BODY_HEIGHT	44 // how 'tall' the barnacle's model is.
 #define BARNACLE_PULL_SPEED		8
-#define BARNACLE_KILL_VICTIM_DELAY	5 // how many seconds after pulling prey in to gib them. 
 
 //=========================================================
 // Monster's Anim Events Go Here
 //=========================================================
 #define	BARNACLE_AE_PUKEGIB	2
 
+extern cvar_t sk_barnacle_health;
+
+#define BARNACLE_MAX_FOOD_HEIGHT	36
+
 class CBarnacle : public CBaseMonster
 {
 public:
+	float GetPointsForDamage( float flDamage ) { return pev->max_health / sk_barnacle_health.value * ( flDamage / pev->max_health ); }
+	void UpdateOnRemove( void )
+	{
+		CBaseMonster::UpdateOnRemove();
+
+		CBaseMonster *pVictim = m_hEnemy != NULL ? m_hEnemy->MyMonsterPointer() : NULL;
+
+		if ( pVictim )
+			pVictim->BarnacleVictimReleased();
+	}
+
+	// a shock trooper too tall to lift isn't food
+	int IRelationship( CBaseEntity *pTarget, bool fIgnoreNoTarget = false )
+	{
+		if ( !pTarget || ( ( pTarget->pev->flags & FL_MONSTER ) && pTarget->Classify() == CLASS_XRACE_SHOCK
+			&& pTarget->pev->size.z > BARNACLE_MAX_FOOD_HEIGHT ) )
+			return R_NO;
+
+		return CBaseEntity::IRelationship( pTarget, fIgnoreNoTarget );
+	}
+
 	void Spawn( void );
 	void Precache( void );
 	CBaseEntity *TongueTouchEnt ( float *pflLength );
@@ -47,22 +75,23 @@ public:
 	virtual int		Restore( CRestore &restore );
 	static	TYPEDESCRIPTION m_SaveData[];
 
-	float m_flAltitude;
-	float m_flKillVictimTime;
-	int	  m_cGibs;// barnacle loads up on gibs each time it kills something.
-	BOOL  m_fTongueExtended;
-	BOOL  m_fLiftingPrey;
-	float m_flTongueAdj;
+	float	m_flAltitude;
+	float	m_flVictimStartHealth;
+	int		m_cGibs;// barnacle loads up on gibs each time it kills something.
+	bool	m_fTongueExtended;
+	bool	m_fLiftingPrey;
+	float	m_flTongueAdj;
 };
 LINK_ENTITY_TO_CLASS( monster_barnacle, CBarnacle );
 
 TYPEDESCRIPTION	CBarnacle::m_SaveData[] = 
 {
 	DEFINE_FIELD( CBarnacle, m_flAltitude, FIELD_FLOAT ),
-	DEFINE_FIELD( CBarnacle, m_flKillVictimTime, FIELD_TIME ),
+	DEFINE_FIELD( CBarnacle, m_flVictimStartHealth, FIELD_FLOAT ),
+	DEFINE_FIELD( CBarnacle, m_flNextAttack, FIELD_TIME ),
 	DEFINE_FIELD( CBarnacle, m_cGibs, FIELD_INTEGER ),// barnacle loads up on gibs each time it kills something.
-	DEFINE_FIELD( CBarnacle, m_fTongueExtended, FIELD_BOOLEAN ),
-	DEFINE_FIELD( CBarnacle, m_fLiftingPrey, FIELD_BOOLEAN ),
+	DEFINE_FIELD( CBarnacle, m_fTongueExtended, FIELD_CHARACTER ),
+	DEFINE_FIELD( CBarnacle, m_fLiftingPrey, FIELD_CHARACTER ),
 	DEFINE_FIELD( CBarnacle, m_flTongueAdj, FIELD_FLOAT ),
 };
 
@@ -104,7 +133,13 @@ void CBarnacle :: Spawn()
 {
 	Precache( );
 
-	SET_MODEL(ENT(pev), "models/barnacle.mdl");
+	if ( !SetupModel() )
+	{
+		if ( CClassicMode::GetInstance()->IsEnabled() )
+			SET_MODEL( ENT(pev), "models/hlclassic/barnacle.mdl" );
+		else
+			SET_MODEL(ENT(pev), "models/barnacle.mdl");
+	}
 	UTIL_SetSize( pev, Vector(-16, -16, -32), Vector(16, 16, 0) );
 
 	pev->solid			= SOLID_SLIDEBOX;
@@ -112,11 +147,14 @@ void CBarnacle :: Spawn()
 	pev->takedamage		= DAMAGE_AIM;
 	m_bloodColor		= BLOOD_COLOR_RED;
 	pev->effects		= EF_INVLIGHT; // take light from the ceiling 
-	pev->health			= 25;
+	if ( !pev->health )
+		pev->health			= sk_barnacle_health.value;
 	m_flFieldOfView		= 0.5;// indicates the width of this monster's forward view cone ( as a dotproduct result )
 	m_MonsterState		= MONSTERSTATE_NONE;
-	m_flKillVictimTime	= 0;
+	m_flNextAttack		= 0;
+	m_flVictimStartHealth = 0;
 	m_cGibs				= 0;
+	m_fTongueExtended	= false;
 	m_fLiftingPrey		= FALSE;
 	m_flTongueAdj		= -100;
 
@@ -125,17 +163,15 @@ void CBarnacle :: Spawn()
 	SetActivity ( ACT_IDLE );
 
 	SetThink ( &CBarnacle::BarnacleThink );
-	pev->nextthink = gpGlobals->time + 0.5;
+	pev->nextthink = gpGlobals->time + 0.1;
 
 	UTIL_SetOrigin ( pev, pev->origin );
 }
 
 int CBarnacle::TakeDamage( entvars_t *pevInflictor, entvars_t *pevAttacker, float flDamage, int bitsDamageType )
 {
-	if ( bitsDamageType & DMG_CLUB )
-	{
-		flDamage = pev->health;
-	}
+	if ( m_hEnemy == NULL && RANDOM_LONG( 0, 1 ) )
+		SetActivity( ACT_SMALL_FLINCH );
 
 	return CBaseMonster::TakeDamage( pevInflictor, pevAttacker, flDamage, bitsDamageType );
 }
@@ -193,11 +229,15 @@ void CBarnacle :: BarnacleThink ( void )
 
 				pVictim = m_hEnemy->MyMonsterPointer();
 
-				m_flKillVictimTime = gpGlobals->time + 10;// now that the victim is in place, the killing bite will be administered in 10 seconds.
+				m_flNextAttack = gpGlobals->time + RANDOM_LONG( 1, 1 );// now that the victim is in place, the killing bite will be administered in 10 seconds.
 
 				if ( pVictim )
 				{
-					pVictim->BarnacleVictimBitten( pev );
+					m_flVictimStartHealth = pVictim->pev->health + pVictim->pev->armorvalue;
+
+					float damage = V_max( sk_barnacle_bite.value, m_flVictimStartHealth / 9.0f );
+
+					pVictim->BarnacleVictimBitten( pev, damage );
 					SetActivity ( ACT_EAT );
 				}
 			}
@@ -210,29 +250,31 @@ void CBarnacle :: BarnacleThink ( void )
 
 			pVictim = m_hEnemy->MyMonsterPointer();
 
-			if ( m_flKillVictimTime != -1 && gpGlobals->time > m_flKillVictimTime )
+			if ( pVictim )
 			{
-				// kill!
-				if ( pVictim )
-				{
-					pVictim->TakeDamage ( pev, pev, pVictim->pev->health, DMG_SLASH | DMG_ALWAYSGIB );
-					m_cGibs = 3;
-				}
+				float damage = V_max( sk_barnacle_bite.value, m_flVictimStartHealth / 9.0f );
+				float health = pVictim->pev->health + pVictim->pev->armorvalue;
 
-				return;
+				if ( health - damage < 0 )
+				{
+					pVictim->TakeDamage ( pev, pev, health * 100.0f, DMG_SLASH | DMG_ALWAYSGIB );
+					m_cGibs = 3;
+					return;
 			}
 
 			// bite prey every once in a while
-			if ( pVictim && ( RANDOM_LONG(0,49) == 0 ) )
-			{
-				switch ( RANDOM_LONG(0,2) )
+			if ( m_flNextAttack != -1 && gpGlobals->time >= m_flNextAttack )
+				{
+					pVictim->BarnacleVictimBitten( pev, damage );
+					m_flNextAttack = gpGlobals->time + RANDOM_LONG( 1, 1 );
+
+					switch ( RANDOM_LONG(0,2) )
 				{
 				case 0:	EMIT_SOUND( ENT(pev), CHAN_WEAPON, "barnacle/bcl_chew1.wav", 1, ATTN_NORM );	break;
 				case 1:	EMIT_SOUND( ENT(pev), CHAN_WEAPON, "barnacle/bcl_chew2.wav", 1, ATTN_NORM );	break;
 				case 2:	EMIT_SOUND( ENT(pev), CHAN_WEAPON, "barnacle/bcl_chew3.wav", 1, ATTN_NORM );	break;
 				}
-
-				pVictim->BarnacleVictimBitten( pev );
+				}
 			}
 
 		}
@@ -270,7 +312,7 @@ void CBarnacle :: BarnacleThink ( void )
 		if ( pTouchEnt != NULL && m_fTongueExtended )
 		{
 			// tongue is fully extended, and is touching someone.
-			if ( pTouchEnt->FBecomeProne() )
+			if ( pTouchEnt->FBecomeProne( this ) )
 			{
 				EMIT_SOUND( ENT(pev), CHAN_WEAPON, "barnacle/bcl_alert2.wav", 1, ATTN_NORM );	
 
@@ -286,7 +328,8 @@ void CBarnacle :: BarnacleThink ( void )
 				pTouchEnt->pev->origin.y = pev->origin.y;
 
 				m_fLiftingPrey = TRUE;// indicate that we should be lifting prey.
-				m_flKillVictimTime = -1;// set this to a bogus time while the victim is lifted.
+				m_flNextAttack = -1;// set this to a bogus time while the victim is lifted.
+				m_flVictimStartHealth = pTouchEnt->pev->health + pTouchEnt->pev->armorvalue;// set this to a bogus time while the victim is lifted.
 
 				m_flAltitude = (pev->origin.z - pTouchEnt->EyePosition().z);
 			}
@@ -358,14 +401,18 @@ void CBarnacle :: WaitTillDead ( void )
 {
 	pev->nextthink = gpGlobals->time + 0.1;
 
+	FCheckAITrigger();
+
 	float flInterval = StudioFrameAdvance( 0.1 );
 	DispatchAnimEvents ( flInterval );
 
 	if ( m_fSequenceFinished )
 	{
-		// death anim finished. 
+		// death anim finished.
 		StopAnimation();
-		SetThink ( NULL );
+
+		if ( ShouldFadeOnDeath() )
+			SUB_StartFadeOut();
 	}
 }
 
@@ -374,7 +421,12 @@ void CBarnacle :: WaitTillDead ( void )
 //=========================================================
 void CBarnacle :: Precache()
 {
-	PRECACHE_MODEL("models/barnacle.mdl");
+	CBaseEntity::Precache();
+
+	if ( CClassicMode::GetInstance()->IsEnabled() )
+		PRECACHE_MODEL( "models/hlclassic/barnacle.mdl" );
+	else
+		PRECACHE_MODEL( "models/barnacle.mdl" );
 
 	PRECACHE_SOUND("barnacle/bcl_alert2.wav");//happy, lifting food up
 	PRECACHE_SOUND("barnacle/bcl_bite3.wav");//just got food to mouth

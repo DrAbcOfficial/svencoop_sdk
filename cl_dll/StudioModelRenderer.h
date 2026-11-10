@@ -30,7 +30,8 @@ public:
 public:  
 	// Public Interfaces
 	virtual int StudioDrawModel ( int flags );
-	virtual int StudioDrawPlayer ( int flags, struct entity_state_s *pplayer );
+	virtual int StudioDrawPlayer ( int flags, entity_state_t *pplayer );
+	virtual int StudioDrawMonster ( int flags, cl_entity_t *pmonster );
 
 public:
 	// Local interfaces
@@ -59,6 +60,7 @@ public:
 
 	// Determine current frame for rendering
 	virtual float StudioEstimateFrame ( mstudioseqdesc_t *pseqdesc );
+	virtual float StudioEstimateGaitFrame ( mstudioseqdesc_t *pseqdesc );
 
 	// Apply special effects to transform matrix
 	virtual void StudioFxTransform( cl_entity_t *ent, float transform[3][4] );
@@ -91,12 +93,18 @@ public:
 	// Player specific data
 	// Determine pitch and blending amounts for players
 	virtual void StudioPlayerBlend ( mstudioseqdesc_t *pseqdesc, int *pBlend, float *pPitch );
+	virtual void StudioMonsterBlend ( mstudioseqdesc_t *pseqdesc, int *pBlend, float *pPitch );
 
 	// Estimate gait frame for player
 	virtual void StudioEstimateGait ( entity_state_t *pplayer );
+	virtual void StudioEstimateMonsterGait ( cl_entity_t *pmonster );
 
 	// Process movement of player
 	virtual void StudioProcessGait ( entity_state_t *pplayer );
+	virtual void StudioProcessMonsterGait ( cl_entity_t *pmonster );
+
+	// Whether the player's weapon model has its own attachment points
+	bool WeaponHasAttachments ( entity_state_t *pplayer );
 
 public:
 
@@ -117,6 +125,7 @@ public:
 	//
 	// Use high quality models?
 	cvar_t			*m_pCvarHiModels;	
+	cvar_t			*m_pCvarIndex[4];
 	// Developer debug output desired?
 	cvar_t			*m_pCvarDeveloper;
 	// Draw entities bone hit boxes, etc?
@@ -130,6 +139,8 @@ public:
 
 	// Player info for current player, if drawing a player
 	player_info_t	*m_pPlayerInfo;
+
+	int				m_iUnknown76;
 
 	// The index of the player being drawn
 	int				m_nPlayerIndex;
@@ -184,6 +195,8 @@ public:
 	// Concatenated bone and light transforms
 	float			(*m_pbonetransform) [ MAXSTUDIOBONES ][ 3 ][ 4 ];
 	float			(*m_plighttransform)[ MAXSTUDIOBONES ][ 3 ][ 4 ];
+
+	bool			m_bPortalLocalPlayer;
 };
 
 #endif // STUDIOMODELRENDERER_H

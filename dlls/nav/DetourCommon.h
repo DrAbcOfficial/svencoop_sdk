@@ -1,0 +1,25 @@
+// DetourCommon.h
+//
+// Based on Detour/Recast (public domain)
+//
+
+#ifndef DETOURCOMMON_H
+#define DETOURCOMMON_H
+
+typedef unsigned int dtStatus;
+
+enum dtStatusFlag
+{
+	DT_SUCCESS = 0x40000000,
+	DT_FAILURE = 0x80000000,
+	DT_INVALID_PARAM = 0x80000002,
+	DT_INVALID_INDEX = 0x80000004,
+	DT_INVALID_STATE = 0x80000008,
+	DT_OUT_OF_MEMORY = 0x80000010,
+	DT_BUFFER_TOO_SMALL = 0x80000020,
+	DT_WRONG_MAGIC = 0x80000040,
+	DT_BAD_VERSION = 0x80000080,
+	DT_NOT_IMPLEMENTED = 0x80000100,
+};
+
+#endif

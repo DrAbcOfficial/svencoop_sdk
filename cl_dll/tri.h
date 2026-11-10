@@ -5,6 +5,8 @@
 
 extern IParticleMan *g_pParticleMan;
 
+void HUD_DrawOrthoTriangles( void );
+
 
 
 

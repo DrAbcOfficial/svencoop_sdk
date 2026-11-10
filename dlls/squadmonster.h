@@ -12,6 +12,9 @@
 *   use or distribution of this code by or to any unlicensed person is illegal.
 *
 ****/
+#ifndef SQUADMONSTER_H
+#define SQUADMONSTER_H
+
 //=========================================================
 // CSquadMonster - all the extra data for monsters that
 // form squads.
@@ -56,6 +59,19 @@
 class CSquadMonster : public CBaseMonster 
 {
 public:
+	bool IsPlayerFollowing( void )
+	{
+		if ( m_hTargetEnt == NULL )
+			return false;
+
+		if ( m_hTargetEnt->IsPlayer() )
+			return true;
+
+		return m_hSquadLeader != NULL && m_hTargetEnt->pev == m_hSquadLeader->pev;
+	}
+
+	void RunAI( void ) { CBaseMonster::RunAI(); }
+
 	// squad leader info
 	EHANDLE	m_hSquadLeader;		// who is my leader
 	EHANDLE	m_hSquadMember[MAX_SQUAD_MEMBERS-1];	// valid only for leader
@@ -72,7 +88,6 @@ public:
 	void ScheduleChange( void );
 	void Killed( entvars_t *pevAttacker, int iGib );
 	BOOL OccupySlot( int iDesiredSlot );
-	BOOL NoFriendlyFire( void );
 
 	// squad functions still left in base class
 	CSquadMonster *MySquadLeader( ) 
@@ -116,5 +131,7 @@ public:
 
 	MONSTERSTATE GetIdealState ( void );
 	Schedule_t	*GetScheduleOfType ( int iType );
+	virtual bool HealMePlayer( CBaseEntity *pPlayer ) { return false; }
 };
 
+#endif

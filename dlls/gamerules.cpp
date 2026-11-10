@@ -17,6 +17,7 @@
 //=========================================================
 
 #include	"extdll.h"
+#include	"SvenVersion.h"
 #include	"util.h"
 #include	"cbase.h"
 #include	"player.h"
@@ -25,6 +26,8 @@
 #include	"teamplay_gamerules.h"
 #include	"skill.h"
 #include	"game.h"
+#include "server_support.h"
+#include "CSpawnPoints.h"
 
 extern edict_t *EntSelectSpawnPoint( CBaseEntity *pPlayer );
 
@@ -35,43 +38,89 @@ extern int gmsgMOTD;
 
 int g_teamplay = 0;
 
-//=========================================================
-//=========================================================
-BOOL CGameRules::CanHaveAmmo( CBasePlayer *pPlayer, const char *pszAmmoName, int iMaxCarry )
+short g_sBarnacleParalyze;
+short g_sDisableAutoclimb;
+
+CGameRules::~CGameRules()
 {
-	int iAmmoIndex;
+}
 
-	if ( pszAmmoName )
-	{
-		iAmmoIndex = pPlayer->GetAmmoIndex( pszAmmoName );
+const char *CGameRules::GetGameDescription( void )
+{
+	static char gameDescription[64];
 
-		if ( iAmmoIndex > -1 )
-		{
-			if ( pPlayer->AmmoInventory( iAmmoIndex ) < iMaxCarry )
-			{
-				// player has room for more of this type of ammo
-				return TRUE;
-			}
-		}
-	}
-
-	return FALSE;
+	UTIL_FormatString( gameDescription, sizeof( gameDescription ), "%s %s", "Sven Co-op", SVEN_GAME_VERSION_STRING );
+	return gameDescription;
 }
 
 //=========================================================
 //=========================================================
-edict_t *CGameRules :: GetPlayerSpawnSpot( CBasePlayer *pPlayer )
+BOOL CGameRules::CanHaveAmmo( CBasePlayer *pPlayer, const char *pszAmmoName, int iMaxCarry, int *pEffectiveMax )
 {
-	edict_t *pentSpawnSpot = EntSelectSpawnPoint( pPlayer );
+	if ( !pszAmmoName )
+		return FALSE;
 
-	pPlayer->pev->origin = VARS(pentSpawnSpot)->origin + Vector(0,0,1);
+	return CanHaveAmmo( pPlayer, CBasePlayer::GetAmmoIndex( pszAmmoName ), iMaxCarry, pEffectiveMax );
+}
+
+#define PM_CVAR_CACHE_UNSET ( (short) 0x8000 )
+
+// The movement code runs too often to look cvars up by name
+bool PM_HACK_GetBarnacleParalyze( void )
+{
+	if ( g_sBarnacleParalyze == PM_CVAR_CACHE_UNSET )
+		g_sBarnacleParalyze = (short) CVAR_GET_POINTER( "mp_barnacle_paralyze" )->value;
+
+	return g_sBarnacleParalyze > 0;
+}
+
+bool PM_HACK_GetDisableAutoClimb( void )
+{
+	if ( g_sDisableAutoclimb == PM_CVAR_CACHE_UNSET )
+		g_sDisableAutoclimb = (short) CVAR_GET_POINTER( "mp_disable_autoclimb" )->value;
+
+	return g_sDisableAutoclimb > 0;
+}
+
+bool CGameRules::CanHaveAmmo( CBasePlayer *player, int ammoIndex, int maxCarry, int *effectiveMax )
+{
+	if ( (unsigned int) ammoIndex >= MAX_AMMO_SLOTS )
+		return false;
+
+	int playerMax = player->GetMaxAmmo( (unsigned int) ammoIndex );
+
+	if ( playerMax != maxCarry )
+		maxCarry = playerMax;
+
+	if ( effectiveMax )
+		*effectiveMax = maxCarry;
+
+	return player->AmmoInventory( ammoIndex ) < maxCarry;
+}
+
+//=========================================================
+//=========================================================
+EntityHandle<CBaseEntity> CGameRules :: GetPlayerSpawnSpot( CBasePlayer *pPlayer )
+{
+	EntityHandle<CBaseEntity> point = CBasePlayer::SelectSpawnPoint( pPlayer );
+
+	if ( !point )
+		return point;
+
+	UTIL_SetOrigin( pPlayer->pev, GetSpawnSpotPlace( point ) + Vector(0,0,1 ) );
 	pPlayer->pev->v_angle  = g_vecZero;
 	pPlayer->pev->velocity = g_vecZero;
-	pPlayer->pev->angles = VARS(pentSpawnSpot)->angles;
+	pPlayer->pev->angles = ( (CBaseEntity *) point )->pev->angles;
 	pPlayer->pev->punchangle = g_vecZero;
 	pPlayer->pev->fixangle = TRUE;
-	
-	return pentSpawnSpot;
+
+	if ( FClassnameIs( ( (CBaseEntity *) point )->pev, "info_player_deathmatch" )
+		|| FClassnameIs( ( (CBaseEntity *) point )->pev, "info_player_dm2" ) )
+	{
+		PlayerSpawns( ( (CBaseEntity *) point )->edict(), pPlayer->edict() );
+	}
+
+	return point;
 }
 
 //=========================================================
@@ -310,37 +359,13 @@ void CGameRules::RefreshSkillData ( void )
 
 CGameRules *InstallGameRules( void )
 {
+	g_sBarnacleParalyze = PM_CVAR_CACHE_UNSET;
+	g_sDisableAutoclimb = PM_CVAR_CACHE_UNSET;
+
 	SERVER_COMMAND( "exec game.cfg\n" );
 	SERVER_EXECUTE( );
 
-	if ( !gpGlobals->deathmatch )
-	{
-		// generic half-life
-		g_teamplay = 0;
-		return new CHalfLifeRules;
-	}
-	else
-	{
-		if ( teamplay.value > 0 )
-		{
-			// teamplay
-
-			g_teamplay = 1;
-			return new CHalfLifeTeamplay;
-		}
-		if ((int)gpGlobals->deathmatch == 1)
-		{
-			// vanilla deathmatch
-			g_teamplay = 0;
-			return new CHalfLifeMultiplay;
-		}
-		else
-		{
-			// vanilla deathmatch??
-			g_teamplay = 0;
-			return new CHalfLifeMultiplay;
-		}
-	}
+	return new CHalfLifeMultiplay;
 }
 
 

@@ -116,18 +116,18 @@ typedef struct efx_api_s efx_api_t;
 
 struct efx_api_s
 {
-	particle_t  *( *R_AllocParticle )			( void ( *callback ) ( struct particle_s *particle, float frametime ) );
-	void		( *R_BlobExplosion )			( float * org );
-	void		( *R_Blood )					( float * org, float * dir, int pcolor, int speed );
-	void		( *R_BloodSprite )				( float * org, int colorindex, int modelIndex, int modelIndex2, float size );
-	void		( *R_BloodStream )				( float * org, float * dir, int pcolor, int speed );
-	void		( *R_BreakModel )				( float *pos, float *size, float *dir, float random, float life, int count, int modelIndex, char flags );
-	void		( *R_Bubbles )					( float * mins, float * maxs, float height, int modelIndex, int count, float speed );
-	void		( *R_BubbleTrail )				( float * start, float * end, float height, int modelIndex, int count, float speed );
+	particle_t* (*R_AllocParticle)				( void ( *callback ) ( struct particle_s *particle, float frametime ) );
+	void		(*R_BlobExplosion)				( float* org );
+	void		(*R_Blood)						( float* org, float* dir, int pcolor, int speed );
+	void		(*R_BloodSprite)				( float* org, int colorindex, int modelIndex, int modelIndex2, float size );
+	void		(*R_BloodStream)				( float* org, float* dir, int pcolor, int speed );
+	void		(*R_BreakModel)					( float* pos, float* size, float* dir, float random, float life, int count, int modelIndex, char flags );
+	void		(*R_Bubbles)					( float* mins, float* maxs, float height, int modelIndex, int count, float speed );
+	void		(*R_BubbleTrail)				( float* start, float* end, float height, int modelIndex, int count, float speed );
 	void		( *R_BulletImpactParticles )	( float * pos );
-	void		( *R_EntityParticles )			( struct cl_entity_s *ent );
+	void		( *R_EntityParticles )			( cl_entity_t* ent );
 	void		( *R_Explosion )				( float *pos, int model, float scale, float framerate, int flags );
-	void		( *R_FizzEffect )				( struct cl_entity_s *pent, int modelIndex, int density );
+	void		( *R_FizzEffect )				( cl_entity_t* pent, int modelIndex, int density );
 	void		( *R_FireField ) 				( float * org, int radius, int modelIndex, int count, int flags, float life );
 	void		( *R_FlickerParticles )			( float * org );
 	void		( *R_FunnelSprite )				( float *org, int modelIndex, int reverse );
@@ -161,12 +161,12 @@ struct efx_api_s
 	void		( *R_StreakSplash )				( float * pos, float * dir, int color, int count, float speed, int velocityMin, int velocityMax );
 	void		( *R_TracerEffect )				( float * start, float * end );
 	void		( *R_UserTracerParticle )		( float * org, float * vel, float life, int colorIndex, float length, unsigned char deathcontext, void ( *deathfunc)( struct particle_s *particle ) );
-	particle_t *( *R_TracerParticles )			( float * org, float * vel, float life );
+	particle_t* (*R_TracerParticles)			( float * org, float * vel, float life );
 	void		( *R_TeleportSplash )			( float * org );
 	void		( *R_TempSphereModel )			( float *pos, float speed, float life, int count, int modelIndex );
-	TEMPENTITY	*( *R_TempModel )				( float *pos, float *dir, float *angles, float life, int modelIndex, int soundtype );
-	TEMPENTITY	*( *R_DefaultSprite )			( float *pos, int spriteIndex, float framerate );
-	TEMPENTITY	*( *R_TempSprite )				( float *pos, float *dir, float scale, int modelIndex, int rendermode, int renderfx, float a, float life, int flags );
+	TEMPENTITY* (*R_TempModel)					( float *pos, float *dir, float *angles, float life, int modelIndex, int soundtype );
+	TEMPENTITY* (*R_DefaultSprite)				( float *pos, int spriteIndex, float framerate );
+	TEMPENTITY* (*R_TempSprite)					( float *pos, float *dir, float scale, int modelIndex, int rendermode, int renderfx, float a, float life, int flags );
 	int			( *Draw_DecalIndex )			( int id );
 	int			( *Draw_DecalIndexFromName )	( char *name );
 	void		( *R_DecalShoot )				( int textureIndex, int entity, int modelIndex, float * position, int flags );
@@ -182,10 +182,10 @@ struct efx_api_s
 	BEAM		*( *R_BeamRing )				( int startEnt, int endEnt, int modelIndex, float life, float width, float amplitude, float brightness, float speed, int startFrame, float framerate, float r, float g, float b );
 	dlight_t	*( *CL_AllocDlight )			( int key );
 	dlight_t	*( *CL_AllocElight )			( int key );
-	TEMPENTITY	*( *CL_TempEntAlloc )			( float * org, struct model_s *model );
+	TEMPENTITY	*( *CL_TempEntAlloc )			( float * org, struct model_s* model );
 	TEMPENTITY	*( *CL_TempEntAllocNoModel )	( float * org );
-	TEMPENTITY	*( *CL_TempEntAllocHigh )		( float * org, struct model_s *model );
-	TEMPENTITY	*( *CL_TentEntAllocCustom )		( float *origin, struct model_s *model, int high, void ( *callback ) ( struct tempent_s *ent, float frametime, float currenttime ) );
+	TEMPENTITY	*( *CL_TempEntAllocHigh )		( float * org, struct model_s* model );
+	TEMPENTITY	*( *CL_TentEntAllocCustom )		( float *origin, struct model_s* model, int high, void ( *callback ) ( struct tempent_s *ent, float frametime, float currenttime ) );
 	void		( *R_GetPackedColor )			( short *packed, short color );
 	short		( *R_LookupColor )				( unsigned char r, unsigned char g, unsigned char b );
 	void		( *R_DecalRemoveAll )			( int textureIndex ); //textureIndex points to the decal index in the array, not the actual texture index.

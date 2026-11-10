@@ -11,6 +11,7 @@
 #include "port.h"
 
 #include "hud.h"
+#include "portal_manager.h"
 #include "cl_util.h"
 #include "camera.h"
 #include "kbutton.h"
@@ -22,17 +23,22 @@
 #include "../public/keydefs.h"
 #include "view.h"
 #include "Exports.h"
+#include "vgui_CameraPanel.h"
 
 #include <SDL2/SDL_mouse.h>
 #include <SDL2/SDL_gamecontroller.h>
 
 #define MOUSE_BUTTON_COUNT 5
+#define CAM_FOLLOWAIM_MAX_YAW 60.0f
 
 // Set this to 1 to show mouse cursor.  Experimental
 int	g_iVisibleMouse = 0;
 
 extern cl_enginefunc_t gEngfuncs;
+extern cvar_t *cl_particles_max;
+extern cvar_t *cl_texture_lod;
 extern int iMouseInUse;
+extern int cam_mousemove;
 
 extern kbutton_t	in_strafe;
 extern kbutton_t	in_mlook;
@@ -58,7 +64,6 @@ extern cvar_t *cl_movespeedkey;
 static double s_flRawInputUpdateTime = 0.0f;
 static bool m_bRawInput = false;
 static bool m_bMouseThread = false;
-extern globalvars_t *gpGlobals;
 
 // mouse variables
 cvar_t		*m_filter;
@@ -167,7 +172,7 @@ void Force_CenterView_f (void)
 {
 	vec3_t viewangles;
 
-	if (!iMouseInUse)
+	if (!iMouseInUse && !cam_mousemove)
 	{
 		gEngfuncs.GetViewAngles( (float *)viewangles );
 	    viewangles[PITCH] = 0;
@@ -224,7 +229,7 @@ DWORD WINAPI MousePos_ThreadFunction( LPVOID p )
 IN_ActivateMouse
 ===========
 */
-void CL_DLLEXPORT IN_ActivateMouse (void)
+void DLLEXPORT IN_ActivateMouse (void)
 {
 	if (mouseinitialized)
 	{
@@ -243,7 +248,7 @@ void CL_DLLEXPORT IN_ActivateMouse (void)
 IN_DeactivateMouse
 ===========
 */
-void CL_DLLEXPORT IN_DeactivateMouse (void)
+void DLLEXPORT IN_DeactivateMouse (void)
 {
 	if (mouseinitialized)
 	{
@@ -344,6 +349,11 @@ void IN_GetMousePos( int *mx, int *my )
 	gEngfuncs.GetMousePosition( mx, my );
 }
 
+bool IsMouseActive(void)
+{
+	return mouseactive != 0;
+}
+
 /*
 ===========
 IN_ResetMouse
@@ -363,9 +373,11 @@ void IN_ResetMouse( void )
 		ThreadInterlockedExchange( &old_mouse_pos.y, gEngfuncs.GetWindowCenterY() );
 	}
 
-	if ( gpGlobals && gpGlobals->time - s_flRawInputUpdateTime > 1.0f )
+	double time = gEngfuncs.GetClientTime();
+
+	if (time - s_flRawInputUpdateTime > 1.0f )
 	{
-		s_flRawInputUpdateTime = gpGlobals->time;
+		s_flRawInputUpdateTime = time;
 		m_bRawInput = CVAR_GET_FLOAT( "m_rawinput" ) != 0;
 	}
 #endif
@@ -376,11 +388,22 @@ void IN_ResetMouse( void )
 IN_MouseEvent
 ===========
 */
-void CL_DLLEXPORT IN_MouseEvent (int mstate)
+void DLLEXPORT IN_MouseEvent (int mstate)
 {
 	int		i;
 
-	if ( iMouseInUse || g_iVisibleMouse )
+	if (gViewPort)
+	{
+		CCameraPanel *camera = gViewPort->GetCameraPanel();
+
+		if (camera && gViewPort->m_pCurrentMenu == camera &&
+			camera->HasOverrideCursor() && camera->isVisible())
+		{
+			camera->MouseButtonsChanged((mstate & 1) != 0, (mstate & 2) != 0, (mstate & 4) != 0);
+		}
+	}
+
+	if (iMouseInUse || g_iVisibleMouse || cam_mousemove)
 		return;
 
 	// perform button actions
@@ -461,11 +484,30 @@ void IN_MouseMove ( float frametime, usercmd_t *cmd)
 	int		mx, my;
 	vec3_t viewangles;
 
+	if (cam_mousemove)
+		return;
+
 	gEngfuncs.GetViewAngles( (float *)viewangles );
 
 	if ( in_mlook.state & 1)
 	{
 		V_StopPitchDrift ();
+	}
+
+	if (gViewPort)
+	{
+		CCameraPanel *camera = gViewPort->GetCameraPanel();
+
+		if (camera && gViewPort->m_pCurrentMenu == camera &&
+			camera->HasOverrideCursor() && camera->isVisible())
+		{
+			int deltaX, deltaY;
+
+			SDL_GetRelativeMouseState(&deltaX, &deltaY);
+			camera->MouseMovedDelta(deltaX, deltaY);
+			gEngfuncs.SetViewAngles((float *)viewangles);
+			return;
+		}
 	}
 
 	//jjb - this disbles normal mouse control if the user is trying to 
@@ -543,6 +585,11 @@ void IN_MouseMove ( float frametime, usercmd_t *cmd)
 		else
 			viewangles[YAW] -= m_yaw->value * mouse_x;
 
+		if (viewangles[YAW] < 0)
+			viewangles[YAW] += 360.0f * (1 - (int)(viewangles[YAW] / -360.0f));
+		else if (viewangles[YAW] >= 360.0f)
+			viewangles[YAW] -= 360.0f * (int)(viewangles[YAW] / 360.0f);
+
 		if ( (in_mlook.state & 1) && !(in_strafe.state & 1))
 		{
 			viewangles[PITCH] += m_pitch->value * mouse_y;
@@ -587,11 +634,153 @@ void IN_MouseMove ( float frametime, usercmd_t *cmd)
 
 /*
 ===========
+IN_CameraAccumulate
+
+Mouse movement collected for the third person look while the view angles are left alone
+===========
+*/
+float anglemod( float a );
+
+static int cam_mx_accum, cam_my_accum;
+static int cam_old_mx, cam_old_my;
+
+void IN_CameraAccumulate( void )
+{
+#ifdef _WIN32
+	if ( !m_bRawInput )
+	{
+		if ( !m_bMouseThread )
+		{
+			GetCursorPos( &current_pos );
+
+			cam_mx_accum += current_pos.x - gEngfuncs.GetWindowCenterX();
+			cam_my_accum += current_pos.y - gEngfuncs.GetWindowCenterY();
+		}
+	}
+	else
+#endif
+	{
+		int deltaX, deltaY;
+
+		SDL_GetRelativeMouseState( &deltaX, &deltaY );
+
+		cam_mx_accum += deltaX;
+		cam_my_accum += deltaY;
+	}
+
+	IN_ResetMouse();
+}
+
+/*
+===========
+IN_CameraMouseLook
+
+Applies the mouse to the third person offset angles
+===========
+*/
+void IN_CameraMouseLook( float *angles )
+{
+	int mx, my;
+	int deltaX = 0, deltaY = 0;
+	float lookX, lookY;
+
+	V_StopPitchDrift();
+
+#ifdef _WIN32
+	if ( !m_bRawInput )
+	{
+		if ( m_bMouseThread )
+		{
+			ThreadInterlockedExchange( &current_pos.x, s_mouseDeltaX );
+			ThreadInterlockedExchange( &current_pos.y, s_mouseDeltaY );
+			ThreadInterlockedExchange( &s_mouseDeltaX, 0 );
+			ThreadInterlockedExchange( &s_mouseDeltaY, 0 );
+
+			mx = current_pos.x;
+			my = current_pos.y;
+		}
+		else
+		{
+			GetCursorPos( &current_pos );
+
+			mx = current_pos.x - gEngfuncs.GetWindowCenterX() + cam_mx_accum;
+			my = current_pos.y - gEngfuncs.GetWindowCenterY() + cam_my_accum;
+		}
+	}
+	else
+#endif
+	{
+		SDL_GetRelativeMouseState( &deltaX, &deltaY );
+
+		mx = deltaX + cam_mx_accum;
+		my = deltaY + cam_my_accum;
+	}
+
+	cam_mx_accum = 0;
+	cam_my_accum = 0;
+
+	if ( m_filter && m_filter->value )
+	{
+		lookX = ( mx + cam_old_mx ) * 0.5;
+		lookY = ( my + cam_old_my ) * 0.5;
+	}
+	else
+	{
+		lookX = mx;
+		lookY = my;
+	}
+
+	cam_old_mx = mx;
+	cam_old_my = my;
+
+	IN_ScaleMouse( &lookX, &lookY );
+
+	angles[YAW] -= m_yaw->value * lookX;
+
+	if ( cam_followaim->value > 0 )
+	{
+		angles[YAW] = anglemod( angles[YAW] );
+
+		if ( angles[YAW] > 180.0f )
+			angles[YAW] -= 360.0f;
+
+		if ( angles[YAW] > CAM_FOLLOWAIM_MAX_YAW )
+			angles[YAW] = CAM_FOLLOWAIM_MAX_YAW;
+		else if ( angles[YAW] < -CAM_FOLLOWAIM_MAX_YAW )
+			angles[YAW] = -CAM_FOLLOWAIM_MAX_YAW;
+	}
+
+	angles[YAW] = anglemod( angles[YAW] );
+	angles[PITCH] = anglemod( angles[PITCH] + m_pitch->value * lookY );
+
+	if ( angles[PITCH] > 180.0f )
+		angles[PITCH] -= 360.0f;
+	else if ( angles[PITCH] < -180.0f )
+		angles[PITCH] += 360.0f;
+
+	if ( angles[PITCH] > cl_pitchdown->value )
+		angles[PITCH] = cl_pitchdown->value;
+
+	if ( angles[PITCH] < -cl_pitchup->value )
+		angles[PITCH] = -cl_pitchup->value;
+
+	if ( mx || my )
+		IN_ResetMouse();
+}
+
+/*
+===========
 IN_Accumulate
 ===========
 */
-void CL_DLLEXPORT IN_Accumulate (void)
+void DLLEXPORT IN_Accumulate (void)
 {
+	if ( cam_mousemove )
+	{
+		IN_CameraAccumulate();
+		return;
+	}
+
 	//only accumulate mouse if we are not moving the camera with the mouse
 	if ( !iMouseInUse && !g_iVisibleMouse)
 	{
@@ -629,7 +818,7 @@ void CL_DLLEXPORT IN_Accumulate (void)
 IN_ClearStates
 ===================
 */
-void CL_DLLEXPORT IN_ClearStates (void)
+void DLLEXPORT IN_ClearStates (void)
 {
 	if ( !mouseactive )
 		return;
@@ -908,7 +1097,7 @@ void IN_JoyMove ( float frametime, usercmd_t *cmd )
 				// y=ax^b; where a = 300 and b = 1.3
 				// also x values are in increments of 800 (so this is factored out)
 				// then bounds check result to level out excessively high spin rates
-				fTemp = 300.0 * pow(fabs(fAxisValue) / 800.0, 1.3);
+				fTemp = 300.0 * pow( fabs(fAxisValue) / 800.0, 1.3);
 				if (fTemp > 14000.0)
 					fTemp = 14000.0;
 				// restore direction information
@@ -925,7 +1114,7 @@ void IN_JoyMove ( float frametime, usercmd_t *cmd )
 			if ((joy_advanced->value == 0.0) && (in_jlook.state & 1))
 			{
 				// user wants forward control to become look control
-				if (ffabs(fAxisValue) > joy_pitchthreshold->value)
+				if (fabs(fAxisValue) > joy_pitchthreshold->value)
 				{		
 					// if mouse invert is on, invert the joystick pitch value
 					// only absolute control support here (joy_advanced is 0)
@@ -954,7 +1143,7 @@ void IN_JoyMove ( float frametime, usercmd_t *cmd )
 			else
 			{
 				// user wants forward control to be forward control
-				if (ffabs(fAxisValue) > joy_forwardthreshold->value)
+				if (fabs(fAxisValue) > joy_forwardthreshold->value)
 				{
 					cmd->forwardmove += (fAxisValue * joy_forwardsensitivity->value) * speed * cl_forwardspeed->value;
 				}
@@ -962,7 +1151,7 @@ void IN_JoyMove ( float frametime, usercmd_t *cmd )
 			break;
 
 		case AxisSide:
-			if (ffabs(fAxisValue) > joy_sidethreshold->value)
+			if (fabs(fAxisValue) > joy_sidethreshold->value)
 			{
 				cmd->sidemove += (fAxisValue * joy_sidesensitivity->value) * speed * cl_sidespeed->value;
 			}
@@ -972,7 +1161,7 @@ void IN_JoyMove ( float frametime, usercmd_t *cmd )
 			if ((in_strafe.state & 1) || (lookstrafe->value && (in_jlook.state & 1)))
 			{
 				// user wants turn control to become side control
-				if (ffabs(fAxisValue) > joy_sidethreshold->value)
+				if (fabs(fAxisValue) > joy_sidethreshold->value)
 				{
 					cmd->sidemove -= (fAxisValue * joy_sidesensitivity->value) * speed * cl_sidespeed->value;
 				}
@@ -980,7 +1169,7 @@ void IN_JoyMove ( float frametime, usercmd_t *cmd )
 			else
 			{
 				// user wants turn control to be turn control
-				if (ffabs(fAxisValue) > joy_yawthreshold->value)
+				if (fabs(fAxisValue) > joy_yawthreshold->value)
 				{
 					if(dwControlMap[i] == JOY_ABSOLUTE_AXIS)
 					{
@@ -998,7 +1187,7 @@ void IN_JoyMove ( float frametime, usercmd_t *cmd )
 		case AxisLook:
 			if (in_jlook.state & 1)
 			{
-				if (ffabs(fAxisValue) > joy_pitchthreshold->value)
+				if (fabs(fAxisValue) > joy_pitchthreshold->value)
 				{
 					// pitch movement detected and pitch movement desired by user
 					if(dwControlMap[i] == JOY_ABSOLUTE_AXIS)
@@ -1061,6 +1250,10 @@ IN_Init
 */
 void IN_Init (void)
 {
+	P_PortalInitCVars();
+	cl_particles_max = gEngfuncs.pfnRegisterVariable("cl_particles_max", "800", FCVAR_ARCHIVE);
+	cl_texture_lod = gEngfuncs.pfnRegisterVariable("cl_texture_lod", "-0.6", FCVAR_ARCHIVE);
+
 	m_filter				= gEngfuncs.pfnRegisterVariable ( "m_filter","0", FCVAR_ARCHIVE );
 	sensitivity				= gEngfuncs.pfnRegisterVariable ( "sensitivity","3", FCVAR_ARCHIVE ); // user mouse sensitivity setting.
 

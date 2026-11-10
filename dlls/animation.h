@@ -27,6 +27,8 @@ int LookupActivity( void *pmodel, entvars_t *pev, int activity );
 int LookupActivityHeaviest( void *pmodel, entvars_t *pev, int activity );
 int LookupSequence( void *pmodel, const char *label );
 void GetSequenceInfo( void *pmodel, entvars_t *pev, float *pflFrameRate, float *pflGroundSpeed );
+void GetGaitSequenceInfo( void *pmodel, entvars_t *pev, float *pflFrameRate, float *pflGroundSpeed );
+int GetSequenceActivityName( void *pmodel, int iSequence );
 int GetSequenceFlags( void *pmodel, entvars_t *pev );
 int LookupAnimationEvents( void *pmodel, entvars_t *pev, float flStart, float flEnd );
 float SetController( void *pmodel, entvars_t *pev, int iController, float flValue );
@@ -38,6 +40,7 @@ void SetBodygroup( void *pmodel, entvars_t *pev, int iGroup, int iValue );
 int GetBodygroup( void *pmodel, entvars_t *pev, int iGroup );
 
 int GetAnimationEvent( void *pmodel, entvars_t *pev, MonsterEvent_t *pMonsterEvent, float flStart, float flEnd, int index );
+int GetSequenceEventFrame( void *pmodel, int sequence, int eventNumber );
 int ExtractBbox( void *pmodel, int sequence, float *mins, float *maxs );
 
 // From /engine/studio.h

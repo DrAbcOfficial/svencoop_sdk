@@ -15,15 +15,27 @@
 #ifndef ITEMS_H
 #define ITEMS_H
 
+#include "CCustomRespawnDelay.h"
+#include "PickupUtils.h"
 
 class CItem : public CBaseEntity
 {
 public:
+	void OnCreate( void );
+	void KeyValue( KeyValueData *data );
+	int ObjectCaps( void );
 	void	Spawn( void );
 	CBaseEntity*	Respawn( void );
 	void	EXPORT ItemTouch( CBaseEntity *pOther );
-	void	EXPORT Materialize( void );
 	virtual BOOL MyTouch( CBasePlayer *pPlayer ) { return FALSE; };
+	virtual void EXPORT Materialize( void );
+	void EXPORT CallMaterialize( void ) { Materialize(); }
+	void Use( CBaseEntity *activator, CBaseEntity *caller, USE_TYPE useType, float value );
+	bool CanCollect( CBaseEntity *other, COLLECT_TYPE collectType );
+	void Collect( CBaseEntity *other, COLLECT_TYPE collectType );
+
+	string_t            m_iszSequence;
+	CCustomRespawnDelay m_RespawnDelay;
 };
 
 #endif // ITEMS_H

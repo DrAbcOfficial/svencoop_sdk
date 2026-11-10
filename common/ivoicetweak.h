@@ -7,14 +7,15 @@
 
 #ifndef IVOICETWEAK_H
 #define IVOICETWEAK_H
+
 #ifdef _WIN32
-#pragma once
+	#pragma once
 #endif
 
 // These provide access to the voice controls.
 typedef enum
 {
-	MicrophoneVolume=0,			// values 0-1.
+	MicrophoneVolume = 0,		// values 0-1.
 	OtherSpeakerScale,			// values 0-1. Scales how loud other players are.
 	MicBoost,					// 20 db gain to voice input
 } VoiceTweakControl;
@@ -24,14 +25,14 @@ typedef struct IVoiceTweak_s
 {
 	// These turn voice tweak mode on and off. While in voice tweak mode, the user's voice is echoed back
 	// without sending to the server. 
-	int				(*StartVoiceTweakMode)();	// Returns 0 on error.
-	void			(*EndVoiceTweakMode)();
+	int				(*StartVoiceTweakMode)	( void );	// Returns 0 on error.
+	void			(*EndVoiceTweakMode)	( void );
 	
 	// Get/set control values.
-	void			(*SetControlFloat)(VoiceTweakControl iControl, float value);
-	float			(*GetControlFloat)(VoiceTweakControl iControl);
+	void			(*SetControlFloat)		( VoiceTweakControl iControl, float value );
+	float			(*GetControlFloat)		( VoiceTweakControl iControl );
 
-    int             (*GetSpeakingVolume)();
+    int             (*GetSpeakingVolume)	( void );
 } IVoiceTweak;
 
 

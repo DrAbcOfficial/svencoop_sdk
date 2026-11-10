@@ -23,12 +23,16 @@
 #include	"cbase.h"
 #include	"monsters.h"
 #include	"schedule.h"
+#include "CClassicMode.h"
 #include	"squadmonster.h"
 #include	"weapons.h"
 #include	"soundent.h"
 #include	"game.h"
 
+extern cvar_t sk_hassassin_enable_cloaking;
+
 extern DLL_GLOBAL int  g_iSkillLevel;
+extern cvar_t sk_hassassin_health;
 
 //=========================================================
 // monster-specific schedule types
@@ -64,9 +68,14 @@ enum
 class CHAssassin : public CBaseMonster
 {
 public:
+	int ObjectCaps( void );
+	float GetPointsForDamage( float flDamage );
+	void Killed( entvars_t *pevAttacker, int iGib );
 	void Spawn( void );
 	void Precache( void );
+	void SetupFriendly( void );
 	void SetYawSpeed ( void );
+	void SetActivity( Activity NewActivity );
 	int  Classify ( void );
 	int  ISoundMask ( void);
 	void Shoot( void );
@@ -125,6 +134,31 @@ TYPEDESCRIPTION	CHAssassin::m_SaveData[] =
 
 IMPLEMENT_SAVERESTORE( CHAssassin, CBaseMonster );
 
+float CHAssassin::GetPointsForDamage( float flDamage )
+{
+	float points = pev->max_health / sk_hassassin_health.value;
+
+	points *= 6.0f;
+
+	return points * ( flDamage / pev->max_health );
+}
+
+int CHAssassin::ObjectCaps( void )
+{
+	return IsPlayerAlly() ? FCAP_IMPULSE_USE : FCAP_ACROSS_TRANSITION;
+}
+
+void CHAssassin::Killed( entvars_t *pevAttacker, int iGib )
+{
+	if ( GetBodygroup( CClassicMode::GetInstance()->IsEnabled() ? 1 : 2 ) == 0 )
+	{
+		CBaseMonster::DropWeapon( "weapon_9mmhandgun", false );
+		SetBodygroup( CClassicMode::GetInstance()->IsEnabled() ? 1 : 2, 1 );
+	}
+
+	CBaseMonster::Killed( pevAttacker, iGib );
+}
+
 
 //=========================================================
 // DieSound
@@ -159,7 +193,28 @@ int CHAssassin :: ISoundMask ( void)
 //=========================================================
 int	CHAssassin :: Classify ( void )
 {
-	return	CLASS_HUMAN_MILITARY;
+	return GetClassification( CLASS_HUMAN_MILITARY );
+}
+
+void CHAssassin::SetupFriendly( void )
+{
+	const char *model;
+
+	if ( CClassicMode::GetInstance()->IsEnabled() )
+		model = "models/hlclassic/hassassin.mdl";
+	else
+		model = IsPlayerAlly() ? "models/hassassinf.mdl" : "models/hassassin.mdl";
+
+	UTIL_SetModel( this, model );
+	UTIL_SetSize( pev, VEC_HUMAN_HULL_MIN, VEC_HUMAN_HULL_MAX );
+}
+
+void CHAssassin::SetActivity( Activity NewActivity )
+{
+	if ( NewActivity == ACT_LAND )
+		SetSequenceByName( "landfromjump" );
+	else
+		CBaseMonster::SetActivity( NewActivity );
 }
 
 //=========================================================
@@ -191,17 +246,13 @@ void CHAssassin :: SetYawSpeed ( void )
 void CHAssassin :: Shoot ( void )
 {
 	if (m_hEnemy == NULL)
-	{
 		return;
-	}
 
 	Vector vecShootOrigin = GetGunPosition();
 	Vector vecShootDir = ShootAtEnemy( vecShootOrigin );
 
 	if (m_flLastShot + 2 < gpGlobals->time)
-	{
 		m_flDiviation = 0.10;
-	}
 	else
 	{
 		m_flDiviation -= 0.01;
@@ -212,28 +263,28 @@ void CHAssassin :: Shoot ( void )
 
 	UTIL_MakeVectors ( pev->angles );
 
-	Vector	vecShellVelocity = gpGlobals->v_right * RANDOM_FLOAT(40,90) + gpGlobals->v_up * RANDOM_FLOAT(75,200) + gpGlobals->v_forward * RANDOM_FLOAT(-40, 40);
-	EjectBrass ( pev->origin + gpGlobals->v_up * 32 + gpGlobals->v_forward * 12, vecShellVelocity, pev->angles.y, m_iShell, TE_BOUNCE_SHELL); 
+	Vector	vecShellVelocity = gpGlobals->v_right * RANDOM_FLOAT(40,90);
+
+	vecShellVelocity = vecShellVelocity + gpGlobals->v_up * RANDOM_FLOAT(75,200);
+	vecShellVelocity = vecShellVelocity + gpGlobals->v_forward * RANDOM_FLOAT(-40, 40);
+	EjectBrass ( pev->origin + gpGlobals->v_up * 32 + gpGlobals->v_forward * 12, vecShellVelocity, pev->angles.y, m_iShell, TE_BOUNCE_SHELL);
 	FireBullets(1, vecShootOrigin, vecShootDir, Vector( m_flDiviation, m_flDiviation, m_flDiviation ), 2048, BULLET_MONSTER_9MM ); // shoot +-8 degrees
 
 	switch(RANDOM_LONG(0,1))
 	{
 	case 0:
-		EMIT_SOUND(ENT(pev), CHAN_WEAPON, "weapons/pl_gun1.wav", RANDOM_FLOAT(0.6, 0.8), ATTN_NORM);
+		EMIT_SOUND(ENT(pev), CHAN_WEAPON, "weapons/pl_gun1.wav", RANDOM_FLOAT(0.6, 0.8), 0.8f );
 		break;
 	case 1:
-		EMIT_SOUND(ENT(pev), CHAN_WEAPON, "weapons/pl_gun2.wav", RANDOM_FLOAT(0.6, 0.8), ATTN_NORM);
+		EMIT_SOUND(ENT(pev), CHAN_WEAPON, "weapons/pl_gun2.wav", RANDOM_FLOAT(0.6, 0.8), 0.8f );
 		break;
 	}
 
+	Vector angles = UTIL_VecToAngles( vecShootDir );
+	SetBlending( 0, angles.x );
 	pev->effects |= EF_MUZZLEFLASH;
-
-	Vector angDir = UTIL_VecToAngles( vecShootDir );
-	SetBlending( 0, angDir.x );
-
-	m_cAmmoLoaded--;
+	--m_cAmmoLoaded;
 }
-
 
 //=========================================================
 // HandleAnimEvent - catches the monster-specific messages
@@ -249,25 +300,19 @@ void CHAssassin :: HandleAnimEvent( MonsterEvent_t *pEvent )
 		Shoot( );
 		break;
 	case ASSASSIN_AE_TOSS1:
-		{
 			UTIL_MakeVectors( pev->angles );
-			CGrenade::ShootTimed( pev, pev->origin + gpGlobals->v_forward * 34 + Vector (0, 0, 32), m_vecTossVelocity, 2.0 );
+			CGrenade::ShootTimed( pev, pev->origin + gpGlobals->v_forward * 34 + Vector (0, 0, 32), m_vecTossVelocity, 2 );
 
-			m_flNextGrenadeCheck = gpGlobals->time + 6;// wait six seconds before even looking again to see if a grenade can be thrown.
+			m_flNextGrenadeCheck = gpGlobals->time + RANDOM_FLOAT( 4, 8 );// wait six seconds before even looking again to see if a grenade can be thrown.
 			m_fThrowGrenade = FALSE;
-			// !!!LATER - when in a group, only try to throw grenade if ordered.
-		}
-		break;
+			break;
 	case ASSASSIN_AE_JUMP:
-		{
-			// ALERT( at_console, "jumping");
 			UTIL_MakeAimVectors( pev->angles );
 			pev->movetype = MOVETYPE_TOSS;
 			pev->flags &= ~FL_ONGROUND;
 			pev->velocity = m_vecJumpVelocity;
-			m_flNextJump = gpGlobals->time + 3.0;
-		}
-		return;
+			m_flNextJump = gpGlobals->time + 3;
+			break;
 	default:
 		CBaseMonster::HandleAnimEvent( pEvent );
 		break;
@@ -277,48 +322,73 @@ void CHAssassin :: HandleAnimEvent( MonsterEvent_t *pEvent )
 //=========================================================
 // Spawn
 //=========================================================
-void CHAssassin :: Spawn()
+void CHAssassin :: Spawn( void )
 {
 	Precache( );
 
-	SET_MODEL(ENT(pev), "models/hassassin.mdl");
+	if ( !SetupModel() )
+		SetupFriendly();
 	UTIL_SetSize(pev, VEC_HUMAN_HULL_MIN, VEC_HUMAN_HULL_MAX);
 
 	pev->solid			= SOLID_SLIDEBOX;
 	pev->movetype		= MOVETYPE_STEP;
 	m_bloodColor		= BLOOD_COLOR_RED;
 	pev->effects		= 0;
-	pev->health			= gSkillData.hassassinHealth;
-	m_flFieldOfView		= VIEW_FIELD_WIDE; // indicates the width of this monster's forward view cone ( as a dotproduct result )
+
+	if ( pev->health == 0 )
+		pev->health			= sk_hassassin_health.value;
+	m_flFieldOfView		= -0.7f; // indicates the width of this monster's forward view cone ( as a dotproduct result )
 	m_MonsterState		= MONSTERSTATE_NONE;
 	m_afCapability		= bits_CAP_MELEE_ATTACK1 | bits_CAP_DOORS_GROUP;
+	m_fCheckCreatureDanger = true;
 	pev->friction		= 1;
+	m_afMoveShootCap = bits_MOVESHOOTCAP_RANGE_ATTACK1 | bits_MOVESHOOTCAP_RANGE_ATTACK2;
 
 	m_HackedGunPos		= Vector( 0, 24, 48 );
+	SetBodygroup( CClassicMode::GetInstance()->IsEnabled() ? 1 : 2, 0 );
 
 	m_iTargetRanderamt	= 20;
 	pev->renderamt		= 20;
 	pev->rendermode		= kRenderTransTexture;
 
+	if ( !m_FormattedName )
+		m_FormattedName = MAKE_STRING( "Female Assassin" );
+
 	MonsterInit();
+
+	if ( IsPlayerAlly() && !( pev->spawnflags & SF_MONSTER_PREDISASTER ) )
+	{
+		SetUse( &CBaseMonster::CallFollowerPlayerUse );
+		m_fCanPlayerFollow = true;
+	}
 }
 
 //=========================================================
 // Precache - precaches all resources this monster needs
 //=========================================================
-void CHAssassin :: Precache()
+void CHAssassin :: Precache( void )
 {
-	PRECACHE_MODEL("models/hassassin.mdl");
+	CBaseMonster::Precache();
 
-	PRECACHE_SOUND("weapons/pl_gun1.wav");
-	PRECACHE_SOUND("weapons/pl_gun2.wav");
+	if ( !pev->model )
+	{
+		const char *model;
 
-	PRECACHE_SOUND("debris/beamstart1.wav");
+		if ( CClassicMode::GetInstance()->IsEnabled() )
+			model = "models/hlclassic/hassassin.mdl";
+		else
+			model = IsPlayerAlly() ? "models/hassassinf.mdl" : "models/hassassin.mdl";
 
-	m_iShell = PRECACHE_MODEL ("models/shell.mdl");// brass shell
-}	
-	
+		UTIL_PrecacheModel( this, model );
+	}
 
+	bool classic = CClassicMode::GetInstance()->IsEnabled();
+
+	m_iShell = UTIL_PrecacheModel( this, classic ? "models/hlclassic/shell.mdl" : "models/shell.mdl");
+	PrecacheSound_Intercept( this, "weapons/pl_gun1.wav" );
+	PrecacheSound_Intercept( this, "weapons/pl_gun2.wav" );
+	PrecacheSound_Intercept( this, "debris/beamstart1.wav" );
+}
 
 //=========================================================
 // AI Schedules Specific to this monster
@@ -343,7 +413,6 @@ Schedule_t	slAssassinFail[] =
 		ARRAYSIZE ( tlAssassinFail ),
 		bits_COND_LIGHT_DAMAGE		|
 		bits_COND_HEAVY_DAMAGE		|
-		bits_COND_PROVOKED			|
 		bits_COND_CAN_RANGE_ATTACK1 |
 		bits_COND_CAN_RANGE_ATTACK2 |
 		bits_COND_CAN_MELEE_ATTACK1 |
@@ -390,7 +459,7 @@ Task_t	tlAssassinTakeCoverFromEnemy[] =
 	{ TASK_SET_FAIL_SCHEDULE,		(float)SCHED_RANGE_ATTACK1	},
 	{ TASK_FIND_COVER_FROM_ENEMY,	(float)0					},
 	{ TASK_RUN_PATH,				(float)0					},
-	{ TASK_WAIT_FOR_MOVEMENT,		(float)0					},
+	{ TASK_WAIT_FOR_MOVEMENT_ENEMY_OCCLUDED,	(float)0			},
 	{ TASK_REMEMBER,				(float)bits_MEMORY_INCOVER	},
 	{ TASK_FACE_ENEMY,				(float)0					},
 };
@@ -493,7 +562,6 @@ Schedule_t	slAssassinHide[] =
 		bits_COND_SEE_FEAR				|
 		bits_COND_LIGHT_DAMAGE			|
 		bits_COND_HEAVY_DAMAGE			|
-		bits_COND_PROVOKED		|
 		bits_COND_HEAR_SOUND,
 		
 		bits_SOUND_DANGER,
@@ -521,6 +589,7 @@ Schedule_t slAssassinHunt[] =
 		bits_COND_NEW_ENEMY			|
 		// bits_COND_SEE_ENEMY			|
 		bits_COND_CAN_RANGE_ATTACK1	|
+		bits_COND_CAN_MELEE_ATTACK1	|
 		bits_COND_HEAR_SOUND,
 		
 		bits_SOUND_DANGER,
@@ -690,7 +759,7 @@ BOOL CHAssassin :: CheckRangeAttack2 ( float flDot, float flDist )
 
 	if ( m_flNextGrenadeCheck < gpGlobals->time && !HasConditions( bits_COND_ENEMY_OCCLUDED ) && flDist <= 512 /* && flDot >= 0.5 */ /* && NoFriendlyFire() */ )
 	{
-		Vector vecToss = VecCheckThrow( pev, GetGunPosition( ), m_hEnemy->Center(), flDist, 0.5 ); // use dist as speed to get there in 1 second
+		Vector vecToss = VecCheckThrow( pev, GetGunPosition( ), m_hEnemy->Center(), flDist, 0.7f ); // use dist as speed to get there in 1 second
 
 		if ( vecToss != g_vecZero )
 		{
@@ -714,9 +783,12 @@ void CHAssassin :: RunAI( void )
 {
 	CBaseMonster :: RunAI();
 
+	if ( pev->movetype == MOVETYPE_TOSS && ( ( pev->flags & FL_ONGROUND ) || pev->velocity == g_vecZero ) )
+		pev->movetype = MOVETYPE_STEP;
+
 	// always visible if moving
 	// always visible is not on hard
-	if (g_iSkillLevel != SKILL_HARD || m_hEnemy == NULL || pev->deadflag != DEAD_NO || m_Activity == ACT_RUN || m_Activity == ACT_WALK || !(pev->flags & FL_ONGROUND))
+	if (sk_hassassin_enable_cloaking.value < 1.0f || m_hEnemy == NULL || pev->deadflag != DEAD_NO || m_Activity == ACT_RUN || m_Activity == ACT_WALK || !(pev->flags & FL_ONGROUND))
 		m_iTargetRanderamt = 255;
 	else
 		m_iTargetRanderamt = 20;
@@ -728,12 +800,12 @@ void CHAssassin :: RunAI( void )
 			EMIT_SOUND (ENT(pev), CHAN_BODY, "debris/beamstart1.wav", 0.2, ATTN_NORM );
 		}
 
-		pev->renderamt = max( pev->renderamt - 50, m_iTargetRanderamt );
+		pev->renderamt = V_max( pev->renderamt - 50, m_iTargetRanderamt );
 		pev->rendermode = kRenderTransTexture;
 	}
 	else if (pev->renderamt < m_iTargetRanderamt)
 	{
-		pev->renderamt = min( pev->renderamt + 50, m_iTargetRanderamt );
+		pev->renderamt = V_min( pev->renderamt + 50, m_iTargetRanderamt );
 		if (pev->renderamt == 255)
 			pev->rendermode = kRenderNormal;
 	}
@@ -746,10 +818,10 @@ void CHAssassin :: RunAI( void )
 		{
 			switch( RANDOM_LONG( 0, 3 ) )
 			{
-			case 0:	EMIT_SOUND( ENT(pev), CHAN_BODY, "player/pl_step1.wav", 0.5, ATTN_NORM);	break;
-			case 1:	EMIT_SOUND( ENT(pev), CHAN_BODY, "player/pl_step3.wav", 0.5, ATTN_NORM);	break;
-			case 2:	EMIT_SOUND( ENT(pev), CHAN_BODY, "player/pl_step2.wav", 0.5, ATTN_NORM);	break;
-			case 3:	EMIT_SOUND( ENT(pev), CHAN_BODY, "player/pl_step4.wav", 0.5, ATTN_NORM);	break;
+			case 0:	EMIT_SOUND( ENT(pev), CHAN_BODY, "common/npc_step1.wav", 0.5, ATTN_NORM);	break;
+			case 1:	EMIT_SOUND( ENT(pev), CHAN_BODY, "common/npc_step3.wav", 0.5, ATTN_NORM);	break;
+			case 2:	EMIT_SOUND( ENT(pev), CHAN_BODY, "common/npc_step2.wav", 0.5, ATTN_NORM);	break;
+			case 3:	EMIT_SOUND( ENT(pev), CHAN_BODY, "common/npc_step4.wav", 0.5, ATTN_NORM);	break;
 			}
 		}
 	}

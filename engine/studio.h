@@ -19,6 +19,10 @@
 #ifndef _STUDIO_H_
 #define _STUDIO_H_
 
+#define STUDIO_VERSION	10
+
+#define IDSTUDIOHEADER	(('T'<<24)+('S'<<16)+('D'<<8)+'I') // little-endian "IDST"
+
 /*
 ==============================================================================
 
@@ -44,7 +48,7 @@ Studio models are position independent, so the cache manager can move them.
 #define MAXSTUDIOPIVOTS		256
 #define MAXSTUDIOCONTROLLERS 8
 
-typedef struct 
+typedef struct studiohdr_s
 {
 	int					id;
 	int					version;
@@ -100,7 +104,7 @@ typedef struct
 } studiohdr_t;
 
 // header for demand loaded sequence group data
-typedef struct 
+typedef struct
 {
 	int					id;
 	int					version;
@@ -110,7 +114,7 @@ typedef struct
 } studioseqhdr_t;
 
 // bones
-typedef struct 
+typedef struct
 {
 	char				name[32];	// bone name for symbolic links
 	int		 			parent;		// parent bone
@@ -122,7 +126,7 @@ typedef struct
 
 
 // bone controllers
-typedef struct 
+typedef struct
 {
 	int					bone;	// -1 == 0
 	int					type;	// X, Y, Z, XR, YR, ZR, M
@@ -133,7 +137,7 @@ typedef struct
 } mstudiobonecontroller_t;
 
 // intersection boxes
-typedef struct
+typedef struct mstudiobbox_t
 {
 	int					bone;
 	int					group;			// intersection group
@@ -209,7 +213,7 @@ typedef struct
 // events
 #include "studio_event.h"
 /*
-typedef struct 
+typedef struct
 {
 	int 				frame;
 	int					event;
@@ -219,7 +223,7 @@ typedef struct
 */
 
 // pivots
-typedef struct 
+typedef struct
 {
 	vec3_t				org;	// pivot point
 	int					start;
@@ -227,7 +231,7 @@ typedef struct
 } mstudiopivot_t;
 
 // attachment
-typedef struct 
+typedef struct
 {
 	char				name[32];
 	int					type;
@@ -306,7 +310,7 @@ typedef struct
 
 
 // meshes
-typedef struct 
+typedef struct
 {
 	int					numtris;
 	int					triindex;
@@ -317,13 +321,16 @@ typedef struct
 
 // triangles
 #if 0
-typedef struct 
+typedef struct
 {
 	short				vertindex;		// index into vertex array
 	short				normindex;		// index into normal array
 	short				s,t;			// s,t position on skin
 } mstudiotrivert_t;
 #endif
+
+#define STUDIO_DYNAMIC_LIGHT	0x0100	// dynamically get lighting from floor or ceil (flying monsters)
+#define STUDIO_TRACE_HITBOX		0x0200	// always use hitbox trace instead of bbox
 
 // lighting options
 #define STUDIO_NF_FLATSHADE		0x0001
@@ -333,6 +340,8 @@ typedef struct
 #define STUDIO_NF_ALPHA         0x0010
 #define STUDIO_NF_ADDITIVE      0x0020
 #define STUDIO_NF_MASKED        0x0040
+
+#define STUDIO_NF_UV_COORDS		(1u<<31)	// using half-float coords instead of ST
 
 // motion flags
 #define STUDIO_X		0x0001
@@ -362,7 +371,7 @@ typedef struct
 #define STUDIO_HAS_BBOX		0x0004
 #define STUDIO_HAS_CHROME	0x0008	// if any of the textures have chrome on them
 
-#define RAD_TO_STUDIO		(32768.0/M_PI)
-#define STUDIO_TO_RAD		(M_PI/32768.0)
+#define RAD_TO_STUDIO		(32768.0 / M_PI)
+#define STUDIO_TO_RAD		(M_PI / 32768.0)
 
 #endif

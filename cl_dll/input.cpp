@@ -5,6 +5,10 @@
 // Quake is a trademark of Id Software, Inc., (c) 1996 Id Software, Inc. All
 // rights reserved.
 #include "hud.h"
+#include "client_sound.h"
+#include "client_filesystem.h"
+#include "Discord.h"
+#include "vr_manager.h"
 #include "cl_util.h"
 #include "camera.h"
 extern "C"
@@ -24,14 +28,11 @@ extern "C"
 
 #include "vgui_TeamFortressViewport.h"
 
-
-extern int g_iAlive;
-
 extern int g_weaponselect;
 extern cl_enginefunc_t gEngfuncs;
 
 // Defined in pm_math.c
-extern "C" float anglemod( float a );
+float anglemod( float a );
 
 void IN_Init (void);
 void IN_Move ( float frametime, usercmd_t *cmd);
@@ -39,6 +40,15 @@ void IN_Shutdown( void );
 void V_Init( void );
 void VectorAngles( const float *forward, float *angles );
 int CL_ButtonBits( int );
+int CL_IsDead( void );
+void V_ConcussEffect(float time, float scale, float frequency, float *angles);
+
+extern float v_concussscale;
+extern float v_concusstargetscale;
+extern float v_concussfadeinc;
+extern float v_concussfreq;
+extern float v_concusstargetfreq;
+extern float v_concussfreqinc;
 
 // xxx need client dll function to get and clear impuse
 extern cvar_t *in_joystick;
@@ -64,6 +74,7 @@ cvar_t	*cl_yawspeed;
 cvar_t	*cl_pitchspeed;
 cvar_t	*cl_anglespeedkey;
 cvar_t	*cl_vsmoothing;
+cvar_t	*cl_showstats;
 /*
 ===============================================================================
 
@@ -150,7 +161,7 @@ int KB_ConvertString( char *in, char **ppout )
 		if ( *p == '+' )
 		{
 			pEnd = binding;
-			while ( *p && ( isalnum( *p ) || ( pEnd == binding ) ) && ( ( pEnd - binding ) < 63 ) )
+			while ( *p && ( isalnum( (unsigned char)*p ) || ( pEnd == binding ) ) && ( ( pEnd - binding ) < 63 ) )
 			{
 				*pEnd++ = *p++;
 			}
@@ -206,7 +217,7 @@ KB_Find
 Allows the engine to get a kbutton_t directly ( so it can check +mlook state, etc ) for saving out to .cfg files
 ============
 */
-struct kbutton_s CL_DLLEXPORT *KB_Find( const char *name )
+kbutton_t DLLEXPORT *KB_Find( const char *name )
 {
 //	RecClFindKey(name);
 
@@ -365,14 +376,14 @@ HUD_Key_Event
 Return 1 to allow engine to process the key, otherwise, act on it as needed
 ============
 */
-int CL_DLLEXPORT HUD_Key_Event( int down, int keynum, const char *pszCurrentBinding )
+int DLLEXPORT HUD_Key_Event( int down, int keynum, const char *pszCurrentBinding )
 {
 //	RecClKeyEvent(down, keynum, pszCurrentBinding);
 
-	if (gViewPort)
-		return gViewPort->KeyInput(down, keynum, pszCurrentBinding);
-	
-	return 1;
+	if (gViewPort && !gViewPort->KeyInput(down, keynum, pszCurrentBinding))
+		return 0;
+
+	return CAM_KeyEvent(down, keynum);
 }
 
 void IN_BreakDown( void ) { KeyDown( &in_break );};
@@ -394,25 +405,21 @@ void IN_RightUp(void) {KeyUp(&in_right);}
 void IN_ForwardDown(void)
 {
 	KeyDown(&in_forward);
-	gHUD.m_Spectator.HandleButtonsDown( IN_FORWARD );
 }
 
 void IN_ForwardUp(void)
 {
 	KeyUp(&in_forward);
-	gHUD.m_Spectator.HandleButtonsUp( IN_FORWARD );
 }
 
 void IN_BackDown(void)
 {
 	KeyDown(&in_back);
-	gHUD.m_Spectator.HandleButtonsDown( IN_BACK );
 }
 
 void IN_BackUp(void)
 {
 	KeyUp(&in_back);
-	gHUD.m_Spectator.HandleButtonsUp( IN_BACK );
 }
 void IN_LookupDown(void) {KeyDown(&in_lookup);}
 void IN_LookupUp(void) {KeyUp(&in_lookup);}
@@ -421,64 +428,46 @@ void IN_LookdownUp(void) {KeyUp(&in_lookdown);}
 void IN_MoveleftDown(void)
 {
 	KeyDown(&in_moveleft);
-	gHUD.m_Spectator.HandleButtonsDown( IN_MOVELEFT );
 }
 
 void IN_MoveleftUp(void)
 {
 	KeyUp(&in_moveleft);
-	gHUD.m_Spectator.HandleButtonsUp( IN_MOVELEFT );
 }
 
 void IN_MoverightDown(void)
 {
 	KeyDown(&in_moveright);
-	gHUD.m_Spectator.HandleButtonsDown( IN_MOVERIGHT );
 }
 
 void IN_MoverightUp(void)
 {
 	KeyUp(&in_moveright);
-	gHUD.m_Spectator.HandleButtonsUp( IN_MOVERIGHT );
 }
 void IN_SpeedDown(void) {KeyDown(&in_speed);}
 void IN_SpeedUp(void) {KeyUp(&in_speed);}
 void IN_StrafeDown(void) {KeyDown(&in_strafe);}
 void IN_StrafeUp(void) {KeyUp(&in_strafe);}
 
-// needs capture by hud/vgui also
-extern void __CmdFunc_InputPlayerSpecial(void);
-
 void IN_Attack2Down(void) 
 {
 	KeyDown(&in_attack2);
-
-#ifdef _TFC
-	__CmdFunc_InputPlayerSpecial();
-#endif
-
-	gHUD.m_Spectator.HandleButtonsDown( IN_ATTACK2 );
 }
 
 void IN_Attack2Up(void) {KeyUp(&in_attack2);}
 void IN_UseDown (void)
 {
 	KeyDown(&in_use);
-	gHUD.m_Spectator.HandleButtonsDown( IN_USE );
 }
 void IN_UseUp (void) {KeyUp(&in_use);}
 void IN_JumpDown (void)
 {
 	KeyDown(&in_jump);
-	gHUD.m_Spectator.HandleButtonsDown( IN_JUMP );
-
 }
 void IN_JumpUp (void) {KeyUp(&in_jump);}
 void IN_DuckDown(void)
 {
 	KeyDown(&in_duck);
-	gHUD.m_Spectator.HandleButtonsDown( IN_DUCK );
-
 }
 void IN_DuckUp(void) {KeyUp(&in_duck);}
 void IN_ReloadDown(void) {KeyDown(&in_reload);}
@@ -491,7 +480,6 @@ void IN_GraphUp(void) {KeyUp(&in_graph);}
 void IN_AttackDown(void)
 {
 	KeyDown( &in_attack );
-	gHUD.m_Spectator.HandleButtonsDown( IN_ATTACK );
 }
 
 void IN_AttackUp(void)
@@ -594,6 +582,60 @@ float CL_KeyState (kbutton_t *key)
 	return val;
 }
 
+void CL_UpdateConcussEffect(float frametime, float *viewangles)
+{
+	static Vector vecAnglesDiff;
+
+	if (vecAnglesDiff.Length() != 0)
+	{
+		viewangles[PITCH] -= vecAnglesDiff.x;
+		viewangles[YAW] -= vecAnglesDiff.y;
+		viewangles[ROLL] = 0;
+		vecAnglesDiff = Vector(0, 0, 0);
+	}
+
+	if (!CL_IsDead())
+	{
+		if (v_concussscale != v_concusstargetscale)
+		{
+			v_concussscale += frametime * v_concussfadeinc;
+
+			if (v_concussfadeinc == 0
+				|| (v_concussfadeinc < 0 && v_concussscale < v_concusstargetscale)
+				|| (v_concussfadeinc > 0 && v_concussscale > v_concusstargetscale))
+				v_concussscale = v_concusstargetscale;
+		}
+
+		if (v_concussfreq != v_concusstargetfreq)
+		{
+			v_concussfreq += frametime * v_concussfreqinc;
+
+			if (v_concussfreqinc == 0
+				|| (v_concussfreqinc < 0 && v_concussfreq < v_concusstargetfreq)
+				|| (v_concussfreqinc > 0 && v_concussfreq > v_concusstargetfreq))
+				v_concussfreq = v_concusstargetfreq;
+		}
+	}
+
+	static float flLastFreq = v_concussfreq;
+	static double flDynamicTime;
+
+	if (v_concussscale != 0)
+	{
+		if (CL_IsDead())
+		{
+			v_concussscale = 0;
+		}
+		else
+		{
+			flDynamicTime = (flLastFreq / v_concussfreq) * flDynamicTime + frametime;
+			V_ConcussEffect((float)flDynamicTime, v_concussscale, v_concussfreq, vecAnglesDiff);
+			flLastFreq = v_concussfreq;
+			VectorAdd(viewangles, vecAnglesDiff, viewangles);
+		}
+	}
+}
+
 /*
 ================
 CL_AdjustAngles
@@ -646,6 +688,8 @@ void CL_AdjustAngles ( float frametime, float *viewangles )
 		viewangles[ROLL] = 50;
 	if (viewangles[ROLL] < -50)
 		viewangles[ROLL] = -50;
+
+	CL_UpdateConcussEffect(frametime, viewangles);
 }
 
 /*
@@ -657,15 +701,14 @@ if active == 1 then we are 1) not playing back demos ( where our commands are ig
 2 ) we have finished signing on to server
 ================
 */
-void CL_DLLEXPORT CL_CreateMove ( float frametime, struct usercmd_s *cmd, int active )
+void DLLEXPORT CL_CreateMove ( float frametime, usercmd_t *cmd, int active )
 {	
 //	RecClCL_CreateMove(frametime, cmd, active);
 
-	float spd;
-	vec3_t viewangles;
+	vec3_t viewangles = {0, 0, 0};
 	static vec3_t oldangles;
 
-	if ( active && !Bench_Active() )
+	if ( active )
 	{
 		//memset( viewangles, 0, sizeof( vec3_t ) );
 		//viewangles[ 0 ] = viewangles[ 1 ] = viewangles[ 2 ] = 0.0;
@@ -679,45 +722,33 @@ void CL_DLLEXPORT CL_CreateMove ( float frametime, struct usercmd_s *cmd, int ac
 
 		if ( in_strafe.state & 1 )
 		{
-			cmd->sidemove += cl_sidespeed->value * CL_KeyState (&in_right);
-			cmd->sidemove -= cl_sidespeed->value * CL_KeyState (&in_left);
+			cmd->sidemove += 255.0f * CL_KeyState (&in_right);
+			cmd->sidemove -= 255.0f * CL_KeyState (&in_left);
 		}
 
-		cmd->sidemove += cl_sidespeed->value * CL_KeyState (&in_moveright);
-		cmd->sidemove -= cl_sidespeed->value * CL_KeyState (&in_moveleft);
+		cmd->sidemove += 255.0f * CL_KeyState (&in_moveright);
+		cmd->sidemove -= 255.0f * CL_KeyState (&in_moveleft);
 
-		cmd->upmove += cl_upspeed->value * CL_KeyState (&in_up);
-		cmd->upmove -= cl_upspeed->value * CL_KeyState (&in_down);
+		cmd->upmove += 255.0f * CL_KeyState (&in_up);
+		cmd->upmove -= 255.0f * CL_KeyState (&in_down);
 
 		if ( !(in_klook.state & 1 ) )
 		{	
-			cmd->forwardmove += cl_forwardspeed->value * CL_KeyState (&in_forward);
-			cmd->forwardmove -= cl_backspeed->value * CL_KeyState (&in_back);
+			cmd->forwardmove += 255.0f * CL_KeyState (&in_forward);
+			cmd->forwardmove -= 255.0f * CL_KeyState (&in_back);
 		}	
 
 		// adjust for speed key
-		if ( in_speed.state & 1 )
+		if ( (in_speed.state & 1) || (in_use.state & 1) )
 		{
 			cmd->forwardmove *= cl_movespeedkey->value;
 			cmd->sidemove *= cl_movespeedkey->value;
 			cmd->upmove *= cl_movespeedkey->value;
 		}
 
-		// clip to maxspeed
-		spd = gEngfuncs.GetClientMaxspeed();
-		if ( spd != 0.0 )
-		{
-			// scale the 3 speeds so that the total velocity is not > cl.maxspeed
-			float fmov = sqrt( (cmd->forwardmove*cmd->forwardmove) + (cmd->sidemove*cmd->sidemove) + (cmd->upmove*cmd->upmove) );
-
-			if ( fmov > spd )
-			{
-				float fratio = spd / fmov;
-				cmd->forwardmove *= fratio;
-				cmd->sidemove *= fratio;
-				cmd->upmove *= fratio;
-			}
-		}
+		cmd->forwardmove = V_min(255.0f, V_max(-255.0f, cmd->forwardmove));
+		cmd->sidemove = V_min(255.0f, V_max(-255.0f, cmd->sidemove));
+		cmd->upmove = V_min(255.0f, V_max(-255.0f, cmd->upmove) );
 
 		// Allow mice and other controllers to add their inputs
 		IN_Move ( frametime, cmd );
@@ -753,7 +784,7 @@ void CL_DLLEXPORT CL_CreateMove ( float frametime, struct usercmd_s *cmd, int ac
 	gEngfuncs.GetViewAngles( (float *)viewangles );
 	// Set current view angles.
 
-	if ( g_iAlive )
+	if ( !CL_IsDead() )
 	{
 		VectorCopy( viewangles, cmd->viewangles );
 		VectorCopy( viewangles, oldangles );
@@ -762,8 +793,6 @@ void CL_DLLEXPORT CL_CreateMove ( float frametime, struct usercmd_s *cmd, int ac
 	{
 		VectorCopy( oldangles, cmd->viewangles );
 	}
-
-	Bench_SetViewAngles( 1, (float *)&cmd->viewangles, frametime, cmd );
 }
 
 /*
@@ -925,6 +954,7 @@ InitInput
 */
 void InitInput (void)
 {
+	P_VRInitCVars();
 	gEngfuncs.pfnAddCommand ("+moveup",IN_UpDown);
 	gEngfuncs.pfnAddCommand ("-moveup",IN_UpUp);
 	gEngfuncs.pfnAddCommand ("+movedown",IN_DownDown);
@@ -978,6 +1008,9 @@ void InitInput (void)
 	gEngfuncs.pfnAddCommand ("-graph", IN_GraphUp);
 	gEngfuncs.pfnAddCommand ("+break",IN_BreakDown);
 	gEngfuncs.pfnAddCommand ("-break",IN_BreakUp);
+	gEngfuncs.pfnAddCommand ("cl_stopsound", FMOD_StopSound);
+	gEngfuncs.pfnAddCommand ("cl_flushsoundcache", FMOD_FlushSoundCache);
+	gEngfuncs.pfnAddCommand ("cl_flushsoundcache_force", FMOD_FlushSoundCacheIncludingLocal);
 
 	lookstrafe			= gEngfuncs.pfnRegisterVariable ( "lookstrafe", "0", FCVAR_ARCHIVE );
 	lookspring			= gEngfuncs.pfnRegisterVariable ( "lookspring", "0", FCVAR_ARCHIVE );
@@ -998,6 +1031,7 @@ void InitInput (void)
 	m_yaw				= gEngfuncs.pfnRegisterVariable ( "m_yaw","0.022", FCVAR_ARCHIVE );
 	m_forward			= gEngfuncs.pfnRegisterVariable ( "m_forward","1", FCVAR_ARCHIVE );
 	m_side				= gEngfuncs.pfnRegisterVariable ( "m_side","0.8", FCVAR_ARCHIVE );
+	cl_showstats		= gEngfuncs.pfnRegisterVariable ( "cl_showstats", "0", FCVAR_ARCHIVE );
 
 	// Initialize third person camera controls.
 	CAM_Init();
@@ -1007,6 +1041,7 @@ void InitInput (void)
 	KB_Init();
 	// Initialize view system
 	V_Init();
+	Discord::GetDiscord()->DiscordInitCVars();
 }
 
 /*
@@ -1027,11 +1062,15 @@ void CL_UnloadParticleMan( void );
 void ClearEventList( void );
 #endif
 
-void CL_DLLEXPORT HUD_Shutdown( void )
+void DLLEXPORT HUD_Shutdown( void )
 {
 //	RecClShutdown();
 
+	gHUD.Shutdown();
+	CClient_SoundEngine::GetSoundEngine()->ShutDown();
+	Discord::GetDiscord()->DiscordExit();
 	ShutdownInput();
+	CloseFileSystem();
 
 #if defined( _TFC )
 	ClearEventList();

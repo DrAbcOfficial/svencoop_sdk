@@ -23,9 +23,14 @@
 #include "extdll.h"
 #include "util.h"
 #include "cbase.h"
+#include "player.h"
+#include "CSpawnPoints.h"
+#include "InventoryRules.h"
 #include "saverestore.h"
 #include "nodes.h"
 #include "doors.h"
+
+#define SF_BUTTON_DONTMOVE		1
 
 extern CGraph WorldGraph;
 
@@ -59,16 +64,61 @@ LINK_ENTITY_TO_CLASS(info_null,CNullEntity);
 class CBaseDMStart : public CPointEntity
 {
 public:
+	void		Spawn( void );
+	void		Precache( void );
 	void		KeyValue( KeyValueData *pkvd );
 	BOOL		IsTriggered( CBaseEntity *pEntity );
+	BOOL		IsAlive( void ) { return m_fEnabled; }
+	void		Use( CBaseEntity *activator, CBaseEntity *caller, USE_TYPE useType, float value );
+	Vector		GetSpawnSpot( void );
+	void		PlayerSpawns( CBasePlayer *player );
 
 private:
+	bool		m_fEnabled;
+	USE_TYPE	m_triggerState;
 };
 
 // These are the new entry points to entities. 
 LINK_ENTITY_TO_CLASS(info_player_deathmatch,CBaseDMStart);
+LINK_ENTITY_TO_CLASS(info_player_dm2,CBaseDMStart);
 LINK_ENTITY_TO_CLASS(info_player_start,CPointEntity);
+LINK_ENTITY_TO_CLASS(info_player_coop,CPointEntity);
 LINK_ENTITY_TO_CLASS(info_landmark,CPointEntity);
+
+void CBaseDMStart::Spawn( void )
+{
+	m_fEnabled = !( pev->spawnflags & SF_SPAWNPOINT_START_OFF );
+
+	if ( pev->spawnflags & SF_SPAWNPOINT_REPEL )
+		Precache();
+}
+
+void CBaseDMStart::Precache( void )
+{
+	PrecacheModel_Intercept( this, "sprites/rope.spr" );
+}
+
+void CBaseDMStart::Use( CBaseEntity *activator, CBaseEntity *caller, USE_TYPE useType, float value )
+{
+	switch ( useType )
+	{
+	case USE_OFF:
+		m_fEnabled = false;
+		break;
+	case USE_ON:
+		m_fEnabled = true;
+		break;
+	case USE_SET:
+		m_fEnabled = value != 0;
+		break;
+	case USE_TOGGLE:
+		m_fEnabled = !m_fEnabled;
+		break;
+	case USE_KILL:
+		UTIL_Remove( this );
+		break;
+	}
+}
 
 void CBaseDMStart::KeyValue( KeyValueData *pkvd )
 {
@@ -77,8 +127,108 @@ void CBaseDMStart::KeyValue( KeyValueData *pkvd )
 		pev->netname = ALLOC_STRING(pkvd->szValue);
 		pkvd->fHandled = TRUE;
 	}
+	else if ( FStrEq( pkvd->szKeyName, "triggerstate" ) )
+	{
+		int state = atoi( pkvd->szValue );
+
+		m_triggerState = state == 0 ? USE_OFF : state == 2 ? USE_TOGGLE : USE_ON;
+		pkvd->fHandled = TRUE;
+	}
 	else
 		CPointEntity::KeyValue( pkvd );
+}
+
+Vector CBaseDMStart::GetSpawnSpot( void )
+{
+	if ( CVAR_GET_POINTER( "mp_multiplespawn" )->value >= 1 )
+		return pev->origin;
+
+	Vector mins = pev->origin - Vector( 16, 16, 36 );
+	Vector maxs = pev->origin + Vector( 16, 16, 36 );
+	CBaseEntity *entities[1];
+
+	if ( UTIL_EntitiesInBox( entities, ARRAYSIZE( entities ), mins, maxs, FL_CLIENT ) == 0 )
+		return pev->origin;
+
+	float angle = 0;
+
+	do
+	{
+		Vector position( (float) sin( (double) angle ) * 40 + pev->origin.x,
+			(float) cos( (double) angle ) * 40 + pev->origin.y, pev->origin.z + 0.0f );
+		TraceResult trace = {};
+
+		mins = position - Vector( 16, 16, 36 );
+		maxs = position + Vector( 16, 16, 36 );
+		UTIL_TraceLine( mins, maxs, ignore_monsters, NULL, &trace );
+
+		if ( UTIL_PointContents( mins ) >= CONTENTS_EMPTY
+			&& UTIL_PointContents( maxs ) >= CONTENTS_EMPTY
+			&& !( trace.flFraction < 1 )
+			&& UTIL_EntitiesInBox( entities, ARRAYSIZE( entities ), mins, maxs, FL_CLIENT ) == 0 )
+		{
+			return position;
+		}
+
+		angle = (float) ( (double) angle + 0.7853981633974483 );
+	}
+	while ( (double) angle < 6.283185307179586 );
+
+	return pev->origin;
+}
+
+void CBaseDMStart::PlayerSpawns( CBasePlayer *player )
+{
+	if ( pev->netname )
+		player->pev->targetname = pev->netname;
+
+	if ( pev->spawnflags & SF_SPAWNPOINT_REPEL )
+		player->StartRepelDown( pev->frags );
+
+	if ( pev->spawnflags & SF_SPAWNPOINT_FIRE_TARGET )
+		FireTargets( STRING( pev->target ), player, this, m_triggerState, 0 );
+}
+
+Vector GetSpawnSpotPlace( CBaseEntity *point )
+{
+	if ( !point )
+		return g_vecZero;
+
+	if ( FClassnameIs( point->pev, "info_player_start" )
+		|| FClassnameIs( point->pev, "info_player_deathmatch" )
+		|| FClassnameIs( point->pev, "info_player_dm2" ) )
+	{
+		return ( (CBaseDMStart *) point )->GetSpawnSpot();
+	}
+
+	return point->pev->origin;
+}
+
+void PlayerSpawns( edict_t *point, edict_t *player )
+{
+	if ( !point || point->free || !GET_PRIVATE( point ) || !player || player->free || !GET_PRIVATE( player ) )
+		return;
+
+	if ( !FStrEq( STRING( point->v.classname ), "info_player_deathmatch" )
+		&& !FStrEq( STRING( point->v.classname ), "info_player_dm2" ) )
+	{
+		return;
+	}
+
+	CBaseEntity *entity = CBaseEntity::Instance( player );
+
+	if ( !entity || !entity->IsPlayer() )
+		return;
+
+	CBaseDMStart *spawn = dynamic_cast<CBaseDMStart *>( CBaseEntity::Instance( point ) );
+
+	if ( !spawn || player->free || !GET_PRIVATE( player ) )
+		return;
+
+	entity = CBaseEntity::Instance( player );
+
+	if ( entity && entity->IsPlayer() )
+		spawn->PlayerSpawns( (CBasePlayer *) entity );
 }
 
 BOOL CBaseDMStart::IsTriggered( CBaseEntity *pEntity )
@@ -106,6 +256,13 @@ void CBaseEntity::UpdateOnRemove( void )
 			}
 		}
 	}
+
+	// tell owner ( if any ) that we're gone. This is mostly for MonsterMaker functionality
+	CBaseEntity *pOwner = CBaseEntity::Instance( pev->owner );
+
+	if ( pOwner )
+		pOwner->DeathNotice( pev );
+
 	if ( pev->globalname )
 		gGlobalState.EntitySetState( pev->globalname, GLOBAL_DEAD );
 }
@@ -130,6 +287,11 @@ void CBaseEntity :: SUB_DoNothing( void )
 {
 }
 
+
+CBaseDelay::CBaseDelay()
+{
+	m_hDelayActivator = NULL;
+}
 
 // Global Savedata for Delay
 TYPEDESCRIPTION	CBaseDelay::m_SaveData[] = 
@@ -186,13 +348,85 @@ void CBaseEntity :: SUB_UseTargets( CBaseEntity *pActivator, USE_TYPE useType, f
 }
 
 
-void FireTargets( const char *targetName, CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
+#define TARGET_MAX_RECURSION	128
+
+int giTargetRecursionLevel = 0;
+
+// Type 0 blocks listed names and type 1 allows only listed names
+bool DoesFilterAllowTrigger( const char *pszName, const char *pszFilter, int iType )
 {
-	edict_t *pentTarget = NULL;
-	if ( !targetName )
+	if ( UTIL_FindTokenInTokenList( pszName, pszFilter ) )
+		return iType != 0;
+
+	return iType != 1;
+}
+
+void FireTarget( CBaseEntity *pTarget, CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
+{
+	if ( !pTarget )
 		return;
 
-	ALERT( at_aiconsole, "Firing: (%s)\n", targetName );
+	if ( pCaller )
+	{
+		if ( pCaller->targetnameOutFilter
+			&& !DoesFilterAllowTrigger( STRING( pTarget->pev->targetname ), STRING( pCaller->targetnameOutFilter ), pCaller->targetnameOutFilterType ) )
+			return;
+
+		if ( pCaller->classnameOutFilter
+			&& !DoesFilterAllowTrigger( STRING( pTarget->pev->classname ), STRING( pCaller->classnameOutFilter ), pCaller->classnameOutFilterType ) )
+			return;
+
+		if ( pTarget->targetnameInFilter
+			&& !DoesFilterAllowTrigger( STRING( pCaller->pev->targetname ), STRING( pTarget->targetnameInFilter ), pTarget->targetnameInFilterType ) )
+			return;
+
+		if ( pTarget->classnameInFilter
+			&& !DoesFilterAllowTrigger( STRING( pCaller->pev->classname ), STRING( pTarget->classnameInFilter ), pTarget->classnameInFilterType ) )
+			return;
+	}
+
+	pTarget->Use( pActivator, pCaller, useType, value );
+}
+
+void FireTargets( const char *targetName, CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
+{
+	if ( !targetName || !*targetName )
+		return;
+
+	if ( pActivator )
+	{
+		const char *pszActivatorName = STRING( pActivator->pev->targetname );
+
+		if ( strcmp( pszActivatorName, targetName ) )
+		{
+			giTargetRecursionLevel = 0;
+		}
+		else
+		{
+			if ( giTargetRecursionLevel > TARGET_MAX_RECURSION )
+			{
+				ALERT( at_console, "Warning: %s \"%s\" triggered itself over %i times.\n",
+					STRING( pActivator->pev->classname ), pszActivatorName, TARGET_MAX_RECURSION );
+				giTargetRecursionLevel = 0;
+				return;
+			}
+
+			++giTargetRecursionLevel;
+		}
+
+		if ( !( pActivator->pev->flags & FL_KILLME ) && !strcmp( "!activator", targetName ) )
+		{
+			FireTarget( pActivator, pActivator, pCaller, useType, value );
+			giTargetRecursionLevel = 0;
+			return;
+		}
+	}
+	else
+	{
+		giTargetRecursionLevel = 0;
+	}
+
+	edict_t *pentTarget = NULL;
 
 	for (;;)
 	{
@@ -200,13 +434,12 @@ void FireTargets( const char *targetName, CBaseEntity *pActivator, CBaseEntity *
 		if (FNullEnt(pentTarget))
 			break;
 
-		CBaseEntity *pTarget = CBaseEntity::Instance( pentTarget );
-		if ( pTarget && !(pTarget->pev->flags & FL_KILLME) )	// Don't use dying ents
-		{
-			ALERT( at_aiconsole, "Found: %s, firing (%s)\n", STRING(pTarget->pev->classname), targetName );
-			pTarget->Use( pActivator, pCaller, useType, value );
+		CBaseEntity *pTarget = (CBaseEntity *) GET_PRIVATE( pentTarget );
+		if ( pTarget && !(pTarget->pev->flags & FL_KILLME) )
+			FireTarget( pTarget, pActivator, pCaller, useType, value );
 		}
-	}
+
+	giTargetRecursionLevel = 0;
 }
 
 LINK_ENTITY_TO_CLASS( DelayedUse, CBaseDelay );
@@ -231,10 +464,12 @@ void CBaseDelay :: SUB_UseTargets( CBaseEntity *pActivator, USE_TYPE useType, fl
 
 		pTemp->pev->nextthink = gpGlobals->time + m_flDelay;
 
-		pTemp->SetThink( &CBaseDelay::DelayThink );
+		pTemp->SetThink( &CBaseDelay::CallDelayThink );
 		
 		// Save the useType
 		pTemp->pev->button = (int)useType;
+
+		pTemp->pev->frags = value;
 		pTemp->m_iszKillTarget = m_iszKillTarget;
 		pTemp->m_flDelay = 0; // prevent "recursion"
 		pTemp->pev->target = pev->target;
@@ -251,6 +486,18 @@ void CBaseDelay :: SUB_UseTargets( CBaseEntity *pActivator, USE_TYPE useType, fl
 		{
 			pTemp->pev->owner = NULL;
 		}
+
+		edict_t *activator;
+
+		if ( pActivator && pActivator->pev )
+			activator = pActivator->pev->pContainingEntity;
+		else
+			activator = NULL;
+
+		if ( activator && !activator->free )
+			pTemp->m_hDelayActivator = pActivator;
+		else
+			pTemp->m_hDelayActivator = NULL;
 
 		return;
 	}
@@ -321,12 +568,15 @@ void CBaseDelay::DelayThink( void )
 {
 	CBaseEntity *pActivator = NULL;
 
-	if ( pev->owner != NULL )		// A player activated this on delay
-	{
-		pActivator = CBaseEntity::Instance( pev->owner );	
-	}
-	// The use type is cached (and stashed) in pev->button
-	SUB_UseTargets( pActivator, (USE_TYPE)pev->button, 0 );
+	edict_t *activator = m_hDelayActivator.Get();
+
+	if ( !activator || activator->free || !GET_PRIVATE( activator ) )
+		activator = pev->owner;
+
+	if ( activator && !activator->free && GET_PRIVATE( activator ) )
+		pActivator = CBaseEntity::Instance( activator );
+
+	SUB_UseTargets( pActivator, (USE_TYPE)pev->button, pev->frags );
 	REMOVE_ENTITY(ENT(pev));
 }
 
@@ -356,6 +606,20 @@ TYPEDESCRIPTION	CBaseToggle::m_SaveData[] =
 };
 IMPLEMENT_SAVERESTORE( CBaseToggle, CBaseAnimating );
 
+void CBaseToggle::OnCreate( void )
+{
+	CBaseAnimating::OnCreate();
+
+	m_pInventoryRules = new CInventoryRules( this );
+}
+
+void CBaseToggle::OnDestroy( void )
+{
+	delete m_pInventoryRules;
+	m_pInventoryRules = NULL;
+
+	CBaseAnimating::OnDestroy();
+}
 
 void CBaseToggle::KeyValue( KeyValueData *pkvd )
 {
@@ -379,6 +643,8 @@ void CBaseToggle::KeyValue( KeyValueData *pkvd )
 		m_flMoveDistance = atof(pkvd->szValue);
 		pkvd->fHandled = TRUE;
 	}
+	else if ( m_pInventoryRules->KeyValue( pkvd ) )
+		pkvd->fHandled = TRUE;
 	else
 		CBaseDelay::KeyValue( pkvd );
 }
@@ -399,7 +665,7 @@ void CBaseToggle ::  LinearMove( Vector	vecDest, float flSpeed )
 	m_vecFinalDest = vecDest;
 
 	// Already there?
-	if (vecDest == pev->origin)
+	if ( vecDest == pev->origin || ( FClassnameIs( pev, "func_button" ) && ( m_flLip == 0 || FBitSet( pev->spawnflags, SF_BUTTON_DONTMOVE ) ) ) )
 	{
 		LinearMoveDone();
 		return;

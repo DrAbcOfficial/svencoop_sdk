@@ -49,8 +49,12 @@
 //										32
 //										64
 #define	SF_MONSTER_WAIT_FOR_SCRIPT		128 //spawnflag that makes monsters wait to check for attacking until the script is done or they've been attacked
+#define SF_MONSTER_NO_MODEL_BOX			0x4000 // a custom model keeps the default collision box
 #define SF_MONSTER_PREDISASTER			256	//this is a predisaster scientist or barney. Influences how they speak.
-#define SF_MONSTER_FADECORPSE			512 // Fade out corpse after death
+#define SF_MONSTER_DONT_FADE			512 // Keep corpse after death
+#define SF_MONSTER_NO_WPN_DROP		1024
+#define SF_MONSTER_FREE_ROAM_MODE2		0x1000
+#define SF_MONSTER_FREE_ROAM_MODE1		0x2000
 #define SF_MONSTER_FALL_TO_GROUND		0x80000000
 
 // specialty spawnflags
@@ -85,12 +89,23 @@ BOOL FBoxVisible ( entvars_t *pevLooker, entvars_t *pevTarget );
 BOOL FBoxVisible ( entvars_t *pevLooker, entvars_t *pevTarget, Vector &vecTargetOrigin, float flSize = 0.0 );
 
 // monster to monster relationship types
+#define CLASS_VEHICLE	20
+
 #define R_AL	-2 // (ALLY) pals. Good alternative to R_NO when applicable.
-#define R_FR	-1// (FEAR)will run
+#define R_FR	4 // (FEAR)will run
+
 #define	R_NO	0// (NO RELATIONSHIP) disregard
 #define R_DL	1// (DISLIKE) will attack
 #define R_HT	2// (HATE)will attack this character instead of any visible DISLIKEd characters
 #define R_NM	3// (NEMESIS)  A monster Will ALWAYS attack its nemsis, no matter what
+
+#define WOUNDED_FEAR_HEALTH_FRACTION	0.2f // below this share of max health, enemies are feared instead
+
+// Game-side monster stepping (monsters.cpp)
+bool SV_movestep( edict_t *ent, Vector vecMove, bool relink, edict_t *pentTarget );
+bool SV_StepDirection( edict_t *ent, float yaw, float dist, edict_t *pentTarget );
+bool SV_NewChaseDir( edict_t *actor, Vector vecGoal, float dist, edict_t *pentTarget );
+bool SV_MoveToLocation( edict_t *ent, float yaw, Vector vecGoal, float dist, edict_t *pentTarget, bool fChaseGoal );
 
 
 // these bits represent the monster's memory
@@ -103,6 +118,7 @@ BOOL FBoxVisible ( entvars_t *pevLooker, entvars_t *pevTarget, Vector &vecTarget
 #define bits_MEMORY_MOVE_FAILED			( 1 << 5 )// Movement has already failed
 #define bits_MEMORY_FLINCHED			( 1 << 6 )// Has already flinched
 #define bits_MEMORY_KILLED				( 1 << 7 )// HACKHACK -- remember that I've already called my Killed()
+#define bits_MEMORY_MOVE_RADIUS_ONLY	( 1 << 8 )// Can only get there within radius
 #define bits_MEMORY_CUSTOM4				( 1 << 28 )	// Monster-specific memory
 #define bits_MEMORY_CUSTOM3				( 1 << 29 )	// Monster-specific memory
 #define bits_MEMORY_CUSTOM2				( 1 << 30 )	// Monster-specific memory

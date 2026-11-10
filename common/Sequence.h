@@ -197,5 +197,6 @@ sequenceEntry_s* SequenceGet( const char* fileName, const char* entryName );
 void Sequence_ParseFile( const char* fileName, qboolean isGlobal );
 void Sequence_OnLevelLoad( const char* mapName );
 sentenceEntry_s* SequencePickSentence( const char *groupName, int pickMethod, int *picked );
+sentenceEntry_s* SequenceGetSentenceByIndex(unsigned int index);
 
 #endif // _INCLUDE_SEQUENCE_H_

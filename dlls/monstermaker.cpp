@@ -86,6 +86,11 @@ void CMonsterMaker :: KeyValue( KeyValueData *pkvd )
 		m_cNumMonsters = atoi(pkvd->szValue);
 		pkvd->fHandled = TRUE;
 	}
+	else if ( FStrEq(pkvd->szKeyName, "respawn_as_playerally") )
+	{
+		m_fPlayerAlly = atoi(pkvd->szValue) != 0;
+		pkvd->fHandled = TRUE;
+	}
 	else if ( FStrEq(pkvd->szKeyName, "m_imaxlivechildren") )
 	{
 		m_iMaxLiveChildren = atoi(pkvd->szValue);
@@ -103,7 +108,11 @@ void CMonsterMaker :: KeyValue( KeyValueData *pkvd )
 
 void CMonsterMaker :: Spawn( )
 {
+	if ( m_flDelay <= 0 )
+		m_flDelay = 0.5;
+
 	pev->solid = SOLID_NOT;
+	pev->takedamage = DAMAGE_NO;
 
 	m_cLiveChildren = 0;
 	Precache();
@@ -152,7 +161,8 @@ void CMonsterMaker :: Precache( void )
 {
 	CBaseMonster::Precache();
 
-	UTIL_PrecacheOther( STRING( m_iszMonsterClassname ) );
+	UTIL_PrecacheMonster( STRING( m_iszMonsterClassname ), m_fPlayerAlly );
+	pev->noise = m_iszMonsterClassname;
 }
 
 //=========================================================
@@ -179,15 +189,18 @@ void CMonsterMaker::MakeMonster( void )
 
 	Vector mins = pev->origin - Vector( 34, 34, 0 );
 	Vector maxs = pev->origin + Vector( 34, 34, 0 );
-	maxs.z = pev->origin.z;
+	maxs.z = pev->origin.z + 1;
 	mins.z = m_flGround;
 
 	CBaseEntity *pList[2];
 	int count = UTIL_EntitiesInBox( pList, 2, mins, maxs, FL_CLIENT|FL_MONSTER );
-	if ( count )
+	for ( int i = 0; i < count; i++ )
 	{
-		// don't build a stack of monsters!
-		return;
+		if ( pList[i]->pev->solid != SOLID_NOT && pList[i]->pev->deadflag != DEAD_DEAD )
+		{
+			// don't build a stack of monsters!
+			return;
+		}
 	}
 
 	pent = CREATE_NAMED_ENTITY( m_iszMonsterClassname );
@@ -198,21 +211,24 @@ void CMonsterMaker::MakeMonster( void )
 		return;
 	}
 	
-	// If I have a target, fire!
-	if ( !FStringNull ( pev->target ) )
-	{
-		// delay already overloaded for this entity, so can't call SUB_UseTargets()
-		FireTargets( STRING(pev->target), this, this, USE_TOGGLE, 0 );
-	}
-
 	pevCreate = VARS( pent );
 	pevCreate->origin = pev->origin;
+	pevCreate->skin = pev->skin;
 	pevCreate->angles = pev->angles;
+	pevCreate->health = pev->health;
 	SetBits( pevCreate->spawnflags, SF_MONSTER_FALL_TO_GROUND );
 
 	// Children hit monsterclip brushes
 	if ( pev->spawnflags & SF_MONSTERMAKER_MONSTERCLIP )
 		SetBits( pevCreate->spawnflags, SF_MONSTER_HITMONSTERCLIP );
+
+	if ( pev->spawnflags & SF_MONSTER_NO_WPN_DROP )
+		SetBits( pevCreate->spawnflags, SF_MONSTER_NO_WPN_DROP );
+
+	CBaseMonster *pMonster = CBaseEntity::Instance( pent )->MyMonsterPointer();
+
+	if ( pMonster )
+		pMonster->SetPlayerAlly( m_fPlayerAlly );
 
 	DispatchSpawn( ENT( pevCreate ) );
 	pevCreate->owner = edict();
@@ -231,6 +247,13 @@ void CMonsterMaker::MakeMonster( void )
 		// Disable this forever.  Don't kill it because it still gets death notices
 		SetThink( NULL );
 		SetUse( NULL );
+	}
+
+	// If I have a target, fire!
+	if ( !FStringNull ( pev->target ) )
+	{
+		// delay already overloaded for this entity, so can't call SUB_UseTargets()
+		FireTargets( STRING(pev->target), this, this, USE_TOGGLE, 0 );
 	}
 }
 

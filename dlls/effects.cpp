@@ -22,14 +22,38 @@
 #include "decals.h"
 #include "func_break.h"
 #include "shake.h"
+#include "server_support.h"
 
 #define	SF_GIBSHOOTER_REPEATABLE	1 // allows a gibshooter to be refired
 
 #define SF_FUNNEL_REVERSE			1 // funnel effect repels particles instead of attracting them.
+#define SF_FUNNEL_REPEATABLE		2
 
 
 // Lightning target, just alias landmark
 LINK_ENTITY_TO_CLASS( info_target, CPointEntity );
+
+
+void UTIL_PrecacheSkymap( const char *sky )
+{
+	if ( !strlen( sky ) )
+	{
+		ALERT( at_console, "Empty string in UTIL_PrecacheSkymap\n" );
+		return;
+	}
+
+	const char *sides[] = { "bk", "dn", "ft", "lf", "rt", "up" };
+	char path[260] = {};
+
+	for ( int i = 0; i < ARRAYSIZE( sides ); i++ )
+	{
+		snprintf( path, sizeof( path ), "gfx/env/%s%s.bmp", sky, sides[i] );
+		PRECACHE_GENERIC( (char *) STRING( AllocStringLocal( path ) ) );
+
+		snprintf( path, sizeof( path ), "gfx/env/%s%s.tga", sky, sides[i] );
+		PRECACHE_GENERIC( (char *) STRING( AllocStringLocal( path ) ) );
+	}
+}
 
 
 class CBubbling : public CBaseEntity
@@ -218,8 +242,7 @@ const Vector &CBeam::GetEndPos( void )
 }
 
 
-CBeam *CBeam::BeamCreate( const char *pSpriteName, int width )
-{
+CBeam *CBeam::BeamCreate( const char *pSpriteName, int width ) {
 	// Create a new entity with CBeam private data
 	CBeam *pBeam = GetClassPtr( (CBeam *)NULL );
 	pBeam->pev->classname = MAKE_STRING("beam");
@@ -229,6 +252,70 @@ CBeam *CBeam::BeamCreate( const char *pSpriteName, int width )
 	return pBeam;
 }
 
+void CBeam::XenTeleportZap( const Vector &start, const Vector &end )
+{
+	MESSAGE_BEGIN( MSG_BROADCAST, SVC_TEMPENTITY );
+	WRITE_BYTE( TE_BEAMPOINTS );
+	WRITE_COORD( start.x );
+	WRITE_COORD( start.y );
+	WRITE_COORD( start.z );
+	WRITE_COORD( end.x );
+	WRITE_COORD( end.y );
+	WRITE_COORD( end.z );
+	WRITE_SHORT( PrecacheModel_Intercept( this, "sprites/lgtning.spr" ) );
+	WRITE_BYTE( 0 );
+	WRITE_BYTE( 15 );
+	WRITE_BYTE( 10 );
+	WRITE_BYTE( 32 );
+	WRITE_BYTE( 64 );
+	WRITE_BYTE( 217 );
+	WRITE_BYTE( 226 );
+	WRITE_BYTE( 146 );
+	WRITE_BYTE( 128 );
+	WRITE_BYTE( 15 );
+	MESSAGE_END();
+}
+
+void CBeam::XenTeleport( const Vector &origin, int radius )
+{
+	for ( int i = 0; i < 10; ++i )
+	{
+		Vector start = origin;
+		Vector direction;
+		TraceResult trace;
+
+		direction.z = RANDOM_FLOAT( -1, 1 );
+		direction.y = RANDOM_FLOAT( -1, 1 );
+		direction.x = RANDOM_FLOAT( -1, 1 );
+		direction = direction.Normalize();
+		UTIL_TraceLine( origin, origin + direction * radius, ignore_monsters, edict(), &trace );
+
+		if ( trace.flFraction == 1.0f )
+			continue;
+
+		Vector opposite;
+		TraceResult oppositeTrace;
+
+		do
+		{
+			opposite.z = RANDOM_FLOAT( -1, 1 );
+			opposite.y = RANDOM_FLOAT( -1, 1 );
+			opposite.x = RANDOM_FLOAT( -1, 1 );
+		} while ( DotProduct( direction, opposite ) > 0 );
+
+		opposite = opposite.Normalize();
+		UTIL_TraceLine( origin, origin + opposite * radius, ignore_monsters, edict(), &oppositeTrace );
+
+		if ( oppositeTrace.flFraction == 1.0f )
+			continue;
+
+		if ( ( start - oppositeTrace.vecEndPos ).Length() < radius * 0.1 )
+			continue;
+
+		UTIL_TraceLine( start, oppositeTrace.vecEndPos, ignore_monsters, edict(), &oppositeTrace );
+		XenTeleportZap( origin, oppositeTrace.vecEndPos );
+	}
+}
 
 void CBeam::BeamInit( const char *pSpriteName, int width )
 {
@@ -239,7 +326,7 @@ void CBeam::BeamInit( const char *pSpriteName, int width )
 	SetFrame( 0 );
 	SetScrollRate( 0 );
 	pev->model = MAKE_STRING( pSpriteName );
-	SetTexture( PRECACHE_MODEL( (char *)pSpriteName ) );
+	SetTexture( PrecacheModel_Intercept( this, pSpriteName ) );
 	SetWidth( width );
 	pev->skin = 0;
 	pev->sequence = 0;
@@ -269,8 +356,7 @@ void CBeam::HoseInit( const Vector &start, const Vector &direction )
 }
 
 
-void CBeam::PointEntInit( const Vector &start, int endIndex )
-{
+void CBeam::PointEntInit( const Vector &start, int endIndex ) {
 	SetType( BEAM_ENTPOINT );
 	SetStartPos( start );
 	SetEndEntity( endIndex );
@@ -294,12 +380,12 @@ void CBeam::RelinkBeam( void )
 {
 	const Vector &startPos = GetStartPos(), &endPos = GetEndPos();
 
-	pev->mins.x = min( startPos.x, endPos.x );
-	pev->mins.y = min( startPos.y, endPos.y );
-	pev->mins.z = min( startPos.z, endPos.z );
-	pev->maxs.x = max( startPos.x, endPos.x );
-	pev->maxs.y = max( startPos.y, endPos.y );
-	pev->maxs.z = max( startPos.z, endPos.z );
+	pev->mins.x = V_min( startPos.x, endPos.x );
+	pev->mins.y = V_min( startPos.y, endPos.y );
+	pev->mins.z = V_min( startPos.z, endPos.z );
+	pev->maxs.x = V_max( startPos.x, endPos.x );
+	pev->maxs.y = V_max( startPos.y, endPos.y );
+	pev->maxs.z = V_max( startPos.z, endPos.z );
 	pev->mins = pev->mins - pev->origin;
 	pev->maxs = pev->maxs - pev->origin;
 
@@ -312,12 +398,12 @@ void CBeam::SetObjectCollisionBox( void )
 {
 	const Vector &startPos = GetStartPos(), &endPos = GetEndPos();
 
-	pev->absmin.x = min( startPos.x, endPos.x );
-	pev->absmin.y = min( startPos.y, endPos.y );
-	pev->absmin.z = min( startPos.z, endPos.z );
-	pev->absmax.x = max( startPos.x, endPos.x );
-	pev->absmax.y = max( startPos.y, endPos.y );
-	pev->absmax.z = max( startPos.z, endPos.z );
+	pev->absmin.x = V_min( startPos.x, endPos.x );
+	pev->absmin.y = V_min( startPos.y, endPos.y );
+	pev->absmin.z = V_min( startPos.z, endPos.z );
+	pev->absmax.x = V_max( startPos.x, endPos.x );
+	pev->absmax.y = V_max( startPos.y, endPos.y );
+	pev->absmax.z = V_max( startPos.z, endPos.z );
 }
 #endif
 
@@ -393,6 +479,8 @@ public:
 
 	virtual int		Save( CSave &save );
 	virtual int		Restore( CRestore &restore );
+	CBaseEntity *StrikeTarget( int iszName );
+
 	static	TYPEDESCRIPTION m_SaveData[];
 
 	void	BeamUpdateVars( void );
@@ -400,6 +488,8 @@ public:
 	int		m_active;
 	int		m_iszStartEntity;
 	int		m_iszEndEntity;
+	EHANDLE	m_hStrikeActivator;
+	EHANDLE	m_hStrikeCaller;
 	float	m_life;
 	int		m_boltWidth;
 	int		m_noiseAmplitude;
@@ -609,6 +699,9 @@ void CLightning::StrikeUse( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_T
 	if ( !ShouldToggle( useType, m_active ) )
 		return;
 
+	m_hStrikeActivator = pActivator;
+	m_hStrikeCaller = pCaller;
+
 	if ( m_active )
 	{
 		m_active = 0;
@@ -629,12 +722,24 @@ int IsPointEntity( CBaseEntity *pEnt )
 {
 	if ( !pEnt->pev->modelindex )
 		return 1;
-	if ( FClassnameIs( pEnt->pev, "info_target" ) || FClassnameIs( pEnt->pev, "info_landmark" ) || FClassnameIs( pEnt->pev, "path_corner" ) )
+
+	if ( FClassnameIs( pEnt->pev, "info_target" ) || FClassnameIs( pEnt->pev, "path_corner" ) || FClassnameIs( pEnt->pev, "path_patrol" ) )
 		return 1;
 
 	return 0;
 }
 
+
+CBaseEntity *CLightning::StrikeTarget( int iszName )
+{
+	if ( FStrEq( STRING( iszName ), "!activator" ) && m_hStrikeActivator != NULL )
+		return m_hStrikeActivator;
+
+	if ( FStrEq( STRING( iszName ), "!caller" ) && m_hStrikeCaller != NULL )
+		return m_hStrikeCaller;
+
+	return RandomTargetname( STRING( iszName ) );
+}
 
 void CLightning::StrikeThink( void )
 {
@@ -664,8 +769,8 @@ void CLightning::StrikeThink( void )
 		return;
 	}
 
-	CBaseEntity *pStart = RandomTargetname( STRING(m_iszStartEntity) );
-	CBaseEntity *pEnd = RandomTargetname( STRING(m_iszEndEntity) );
+	CBaseEntity *pStart = StrikeTarget( m_iszStartEntity );
+	CBaseEntity *pEnd = StrikeTarget( m_iszEndEntity );
 
 	if ( pStart != NULL && pEnd != NULL )
 	{
@@ -953,6 +1058,9 @@ TYPEDESCRIPTION	CLaser::m_SaveData[] =
 	DEFINE_FIELD( CLaser, m_pSprite, FIELD_CLASSPTR ),
 	DEFINE_FIELD( CLaser, m_iszSpriteName, FIELD_STRING ),
 	DEFINE_FIELD( CLaser, m_firePosition, FIELD_POSITION_VECTOR ),
+	DEFINE_FIELD( CLaser, m_iFrameStart, FIELD_INTEGER ),
+	DEFINE_FIELD( CLaser, m_hActivator, FIELD_EHANDLE ),
+	DEFINE_FIELD( CLaser, m_hCaller, FIELD_EHANDLE ),
 };
 
 IMPLEMENT_SAVERESTORE( CLaser, CBeam );
@@ -965,6 +1073,7 @@ void CLaser::Spawn( void )
 		return;
 	}
 	pev->solid = SOLID_NOT;							// Remove model & collisions
+	pev->frame = m_iFrameStart;
 	Precache( );
 
 	SetThink( &CLaser::StrikeThink );
@@ -1028,7 +1137,7 @@ void CLaser::KeyValue( KeyValueData *pkvd )
 	}
 	else if (FStrEq(pkvd->szKeyName, "framestart"))
 	{
-		pev->frame = atoi(pkvd->szValue);
+		m_iFrameStart = atoi(pkvd->szValue);
 		pkvd->fHandled = TRUE;
 	}
 	else if (FStrEq(pkvd->szKeyName, "damage"))
@@ -1074,6 +1183,17 @@ void CLaser::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useTyp
 
 	if ( !ShouldToggle( useType, active ) )
 		return;
+
+	m_hActivator = pActivator;
+	m_hCaller = pCaller;
+
+	if ( useType == USE_KILL )
+	{
+		TurnOff();
+		UTIL_Remove( this );
+		return;
+	}
+
 	if ( active )
 	{
 		TurnOff();
@@ -1097,7 +1217,14 @@ void CLaser::FireAtPoint( TraceResult &tr )
 
 void CLaser::StrikeThink( void )
 {
-	CBaseEntity *pEnd = RandomTargetname( STRING(pev->message) );
+	CBaseEntity *pEnd = NULL;
+
+	if ( FStrEq( STRING( pev->message ), "!activator" ) && m_hActivator != NULL )
+		pEnd = m_hActivator;
+	else if ( FStrEq( STRING( pev->message ), "!caller" ) && m_hCaller != NULL )
+		pEnd = m_hCaller;
+	else
+		pEnd = RandomTargetname( STRING(pev->message) );
 
 	if ( pEnd )
 		m_firePosition = pEnd->pev->origin;
@@ -1117,12 +1244,14 @@ public:
 	void Spawn( void );
 	void Think( void );
 	void Animate( float frames );
+	void KeyValue( KeyValueData *pkvd );
 	virtual int		Save( CSave &save );
 	virtual int		Restore( CRestore &restore );
 	static	TYPEDESCRIPTION m_SaveData[];
 
 	float		m_lastTime;
-	float		m_maxFrame;
+	int			m_maxFrame;
+	int			m_iFrameStart;
 };
 
 LINK_ENTITY_TO_CLASS( env_glow, CGlow );
@@ -1130,10 +1259,22 @@ LINK_ENTITY_TO_CLASS( env_glow, CGlow );
 TYPEDESCRIPTION	CGlow::m_SaveData[] = 
 {
 	DEFINE_FIELD( CGlow, m_lastTime, FIELD_TIME ),
-	DEFINE_FIELD( CGlow, m_maxFrame, FIELD_FLOAT ),
+	DEFINE_FIELD( CGlow, m_maxFrame, FIELD_INTEGER ),
+	DEFINE_FIELD( CGlow, m_iFrameStart, FIELD_INTEGER ),
 };
 
 IMPLEMENT_SAVERESTORE( CGlow, CPointEntity );
+
+void CGlow::KeyValue( KeyValueData *pkvd )
+{
+	if ( FStrEq( pkvd->szKeyName, "framestart" ) )
+	{
+		m_iFrameStart = atoi( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else
+		CPointEntity::KeyValue( pkvd );
+}
 
 void CGlow::Spawn( void )
 {
@@ -1145,11 +1286,18 @@ void CGlow::Spawn( void )
 	PRECACHE_MODEL( (char *)STRING(pev->model) );
 	SET_MODEL( ENT(pev), STRING(pev->model) );
 
-	m_maxFrame = (float) MODEL_FRAMES( pev->modelindex ) - 1;
-	if ( m_maxFrame > 1.0 && pev->framerate != 0 )
-		pev->nextthink	= gpGlobals->time + 0.1;
+	m_maxFrame = MODEL_FRAMES( pev->modelindex ) - 1;
 
-	m_lastTime = gpGlobals->time;
+	if ( m_maxFrame > 0 )
+		pev->frame = fmod( (double) m_iFrameStart, (double) m_maxFrame );
+	else
+		pev->frame = m_iFrameStart;
+
+	if ( m_maxFrame > 0 && pev->framerate != 0 )
+	{
+		pev->nextthink	= gpGlobals->time;
+		m_lastTime = gpGlobals->time;
+	}
 }
 
 
@@ -1164,17 +1312,20 @@ void CGlow::Think( void )
 
 void CGlow::Animate( float frames )
 { 
-	if ( m_maxFrame > 0 )
-		pev->frame = fmod( pev->frame + frames, m_maxFrame );
+	pev->frame += frames;
+
+	if ( (int) pev->frame > m_maxFrame && m_maxFrame > 0 )
+		pev->frame = fmod( pev->frame, m_maxFrame );
 }
 
 
 LINK_ENTITY_TO_CLASS( env_sprite, CSprite );
+LINK_ENTITY_TO_CLASS( env_model, CSprite );
 
 TYPEDESCRIPTION	CSprite::m_SaveData[] = 
 {
 	DEFINE_FIELD( CSprite, m_lastTime, FIELD_TIME ),
-	DEFINE_FIELD( CSprite, m_maxFrame, FIELD_FLOAT ),
+	DEFINE_FIELD( CSprite, m_maxFrame, FIELD_INTEGER ),
 };
 
 IMPLEMENT_SAVERESTORE( CSprite, CPointEntity );
@@ -1183,30 +1334,38 @@ void CSprite::Spawn( void )
 {
 	pev->solid			= SOLID_NOT;
 	pev->movetype		= MOVETYPE_NONE;
-	pev->effects		= 0;
+	pev->effects |= EF_NODRAW;
 	pev->frame			= 0;
 
 	Precache();
-	SET_MODEL( ENT(pev), STRING(pev->model) );
+	SetModel_Intercept( edict(), STRING(pev->model) );
 
-	m_maxFrame = (float) MODEL_FRAMES( pev->modelindex ) - 1;
+	if ( MODEL_FRAMES( pev->modelindex ) - 1 < 0 )
+		m_maxFrame = 0;
+	else
+		m_maxFrame = MODEL_FRAMES( pev->modelindex ) - 1;
+
+	pev->frame = m_startFrame;
+
+	if ( m_maxFrame > 0 )
+		pev->frame = (float) fmod( (double) m_startFrame, (double) m_maxFrame );
 	if ( pev->targetname && !(pev->spawnflags & SF_SPRITE_STARTON) )
 		TurnOff();
 	else
 		TurnOn();
-	
+
 	// Worldcraft only sets y rotation, copy to Z
-	if ( pev->angles.y != 0 && pev->angles.z == 0 )
+	// AdamR: THIS IS CAUSING ORIENTATED SPRITES TO BE ROLLED COMPLETELY INCORRECTLY. STAHP!!!!!!
+	if ( !FBitSet( pev->effects, EF_SPRITE_CUSTOM_VP ) && pev->angles.y != 0 && pev->angles.z == 0 )
 	{
 		pev->angles.z = pev->angles.y;
 		pev->angles.y = 0;
 	}
 }
 
-
 void CSprite::Precache( void )
 {
-	PRECACHE_MODEL( (char *)STRING(pev->model) );
+	PrecacheModel_Intercept( this, STRING(pev->model) );
 
 	// Reset attachment after save/restore
 	if ( pev->aiment )
@@ -1219,6 +1378,29 @@ void CSprite::Precache( void )
 	}
 }
 
+void CSprite::KeyValue( KeyValueData *pkvd )
+{
+	if ( FStrEq( pkvd->szKeyName, "framestart" ) )
+	{
+		m_startFrame = atoi( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if ( FStrEq( pkvd->szKeyName, "vp_type" ) )
+	{
+		int type = atoi( pkvd->szValue );
+
+		if ( type > 0 )
+		{
+			m_vpType = type - 1;
+			pev->sequence = m_vpType;
+			pev->effects |= EF_SPRITE_CUSTOM_VP;
+		}
+
+		pkvd->fHandled = TRUE;
+	}
+	else
+		CBaseEntity::KeyValue( pkvd );
+}
 
 void CSprite::SpriteInit( const char *pSpriteName, const Vector &origin )
 {
@@ -1227,25 +1409,30 @@ void CSprite::SpriteInit( const char *pSpriteName, const Vector &origin )
 	Spawn();
 }
 
-CSprite *CSprite::SpriteCreate( const char *pSpriteName, const Vector &origin, BOOL animate )
+CSprite *CSprite::SpriteCreate( const char *pSpriteName, const Vector &origin, BOOL animate ) { return SpriteCreate( pSpriteName, origin, animate != FALSE, 0.0f );
+}
+
+CSprite *CSprite::SpriteCreate( const char *pSpriteName, const Vector &origin, bool animate, float frameRate )
 {
-	CSprite *pSprite = GetClassPtr( (CSprite *)NULL );
+	CSprite *pSprite = GetClassPtr( (CSprite *) NULL );
+
+	pSprite->pev->framerate = frameRate;
 	pSprite->SpriteInit( pSpriteName, origin );
-	pSprite->pev->classname = MAKE_STRING("env_sprite");
+	pSprite->pev->classname = MAKE_STRING( "env_sprite" );
 	pSprite->pev->solid = SOLID_NOT;
 	pSprite->pev->movetype = MOVETYPE_NOCLIP;
+
 	if ( animate )
 		pSprite->TurnOn();
 
 	return pSprite;
 }
 
-
 void CSprite::AnimateThink( void )
 {
 	Animate( pev->framerate * (gpGlobals->time - m_lastTime) );
 
-	pev->nextthink		= gpGlobals->time + 0.1;
+	pev->nextthink		= gpGlobals->time + V_min( 1.0f / pev->framerate, 0.005f );
 	m_lastTime			= gpGlobals->time;
 }
 
@@ -1260,8 +1447,15 @@ void CSprite::AnimateUntilDead( void )
 	}
 }
 
-void CSprite::Expand( float scaleSpeed, float fadeSpeed )
+void CSprite::LiveForTime( float time )
 {
+	m_lastTime = gpGlobals->time;
+	SetThink( &CSprite::AnimateUntilDead );
+	pev->dmgtime = gpGlobals->time + time;
+	pev->nextthink = gpGlobals->time;
+}
+
+void CSprite::Expand( float scaleSpeed, float fadeSpeed ) {
 	pev->speed = scaleSpeed;
 	pev->health = fadeSpeed;
 	SetThink( &CSprite::ExpandThink );
@@ -1269,7 +1463,6 @@ void CSprite::Expand( float scaleSpeed, float fadeSpeed )
 	pev->nextthink	= gpGlobals->time;
 	m_lastTime		= gpGlobals->time;
 }
-
 
 void CSprite::ExpandThink( void )
 {
@@ -1283,41 +1476,35 @@ void CSprite::ExpandThink( void )
 	}
 	else
 	{
-		pev->nextthink		= gpGlobals->time + 0.1;
+		pev->nextthink		= (float) ( (double) gpGlobals->time + 0.1 );
 		m_lastTime			= gpGlobals->time;
 	}
 }
 
-
 void CSprite::Animate( float frames )
-{ 
+{
 	pev->frame += frames;
-	if ( pev->frame > m_maxFrame )
+	if ( (int) pev->frame > m_maxFrame )
 	{
-		if ( pev->spawnflags & SF_SPRITE_ONCE )
-		{
+		if ( pev->spawnflags & SF_SPRITE_ONCE_AND_REMOVE )
+			UTIL_Remove( this );
+		else if ( pev->spawnflags & SF_SPRITE_ONCE )
 			TurnOff();
-		}
-		else
-		{
-			if ( m_maxFrame > 0 )
-				pev->frame = fmod( pev->frame, m_maxFrame );
+		else if ( m_maxFrame > 0 )
+				pev->frame = (float) fmod( (double) pev->frame, (double) m_maxFrame );
 		}
 	}
-}
-
 
 void CSprite::TurnOff( void )
 {
-	pev->effects = EF_NODRAW;
+	pev->effects |= EF_NODRAW;
 	pev->nextthink = 0;
 }
 
-
 void CSprite::TurnOn( void )
 {
-	pev->effects = 0;
-	if ( (pev->framerate && m_maxFrame > 1.0) || (pev->spawnflags & SF_SPRITE_ONCE) )
+	pev->effects &= ~EF_NODRAW;
+	if ( (pev->framerate && m_maxFrame > 0 ) || (pev->spawnflags & ( SF_SPRITE_ONCE | SF_SPRITE_ONCE_AND_REMOVE ) ) )
 	{
 		SetThink( &CSprite::AnimateThink );
 		pev->nextthink = gpGlobals->time;
@@ -1326,23 +1513,17 @@ void CSprite::TurnOn( void )
 	pev->frame = 0;
 }
 
-
 void CSprite::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
 {
-	int on = pev->effects != EF_NODRAW;
+	bool on = !( pev->effects & EF_NODRAW );
 	if ( ShouldToggle( useType, on ) )
 	{
 		if ( on )
-		{
 			TurnOff();
-		}
 		else
-		{
 			TurnOn();
 		}
 	}
-}
-
 
 class CGibShooter : public CBaseDelay
 {
@@ -1813,7 +1994,7 @@ Vector CBlood::BloodPosition( CBaseEntity *pActivator )
 void CBlood::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
 {
 	if ( pev->spawnflags & SF_BLOOD_STREAM )
-		UTIL_BloodStream( BloodPosition(pActivator), Direction(), (Color() == BLOOD_COLOR_RED) ? 70 : Color(), BloodAmount() );
+		UTIL_BloodStream( BloodPosition(pActivator), Direction(), (Color() == BLOOD_COLOR_RED) ? 72 : Color(), BloodAmount() );
 	else
 		UTIL_BloodDrips( BloodPosition(pActivator), Direction(), Color(), BloodAmount() );
 
@@ -2094,16 +2275,42 @@ void CMessage::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useT
 class CEnvFunnel : public CBaseDelay
 {
 public:
+	CEnvFunnel() : m_pszSprite( NULL ) {}
+	~CEnvFunnel();
+
 	void	Spawn( void );
 	void	Precache( void );
+	void	KeyValue( KeyValueData *pkvd );
 	void	Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
 
 	int		m_iSprite;	// Don't save, precache
+	char	*m_pszSprite;
 };
+
+CEnvFunnel::~CEnvFunnel()
+{
+	delete[] m_pszSprite;
+}
+
+void CEnvFunnel::KeyValue( KeyValueData *pkvd )
+{
+	if ( FStrEq( pkvd->szKeyName, "sprite" ) )
+	{
+		size_t length = strlen( pkvd->szValue ) + 1;
+
+		m_pszSprite = new char[length];
+		memcpy( m_pszSprite, pkvd->szValue, length );
+		pkvd->fHandled = TRUE;
+	}
+	else
+	{
+		CBaseDelay::KeyValue( pkvd );
+	}
+}
 
 void CEnvFunnel :: Precache ( void )
 {
-	m_iSprite = PRECACHE_MODEL ( "sprites/flare6.spr" );
+	m_iSprite = PRECACHE_MODEL ( m_pszSprite ? m_pszSprite : "sprites/flare6.spr" );
 }
 
 LINK_ENTITY_TO_CLASS( env_funnel, CEnvFunnel );
@@ -2129,8 +2336,11 @@ void CEnvFunnel::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE us
 
 	MESSAGE_END();
 
-	SetThink( &CEnvFunnel::SUB_Remove );
+	if ( !( pev->spawnflags & SF_FUNNEL_REPEATABLE ) )
+	{
+		SetThink( &CEnvFunnel::SUB_Remove );
 	pev->nextthink = gpGlobals->time;
+}
 }
 
 void CEnvFunnel::Spawn( void )
@@ -2169,7 +2379,7 @@ void CEnvBeverage::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE 
 		return;
 	}
 
-	CBaseEntity *pCan = CBaseEntity::Create( "item_sodacan", pev->origin, pev->angles, edict() );	
+	CBaseEntity *pCan = CBaseEntity::Create( "item_sodacan", pev->origin, pev->angles, false, edict() );
 
 	if ( pev->skin == 6 )
 	{

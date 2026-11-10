@@ -18,7 +18,7 @@
 // lists.
 //=========================================================
 
-#define	MAX_WORLD_SOUNDS	64 // maximum number of sounds handled by the world at one time.
+#define	MAX_WORLD_SOUNDS	1024 // maximum number of sounds handled by the world at one time.
 
 #define bits_SOUND_NONE		0
 #define	bits_SOUND_COMBAT	( 1 << 0 )// gunshots, explosions
@@ -28,6 +28,7 @@
 #define bits_SOUND_MEAT		( 1 << 4 )// gib or pork chop
 #define bits_SOUND_DANGER	( 1 << 5 )// pending danger. Grenade that is about to explode, explosive barrel that is damaged, falling crate
 #define bits_SOUND_GARBAGE	( 1 << 6 )// trash cans, banana peels, old fast food bags.
+#define bits_SOUND_BULLETHIT	( 1 << 7 )
 
 #define bits_ALL_SOUNDS 0xFFFFFFFF
 
@@ -54,9 +55,10 @@ public:
 	float	m_flExpireTime;	// when the sound should be purged from the list
 	int		m_iNext;		// index of next sound in this list ( Active or Free )
 	int		m_iNextAudible;	// temporary link that monsters use to build a list of audible sounds
+	EHANDLE	m_hOwner;
 
-	BOOL	FIsSound( void );
-	BOOL	FIsScent( void );
+	bool	FIsSound( void );
+	bool	FIsScent( void );
 };
 
 //=========================================================
@@ -72,8 +74,10 @@ public:
 	void Spawn( void );
 	void Think( void );
 	void Initialize ( void );
+	void OnDestroy( void );
 	
-	static void		InsertSound ( int iType, const Vector &vecOrigin, int iVolume, float flDuration );
+	static void		InsertSound ( int iType, const Vector &vecOrigin, int iVolume, float flDuration,
+								  CBaseEntity *pOwner = NULL );
 	static void		FreeSound ( int iSound, int iPrevious );
 	static int		ActiveList( void );// return the head of the active list
 	static int		FreeList( void );// return the head of the free list
@@ -88,7 +92,7 @@ public:
 	int		m_iFreeSound;	// index of the first sound in the free sound list
 	int		m_iActiveSound; // indes of the first sound in the active sound list
 	int		m_cLastActiveSounds; // keeps track of the number of active sounds at the last update. (for diagnostic work)
-	BOOL	m_fShowReport; // if true, dump information about free/active sounds.
+	bool	m_fShowReport; // if true, dump information about free/active sounds.
 
 private:
 	CSound		m_SoundPool[ MAX_WORLD_SOUNDS ];

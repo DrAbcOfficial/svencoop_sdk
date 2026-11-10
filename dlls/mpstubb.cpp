@@ -78,7 +78,7 @@ void CBaseMonster :: MonsterInitDead( void )
 	UTIL_SetOrigin( pev, pev->origin );
 
 	// Setup health counters, etc.
-	BecomeDead();
+	BecomeDead( pev->health );
 	SetThink( CorpseFallThink );
 	pev->nextthink = gpGlobals->time + 0.5;
 }
@@ -99,8 +99,7 @@ void	CBaseMonster :: KeyValue( KeyValueData *pkvd )
 	CBaseToggle::KeyValue( pkvd ); 
 }
 
-int CBaseMonster::IRelationship ( CBaseEntity *pTarget )
-{
+int CBaseMonster::IRelationship ( CBaseEntity *pTarget ) {
 	static int iEnemy[14][14] =
 	{			 //   NONE	 MACH	 PLYR	 HPASS	 HMIL	 AMIL	 APASS	 AMONST	APREY	 APRED	 INSECT	PLRALY	PBWPN	ABWPN
 	/*NONE*/		{ R_NO	,R_NO	,R_NO	,R_NO	,R_NO	,R_NO	,R_NO	,R_NO	,R_NO	,R_NO	,R_NO	,R_NO,	R_NO,	R_NO	},

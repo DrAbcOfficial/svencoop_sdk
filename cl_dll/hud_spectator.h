@@ -1,4 +1,4 @@
-//========= Copyright � 1996-2001, Valve LLC, All rights reserved. ============
+//========= Copyright (c) 1996-2001, Valve LLC, All rights reserved. ============
 //
 // Purpose: 
 //
@@ -25,13 +25,14 @@
 #define OVERVIEW_MAX_LAYERS		1
 
 extern void VectorAngles( const float *forward, float *angles );
-extern "C" void NormalizeAngles( float *angles );
+void NormalizeAngles( float* angles );
 
 //-----------------------------------------------------------------------------
 // Purpose: Handles the drawing of the spectator stuff (camera & top-down map and all the things on it )
 //-----------------------------------------------------------------------------
 
-typedef struct overviewInfo_s {
+typedef struct overviewInfo_s
+{
 	char		map[64];	// cl.levelname or empty
 	vec3_t		origin;		// center of map
 	float		zoom;		// zoom of map images
@@ -46,11 +47,11 @@ typedef struct overviewInfo_s {
 	int			insetWindowWidth;
 } overviewInfo_t;
 
-typedef struct overviewEntity_s {
-
-	HSPRITE					hSprite;
-	struct cl_entity_s *	entity;
-	double					killTime;
+typedef struct overviewEntity_s
+{
+	HSPRITE		hSprite;
+	cl_entity_t*	entity;
+	double			killTime;
 } overviewEntity_t;
 
 typedef struct cameraWayPoint_s 
@@ -74,7 +75,7 @@ public:
 	void InitHUDData( void );
 	bool AddOverviewEntityToList( HSPRITE sprite, cl_entity_t * ent, double killTime);
 	void DeathMessage(int victim);
-	bool AddOverviewEntity( int type, struct cl_entity_s *ent, const char *modelname );
+	bool AddOverviewEntity( int type, cl_entity_t *ent, const char *modelname );
 	void CheckOverviewEntities();
 	void DrawOverview();
 	void DrawOverviewEntities();

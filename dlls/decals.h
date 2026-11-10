@@ -62,12 +62,19 @@ enum decal_e
 	DECAL_SMALLSCORCH3,	// Small scorch mark
 	DECAL_MOMMABIRTH,	// Big momma birth splatter
 	DECAL_MOMMASPLAT,
+
+	DECAL_OFSCORCH1,
+	DECAL_OFSCORCH2,
+	DECAL_OFSCORCH3,
+	DECAL_SPORESPLAT1,
+	DECAL_SPORESPLAT2,
+	DECAL_SPORESPLAT3,
 };
 
 typedef struct 
 {
-	char	*name;
-	int		index;
+	const char	*name;
+	int			index;
 } DLL_DECALLIST;
 
 extern DLL_DECALLIST gDecals[];

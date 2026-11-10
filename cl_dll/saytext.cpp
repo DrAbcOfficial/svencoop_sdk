@@ -21,306 +21,445 @@
 #include "hud.h"
 #include "cl_util.h"
 #include "parsemsg.h"
+#include "cl_entity.h"
 
 #include <string.h>
-#include <stdio.h>
-#include <malloc.h> // _alloca
+#include <stdlib.h>
 
 #include "vgui_TeamFortressViewport.h"
 
-extern float *GetClientColor( int clientIndex );
+#define SERVER_CONSOLE_NAME		"Server Console"
+#define SERVER_CONSOLE_LENGTH	( sizeof( SERVER_CONSOLE_NAME ) - 1 )
 
-#define MAX_LINES	5
-#define MAX_CHARS_PER_LINE	256  /* it can be less than this, depending on char size */
+extern float *GetClientColor(int clientIndex);
 
-// allow 20 pixels on either side of the text
-#define MAX_LINE_WIDTH  ( ScreenWidth - 40 )
-#define LINE_START  10
-static float SCROLL_SPEED = 5;
+DECLARE_MESSAGE(m_SayText, SayText);
+DECLARE_MESSAGE(m_NotifyText, NotifyText);
 
-static char g_szLineBuffer[ MAX_LINES + 1 ][ MAX_CHARS_PER_LINE ];
-static float *g_pflNameColors[ MAX_LINES + 1 ];
-static int g_iNameLengths[ MAX_LINES + 1 ];
-static float flScrollTime = 0;  // the time at which the lines next scroll up
-
-static int Y_START = 0;
-static int line_height = 0;
-
-DECLARE_MESSAGE( m_SayText, SayText );
-
-int CHudSayText :: Init( void )
+void CopyText(char *destination, const char *source, size_t size)
 {
-	gHUD.AddHudElem( this );
+	if (!destination || !source || !size)
+		return;
 
-	HOOK_MESSAGE( SayText );
-
-	InitHUDData();
-
-	m_HUD_saytext =			gEngfuncs.pfnRegisterVariable( "hud_saytext", "1", 0 );
-	m_HUD_saytext_time =	gEngfuncs.pfnRegisterVariable( "hud_saytext_time", "5", 0 );
-
-	m_iFlags |= HUD_INTERMISSION; // is always drawn during an intermission
-
-	return 1;
+	memset(destination, 0, size);
+	strncpy(destination, source, size - 1);
 }
 
-
-void CHudSayText :: InitHUDData( void )
+int CHud::DrawConsoleString(int x, int y, const char *string)
 {
-	memset( g_szLineBuffer, 0, sizeof g_szLineBuffer );
-	memset( g_pflNameColors, 0, sizeof g_pflNameColors );
-	memset( g_iNameLengths, 0, sizeof g_iNameLengths );
-}
-
-int CHudSayText :: VidInit( void )
-{
-	return 1;
-}
-
-
-int ScrollTextUp( void )
-{
-	ConsolePrint( g_szLineBuffer[0] ); // move the first line into the console buffer
-	g_szLineBuffer[MAX_LINES][0] = 0;
-	memmove( g_szLineBuffer[0], g_szLineBuffer[1], sizeof(g_szLineBuffer) - sizeof(g_szLineBuffer[0]) ); // overwrite the first line
-	memmove( &g_pflNameColors[0], &g_pflNameColors[1], sizeof(g_pflNameColors) - sizeof(g_pflNameColors[0]) );
-	memmove( &g_iNameLengths[0], &g_iNameLengths[1], sizeof(g_iNameLengths) - sizeof(g_iNameLengths[0]) );
-	g_szLineBuffer[MAX_LINES-1][0] = 0;
-
-	if ( g_szLineBuffer[0][0] == ' ' ) // also scroll up following lines
+	if (m_pCvarDebug->value > 0)
 	{
-		g_szLineBuffer[0][0] = 2;
+		int width, height;
+
+		DRAW_DEBUG_CROSS(x, y);
+		GetConsoleStringSize(string, &width, &height);
+		DRAW_DEBUG_RECT(x, y, width, height);
+	}
+
+	return gEngfuncs.pfnDrawConsoleString(x, y, (char *)string);
+}
+
+CHudBaseTextBlock::CHudBaseTextBlock(bool blockMuted, int lineStart)
+{
+	m_pos.x = m_pos.y = 0;
+	m_bBlockMuted = blockMuted;
+	m_flScrollTime = 0;
+	m_iX = lineStart;
+	m_iY = 0;
+	m_iNumLines = 5;
+	m_iLineHeight = 0;
+	m_flScrollInterval = 5.0f;
+}
+
+int CHudBaseTextBlock::Init(void)
+{
+	gHUD.AddHudElem(this);
+	InitHUDData();
+	return 1;
+}
+
+int CHudBaseTextBlock::VidInit(void)
+{
+	m_iFlags |= HUD_INTERMISSION;
+	return 1;
+}
+
+void CHudBaseTextBlock::InitHUDData(void)
+{
+	memset(m_szLineBuffer, 0, sizeof(m_szLineBuffer));
+	memset(m_pflNameColors, 0, sizeof(m_pflNameColors));
+	memset(m_iNameLengths, 0, sizeof(m_iNameLengths));
+}
+
+void CHudBaseTextBlock::SetNumLines(int lines)
+{
+	m_iNumLines = V_min(V_max(lines, 1), MAX_TEXT_LINES);
+}
+
+int CHudBaseTextBlock::ScrollTextUp(void)
+{
+	m_szLineBuffer[m_iNumLines][0] = 0;
+	memmove(m_szLineBuffer[0], m_szLineBuffer[1], m_iNumLines * sizeof(m_szLineBuffer[0]));
+	memmove(m_pflNameColors, m_pflNameColors + 1, m_iNumLines * sizeof(m_pflNameColors[0]));
+	memmove(m_iNameLengths, m_iNameLengths + 1, m_iNumLines * sizeof(m_iNameLengths[0]));
+
+	for (int i = m_iNumLines; i < MAX_TEXT_LINES; ++i)
+		m_szLineBuffer[i][0] = 0;
+
+	if (m_szLineBuffer[0][0] == ' ')
+	{
+		m_szLineBuffer[0][0] = 2;
 		return 1 + ScrollTextUp();
 	}
 
 	return 1;
 }
 
-int CHudSayText :: Draw( float flTime )
+void CHudBaseTextBlock::FlushText(void)
 {
-	int y = Y_START;
+	while (m_szLineBuffer[0][0])
+		ScrollTextUp();
+}
 
-	if ( ( gViewPort && gViewPort->AllowedToPrintText() == FALSE) || !m_HUD_saytext->value )
+int CHudBaseTextBlock::Draw(float flTime)
+{
+	UpdatePos();
+
+	if (gViewPort && !gViewPort->AllowedToPrintText())
 		return 1;
 
-	// make sure the scrolltime is within reasonable bounds,  to guard against the clock being reset
-	flScrollTime = min( flScrollTime, flTime + m_HUD_saytext_time->value );
+	int y = m_iY;
 
-	// make sure the scrolltime is within reasonable bounds,  to guard against the clock being reset
-	flScrollTime = min( flScrollTime, flTime + m_HUD_saytext_time->value );
+	m_flScrollTime = V_min(m_flScrollTime, flTime + m_flScrollInterval);
 
-	if ( flScrollTime <= flTime )
+	if (flTime >= m_flScrollTime)
 	{
-		if ( *g_szLineBuffer[0] )
+		if (m_szLineBuffer[0][0])
 		{
-			flScrollTime = flTime + m_HUD_saytext_time->value;
-			// push the console up
+			m_flScrollTime = flTime + m_flScrollInterval;
 			ScrollTextUp();
 		}
 		else
-		{ // buffer is empty,  just disable drawing of this section
+		{
 			m_iFlags &= ~HUD_ACTIVE;
 		}
 	}
 
-	for ( int i = 0; i < MAX_LINES; i++ )
-	{
-		if ( *g_szLineBuffer[i] )
-		{
-			if ( *g_szLineBuffer[i] == 2 && g_pflNameColors[i] )
-			{
-				// it's a saytext string
-				char *buf = static_cast<char *>( _alloca( strlen( g_szLineBuffer[i] ) ) );
-				if ( buf )
-				{
-					//char buf[MAX_PLAYER_NAME_LENGTH+32];
+	float *defaultColor = GetClientColor(-1);
 
-					// draw the first x characters in the player color
-					strncpy( buf, g_szLineBuffer[i], min(g_iNameLengths[i], MAX_PLAYER_NAME_LENGTH+32) );
-					buf[ min(g_iNameLengths[i], MAX_PLAYER_NAME_LENGTH+31) ] = 0;
-					gEngfuncs.pfnDrawSetTextColor( g_pflNameColors[i][0], g_pflNameColors[i][1], g_pflNameColors[i][2] );
-					int x = gHUD.DrawConsoleString( LINE_START, y, buf + 1 ); // don't draw the control code at the start
-					strncpy( buf, g_szLineBuffer[i] + g_iNameLengths[i], strlen( g_szLineBuffer[i] ));
-					buf[ strlen( g_szLineBuffer[i] + g_iNameLengths[i] ) - 1 ] = '\0';
-					// color is reset after each string draw
-					gHUD.DrawConsoleString( x, y, buf ); 
-				}
-				else
-				{
-					assert( "Not able to alloca chat buffer!\n");
-				}
+	for (int i = 0; i < m_iNumLines; ++i)
+	{
+		gEngfuncs.pfnDrawSetTextColor(defaultColor[0], defaultColor[1], defaultColor[2]);
+
+		char *line = m_szLineBuffer[i];
+
+		if (*line)
+		{
+			if ((*line == 1 || *line == 2 || *line == 3) && m_pflNameColors[i])
+			{
+				char name[160];
+
+				CopyText(name, line + 1, sizeof(name));
+				name[V_min(m_iNameLengths[i], (int)sizeof(name) - 1)] = 0;
+				gEngfuncs.pfnDrawSetTextColor(m_pflNameColors[i][0], m_pflNameColors[i][1], m_pflNameColors[i][2]);
+
+				int x = gHUD.DrawConsoleString(m_iX, y, name);
+
+				gEngfuncs.pfnDrawSetTextColor(defaultColor[0], defaultColor[1], defaultColor[2]);
+				gHUD.DrawConsoleString(x, y, line + m_iNameLengths[i] + 1);
 			}
 			else
 			{
-				// normal draw
-				gHUD.DrawConsoleString( LINE_START, y, g_szLineBuffer[i] );
+				gHUD.DrawConsoleString(m_iX, y, line);
 			}
 		}
 
-		y += line_height;
+		y += m_iLineHeight;
 	}
 
 	return 1;
 }
 
-int CHudSayText :: MsgFunc_SayText( const char *pszName, int iSize, void *pbuf )
+void CHudBaseTextBlock::Print(const char *text, int size, int clientIndex)
 {
-	BEGIN_READ( pbuf, iSize );
-
-	int client_index = READ_BYTE();		// the client who spoke the message
-	SayTextPrint( READ_STRING(), iSize - 1,  client_index );
-	
-	return 1;
-}
-
-void CHudSayText :: SayTextPrint( const char *pszBuf, int iBufSize, int clientIndex )
-{
-	if ( gViewPort && gViewPort->AllowedToPrintText() == FALSE )
-	{
-		// Print it straight to the console
-		ConsolePrint( pszBuf );
+	if (gViewPort && !gViewPort->AllowedToPrintText())
 		return;
-	}
 
-	int i;
-	// find an empty string slot
-	for ( i = 0; i < MAX_LINES; i++ )
+	const char *levelName = gEngfuncs.pfnGetLevelName();
+	cl_entity_t *player = gEngfuncs.GetLocalPlayer();
+
+	if (m_bBlockMuted && levelName && *levelName && player && player->index != clientIndex
+		&& GetClientVoiceMgr()->IsPlayerBlocked(clientIndex))
+		return;
+
+	int line;
+
+	for (line = 0; line < m_iNumLines; ++line)
 	{
-		if ( ! *g_szLineBuffer[i] )
+		if (!m_szLineBuffer[line][0])
 			break;
 	}
-	if ( i == MAX_LINES )
+
+	if (line == m_iNumLines)
 	{
-		// force scroll buffer up
 		ScrollTextUp();
-		i = MAX_LINES - 1;
+		line = m_iNumLines - 1;
 	}
 
-	g_iNameLengths[i] = 0;
-	g_pflNameColors[i] = NULL;
+	PrintText(line, text, size, clientIndex);
+	ConsolePrint(text);
+	FitInBlock(line);
 
-	// if it's a say message, search for the players name in the string
-	if ( *pszBuf == 2 && clientIndex > 0 )
+	if (line == 0)
 	{
-		gEngfuncs.pfnGetPlayerInfo( clientIndex, &g_PlayerInfoList[clientIndex] );
-		const char *pName = g_PlayerInfoList[clientIndex].name;
-
-		if ( pName )
-		{
-			const char *nameInString = strstr( pszBuf, pName );
-
-			if ( nameInString )
-			{
-				g_iNameLengths[i] = strlen( pName ) + (nameInString - pszBuf);
-				g_pflNameColors[i] = GetClientColor( clientIndex );
-			}
-		}
-	}
-
-	strncpy( g_szLineBuffer[i], pszBuf, max(iBufSize , MAX_CHARS_PER_LINE) );
-
-	// make sure the text fits in one line
-	EnsureTextFitsInOneLineAndWrapIfHaveTo( i );
-
-	// Set scroll time
-	if ( i == 0 )
-	{
-		flScrollTime = gHUD.m_flTime + m_HUD_saytext_time->value;
+		m_flScrollInterval = GetScrollTime();
+		m_flScrollTime = gHUD.m_flTime + m_flScrollInterval;
 	}
 
 	m_iFlags |= HUD_ACTIVE;
-	PlaySound( "misc/talk.wav", 1 );
-
-	Y_START = ScreenHeight - 60 - ( line_height * (MAX_LINES+2) );
+	PlaySound("misc/talk.wav", 1);
 }
 
-void CHudSayText :: EnsureTextFitsInOneLineAndWrapIfHaveTo( int line )
+void CHudBaseTextBlock::FitInBlock(int line)
 {
-	int line_width = 0;
-	GetConsoleStringSize( g_szLineBuffer[line], &line_width, &line_height );
+	int width = 0;
 
-	if ( (line_width + LINE_START) > MAX_LINE_WIDTH )
-	{ // string is too long to fit on line
-		// scan the string until we find what word is too long,  and wrap the end of the sentence after the word
-		int length = LINE_START;
-		int tmp_len = 0;
-		char *last_break = NULL;
-		for ( char *x = g_szLineBuffer[line]; *x != 0; x++ )
+	GetConsoleStringSize(m_szLineBuffer[line], &width, &m_iLineHeight);
+
+	if (width + m_iX <= ScreenWidth - 2 * gHUD.GetBorderSize())
+		return;
+
+	int length = m_iX;
+	char *lastBreak = NULL;
+
+	for (char *p = m_szLineBuffer[line]; *p; ++p)
+	{
+		if (p[0] == '/' && p[1] == '(')
 		{
-			// check for a color change, if so skip past it
-			if ( x[0] == '/' && x[1] == '(' )
+			p += 2;
+
+			while (*p && *p != ')')
+				++p;
+
+			if (*p)
+				++p;
+
+			if (!*p)
+				break;
+		}
+
+		if (*p == ' ' && p != m_szLineBuffer[line])
+			lastBreak = p;
+
+		char character[2] = {*p, 0};
+		int characterWidth = 0;
+
+		GetConsoleStringSize(character, &characterWidth, &m_iLineHeight);
+		length += characterWidth;
+
+		if (length <= ScreenWidth - 2 * gHUD.GetBorderSize())
+			continue;
+
+		if (!lastBreak)
+			lastBreak = p - 1;
+
+		int nextLine;
+
+		do
+		{
+			for (nextLine = 0; nextLine < m_iNumLines; ++nextLine)
 			{
-				x += 2;
-				// skip forward until past mode specifier
-				while ( *x != 0 && *x != ')' )
-					x++;
-
-				if ( *x != 0 )
-					x++;
-
-				if ( *x == 0 )
+				if (!m_szLineBuffer[nextLine][0])
 					break;
 			}
 
-			char buf[2];
-			buf[1] = 0;
+			if (nextLine == m_iNumLines)
+				lastBreak -= MAX_TEXT_LINE_LENGTH * ScrollTextUp();
+		}
+		while (nextLine == m_iNumLines);
 
-			if ( *x == ' ' && x != g_szLineBuffer[line] )  // store each line break,  except for the very first character
-				last_break = x;
+		int difference = (int)strlen(m_szLineBuffer[nextLine]) - (int)strlen(lastBreak);
 
-			buf[0] = *x;  // get the length of the current character
-			GetConsoleStringSize( buf, &tmp_len, &line_height );
-			length += tmp_len;
+		if (*lastBreak == ' ')
+		{
+			if (difference <= MAX_TEXT_LINE_LENGTH)
+				UTIL_AppendString(m_szLineBuffer[nextLine], lastBreak, MAX_TEXT_LINE_LENGTH);
+		}
+		else if ((unsigned int)(difference - 2) < MAX_TEXT_LINE_LENGTH)
+		{
+			UTIL_AppendString(m_szLineBuffer[nextLine], " ", MAX_TEXT_LINE_LENGTH);
+			UTIL_AppendString(m_szLineBuffer[nextLine], lastBreak, MAX_TEXT_LINE_LENGTH);
+		}
 
-			if ( length > MAX_LINE_WIDTH )
-			{  // needs to be broken up
-				if ( !last_break )
-					last_break = x-1;
+		*lastBreak = 0;
+		FitInBlock(nextLine);
+		break;
+	}
+}
 
-				x = last_break;
+CHudSayText::CHudSayText(void) : CHudBaseTextBlock(true, 10)
+{
+}
 
-				// find an empty string slot
-				int j;
-				do 
-				{
-					for ( j = 0; j < MAX_LINES; j++ )
-					{
-						if ( ! *g_szLineBuffer[j] )
-							break;
-					}
-					if ( j == MAX_LINES )
-					{
-						// need to make more room to display text, scroll stuff up then fix the pointers
-						int linesmoved = ScrollTextUp();
-						line -= linesmoved;
-						last_break = last_break - (sizeof(g_szLineBuffer[0]) * linesmoved);
-					}
-				}
-				while ( j == MAX_LINES );
+int CHudSayText :: Init( void )
+{
+	CHudBaseTextBlock::Init();
 
-				// copy remaining string into next buffer,  making sure it starts with a space character
-				if ( (char)*last_break == (char)' ' )
-				{
-					int linelen = strlen(g_szLineBuffer[j]);
-					int remaininglen = strlen(last_break);
+	HOOK_MESSAGE( SayText );
 
-					if ( (linelen - remaininglen) <= MAX_CHARS_PER_LINE )
-						strcat( g_szLineBuffer[j], last_break );
-				}
-				else
-				{
-					if ( (strlen(g_szLineBuffer[j]) - strlen(last_break) - 2) < MAX_CHARS_PER_LINE )
-					{
-						strcat( g_szLineBuffer[j], " " );
-						strcat( g_szLineBuffer[j], last_break );
-					}
-				}
+	m_HUD_saytext = CVAR_CREATE( "hud_saytext", "1", FCVAR_CLIENTDLL);
+	m_HUD_saytext_time = CVAR_CREATE( "hud_saytext_time", "5", FCVAR_CLIENTDLL | FCVAR_ARCHIVE);
+	m_HUD_saytext_lines = CVAR_CREATE("hud_saytext_lines", "6", FCVAR_CLIENTDLL | FCVAR_ARCHIVE);
+	m_HUD_saytext_block_muted = CVAR_CREATE("hud_saytext_block_muted", "0", FCVAR_CLIENTDLL | FCVAR_ARCHIVE);
+	m_bBlockMuted = m_HUD_saytext_block_muted->value != 0; // is always drawn during an intermission
 
-				*last_break = 0; // cut off the last string
+	return 1;
+}
 
-				EnsureTextFitsInOneLineAndWrapIfHaveTo( j );
-				break;
+int CHudSayText :: Draw( float flTime )
+{
+	if (!m_HUD_saytext->value )
+		return 1;
+
+	return CHudBaseTextBlock::Draw(flTime);
+		}
+
+int CHudSayText :: MsgFunc_SayText( const char *pszName, int iSize, void *pbuf )
+{
+	m_bBlockMuted = m_HUD_saytext_block_muted->value != 0;
+	BEGIN_READ( pbuf, iSize );
+
+	int client_index = READ_BYTE();
+
+	Print( READ_STRING(), iSize - 1,  client_index );
+
+	return 1;
+}
+
+float CHudSayText::GetScrollTime(void) const
+{
+	return m_HUD_saytext_time->value;
+}
+
+void CHudSayText::PrintText(int line, const char *text, int size, int clientIndex)
+{
+	char type = *text;
+	int bufferSize = size;
+	const char *serverStart = strstr(text, "<");
+	const char *serverEnd = strstr(text, "> ");
+
+	if (type == 1 && clientIndex == 0 && (unsigned int)(serverEnd - serverStart) < SERVER_CONSOLE_LENGTH)
+		bufferSize += SERVER_CONSOLE_LENGTH - (serverEnd - serverStart);
+
+	m_iNameLengths[line] = 0;
+	m_pflNameColors[line] = GetClientColor(-1);
+
+	char *buffer = (char *)malloc(bufferSize);
+
+	if (!buffer)
+		return;
+
+	CopyText(buffer, text, bufferSize);
+
+	if (type == 1 || type == 2 || type == 3)
+	{
+		if (clientIndex != 0)
+		{
+			gEngfuncs.pfnGetPlayerInfo(clientIndex, &g_PlayerInfoList[clientIndex]);
+
+			const char *name = g_PlayerInfoList[clientIndex].name;
+			const char *nameInText = name ? strstr(buffer, name) : NULL;
+
+			if (nameInText)
+			{
+				m_iNameLengths[line] = nameInText - buffer + strlen(name);
+				m_pflNameColors[line] = GetClientColor(clientIndex);
+			}
+		}
+		else
+		{
+			memset(buffer, 0, bufferSize);
+			UTIL_AppendString(buffer, text, serverStart - text);
+			UTIL_AppendString(buffer, SERVER_CONSOLE_NAME, bufferSize);
+			UTIL_AppendString(buffer, ": ", bufferSize);
+			UTIL_AppendString(buffer, serverEnd + 2, bufferSize);
+			memmove(buffer + 1, buffer, bufferSize - 2);
+			buffer[bufferSize - 1] = 0;
+			buffer[0] = type;
+
+			const char *nameInText = strstr(buffer, SERVER_CONSOLE_NAME);
+
+			if (nameInText)
+			{
+				m_iNameLengths[line] = nameInText - buffer + SERVER_CONSOLE_LENGTH;
+				m_pflNameColors[line] = GetClientColor(0);
 			}
 		}
 	}
+
+	CopyText(m_szLineBuffer[line], buffer, MAX_TEXT_LINE_LENGTH);
+	free(buffer);
+}
+
+void CHudSayText::UpdatePos(void)
+{
+	if ((float)m_iLineHeight != m_HUD_saytext_lines->value)
+		SetNumLines((int)m_HUD_saytext_lines->value);
+
+	int height = m_iLineHeight * (m_iNumLines + 1);
+
+	m_iX = gHUD.GetBorderSize();
+	m_iY = m_iLineHeight + ScreenHeight / 2 + (ScreenHeight / 2 - height) / 2;
+
+	if (height + m_iY > gHUD.GetLineY(2))
+		m_iY = gHUD.GetLineY(2) - height;
+}
+
+void CHudSayText::GetChatInputPosition(int *x, int *y)
+{
+	int lines = m_iNumLines;
+
+	UpdatePos();
+	*y = m_iY + m_iLineHeight * lines;
+	UpdatePos();
+	*x = m_iX;
+}
+
+CHudNotifyText::CHudNotifyText(void) : CHudBaseTextBlock(false, 10)
+{
+}
+
+int CHudNotifyText::Init(void)
+{
+	CHudBaseTextBlock::Init();
+	HOOK_MESSAGE(NotifyText);
+	return 1;
+}
+
+int CHudNotifyText::MsgFunc_NotifyText(const char *pszName, int iSize, void *pbuf)
+{
+	BEGIN_READ(pbuf, iSize);
+
+	int clientIndex = READ_BYTE();
+
+	Print(READ_STRING(), iSize - 1, clientIndex);
+	return 1;
+}
+
+float CHudNotifyText::GetScrollTime(void) const
+{
+	return 5.0f;
+}
+
+void CHudNotifyText::PrintText(int line, const char *text, int size, int clientIndex)
+{
+	m_iNameLengths[line] = 0;
+	m_pflNameColors[line] = NULL;
+	CopyText(m_szLineBuffer[line], text, MAX_TEXT_LINE_LENGTH);
+}
+
+void CHudNotifyText::UpdatePos(void)
+{
+	m_iX = gHUD.GetBorderSize();
+	m_iY = V_max(m_iX, m_iLineHeight);
 }

@@ -50,20 +50,15 @@ CBaseEntity
 #include "monsterevent.h"
 #endif
 
+#include "Platform.h"
+
 // C functions for external declarations that call the appropriate C++ methods
 
-#ifndef CBASE_DLLEXPORT
-#ifdef _WIN32
-#define CBASE_DLLEXPORT _declspec( dllexport )
-#else
-#define CBASE_DLLEXPORT __attribute__ ((visibility("default")))
-#endif
-#endif
+#define EXPORT DLLEXPORT
 
-#define EXPORT CBASE_DLLEXPORT
-
-extern "C" CBASE_DLLEXPORT int GetEntityAPI( DLL_FUNCTIONS *pFunctionTable, int interfaceVersion );
-extern "C" CBASE_DLLEXPORT int GetEntityAPI2( DLL_FUNCTIONS *pFunctionTable, int *interfaceVersion );
+extern "C" DLLEXPORT int GetEntityAPI( DLL_FUNCTIONS *pFunctionTable, int interfaceVersion );
+extern "C" DLLEXPORT int GetEntityAPI2( DLL_FUNCTIONS *pFunctionTable, int *interfaceVersion );
+extern "C" DLLEXPORT int GetNewDLLFunctions( NEW_DLL_FUNCTIONS *pFunctionTable, int *interfaceVersion );
 
 extern int DispatchSpawn( edict_t *pent );
 extern void DispatchKeyValue( edict_t *pentKeyvalue, KeyValueData *pkvd );
@@ -74,13 +69,21 @@ extern void DispatchBlocked( edict_t *pentBlocked, edict_t *pentOther );
 extern void DispatchSave( edict_t *pent, SAVERESTOREDATA *pSaveData );
 extern int  DispatchRestore( edict_t *pent, SAVERESTOREDATA *pSaveData, int globalEntity );
 extern void	DispatchObjectCollsionBox( edict_t *pent );
+extern void DispatchOnFreeEntPrivateData( edict_t *pent );
 extern void SaveWriteFields( SAVERESTOREDATA *pSaveData, const char *pname, void *pBaseData, TYPEDESCRIPTION *pFields, int fieldCount );
 extern void SaveReadFields( SAVERESTOREDATA *pSaveData, const char *pname, void *pBaseData, TYPEDESCRIPTION *pFields, int fieldCount );
 extern void SaveGlobalState( SAVERESTOREDATA *pSaveData );
 extern void RestoreGlobalState( SAVERESTOREDATA *pSaveData );
 extern void ResetGlobalState( void );
 
-typedef enum { USE_OFF = 0, USE_ON = 1, USE_SET = 2, USE_TOGGLE = 3 } USE_TYPE;
+typedef enum
+{
+	USE_OFF = 0,
+	USE_ON = 1,
+	USE_SET = 2,
+	USE_TOGGLE = 3,
+	USE_KILL = 4,
+} USE_TYPE;
 
 extern void FireTargets( const char *targetName, CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
 
@@ -89,35 +92,43 @@ typedef void (CBaseEntity::*ENTITYFUNCPTR)(CBaseEntity *pOther );
 typedef void (CBaseEntity::*USEPTR)( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
 
 // For CLASSIFY
-#define	CLASS_NONE				0
-#define CLASS_MACHINE			1
-#define CLASS_PLAYER			2
-#define	CLASS_HUMAN_PASSIVE		3
-#define CLASS_HUMAN_MILITARY	4
-#define CLASS_ALIEN_MILITARY	5
-#define CLASS_ALIEN_PASSIVE		6
-#define CLASS_ALIEN_MONSTER		7
-#define CLASS_ALIEN_PREY		8
-#define CLASS_ALIEN_PREDATOR	9
-#define CLASS_INSECT			10
-#define CLASS_PLAYER_ALLY		11
-#define CLASS_PLAYER_BIOWEAPON	12 // hornets and snarks.launched by players
-#define CLASS_ALIEN_BIOWEAPON	13 // hornets and snarks.launched by the alien menace
-#define	CLASS_BARNACLE			99 // special because no one pays attention to it, and it eats a wide cross-section of creatures.
+#include "EntityClassification.h"
+#include "CCustomKeyvalues.h"
+#ifndef CLIENT_DLL
+#include "CStringMap.h"
+#endif
+
+int AllocStringLocal( const char *text );
+
+#define MAX_COLORMAP_COLOR		255
+#define COLORMAP_BOTTOM_SHIFT	8
 
 class CBaseEntity;
 class CBaseMonster;
+class CScriptDictValue;
+class CBasePlayer;
 class CBasePlayerItem;
 class CSquadMonster;
+class CAttackVectors;
+
+class ICustomEntity;
+class CScriptDictionary;
 
 
-#define	SF_NORESPAWN	( 1 << 30 )// !!!set this bit on guns and stuff that should never respawn.
+#define SF_NORESPAWN		( 1 << 10 )
+#define SF_DELAYREMOVE		( 1 << 11 )	// a dropped weapon is removed after about a minute
+#define SF_CREATEDWEAPON	( 1 << 12 )	// made for a player rather than placed in the map
+#define SF_DODAMAGE			( 1 << 13 )	// a thrown weapon hurts what it hits
+#define SF_GIVENITEM		( 1 << 14 )
+#define SF_NODEFAULTAMMO	( 1 << 15 )
 
 //
 // EHANDLE. Safe way to point to CBaseEntities who may die between frames
 //
 class EHANDLE
 {
+	friend class CBasePlayer;
+
 private:
 	edict_t *m_pent;
 	int		m_serialnumber;
@@ -125,14 +136,19 @@ public:
 	edict_t *Get( void );
 	edict_t *Set( edict_t *pent );
 
-	operator int ();
-
 	operator CBaseEntity *();
 
 	CBaseEntity * operator = (CBaseEntity *pEntity);
 	CBaseEntity * operator ->();
 };
 
+
+// FireBullets draw mode options
+typedef enum
+{
+	FBDM_DONTDRAW = 0,	// Don't draw impact decal
+	FBDM_DRAW = 2		// Draw impact decal
+} FireBulletsDrawMode;
 
 //
 // Base Entity.  All entity types derive from this
@@ -146,23 +162,107 @@ public:
 
 	// path corners
 	CBaseEntity			*m_pGoalEnt;// path corner we are heading towards
-	CBaseEntity			*m_pLink;// used for temporary link-list operations. 
+
+#ifndef CLIENT_DLL
+	EHANDLE				m_pLink;// used for temporary link-list operations.
+#else
+	CBaseEntity			*m_pLink;// used for temporary link-list operations.
+#endif
+
+	CCustomKeyvalues	*m_pCustomKeyvalues;
+
+#ifndef CLIENT_DLL
+	float				m_flCreationTime;
+	int					m_iExtraSpawnFlags;
+	string_t			m_iszOnDestroy;
+	CScriptDictionary	*m_pUserData;
+	CStringMap			*m_pSoundReplacementMap;
+	bool				m_fCustomModel;
+
+	float				m_flMaximumFadeWait;
+	float				m_flMaximumFadeWaitB;
+	bool				m_fCanFadeStart;
+
+	unsigned int		m_uiEntityFlags;
+	Vector				m_vecLastOrigin;
+	unsigned int		m_uiPortalVisibilityGeneration[32 + 1];	// one per client, indexed by entity index
+
+	EHANDLE				m_pSightLink;	// Look's list of everything seen, corpses included
+	EHANDLE				m_hAssignedMedic;	// medic reserving this entity for healing or revival
+#endif
+
+	bool				m_fOverrideClass;
+	int					m_iClassSelection;
+	bool				m_fPlayerAlly;
+
+	string_t			m_iszSoundList;
+
+	int					targetnameOutFilterType;
+	int					classnameOutFilterType;
+	int					targetnameInFilterType;
+	int					classnameInFilterType;
+	string_t			targetnameOutFilter;
+	string_t			classnameOutFilter;
+	string_t			targetnameInFilter;
+	string_t			classnameInFilter;
+
+	int					m_iOriginalRenderMode;
+	int					m_iOriginalRenderFX;
+	float				m_flOriginalRenderAmount;
+	Vector				m_vecOriginalRenderColor;
+
+	int					m_iTopColor;
+	int					m_iBottomColor;
+
+	CBaseEntity();
 
 	// initialization functions
+	virtual void PreSpawn( void );
 	virtual void	Spawn( void ) { return; }
-	virtual void	Precache( void ) { return; }
-	virtual void	KeyValue( KeyValueData* pkvd) { pkvd->fHandled = FALSE; }
+	virtual void	PostSpawn( void ) { }
+	virtual void	Precache( void );
+	bool SetupModel( void );
+#ifndef CLIENT_DLL
+	const char *SOUNDREPLACEMENT_Find( const char *sample );
+	void AddEntityFlag( int mask );
+	void RemoveEntityFlag( int mask );
+	bool HasEntityFlag( int mask ) const;
+	void ClearEntityFlags( void );
+	CScriptDictionary *GetUserData( void );
+	CScriptDictValue &GetUserData( const CString &key );
+	void ClearUserData( void );
+	void ClearUserData( bool checkContext );
+	void SetOnDestroyFunction( const char *name );
+	int FormatASFunction( char *buffer, unsigned int size, const char *returnType,
+	                      const char *name, const char *parameters, bool warn ) const;
+#endif
+	virtual void	KeyValue( KeyValueData* pkvd);
+	virtual void	*GetKeyValue( const char *szKeyName, entvartype_s &type );
+	virtual void	OnKeyValueUpdate( const char *szKeyName );
+
+	entvartype_s GetEntvar( const char *szKeyName, void **value, int &index );
+
 	virtual int		Save( CSave &save );
 	virtual int		Restore( CRestore &restore );
 	virtual int		ObjectCaps( void ) { return FCAP_ACROSS_TRANSITION; }
 	virtual void	Activate( void ) {}
-	
+
 	// Setup the object->object collision box (pev->mins / pev->maxs is the object->world collision box)
 	virtual void	SetObjectCollisionBox( void );
 
+	virtual int		GetClassification( int cl );
+	virtual const char *GetClassificationTag( void );
+	virtual const char *GetClassificationName( void );
+	virtual void	SetClassification( int cl ) { SetClassificationSpecial( cl, false ); }
+	virtual void	SetClassificationSpecial( int cl, bool fKeepOverride );
+	void			SetClassificationFromEntity( CBaseEntity *pEntity );
+	void			ClearClassification( void );
+	virtual int		IRelationship( CBaseEntity *other, bool ignoreNoTarget = false );
+
 // Classify - returns the type of group (i.e, "houndeye", or "human military" so that monsters with different classnames
 // still realize that they are teammates. (overridden for monsters that form groups)
-	virtual int Classify ( void ) { return CLASS_NONE; };
+	virtual int Classify ( void ) { return GetClassification( CLASS_NONE ); };
+	int IRelationshipByClass( int classification );
 	virtual void DeathNotice ( entvars_t *pevChild ) {}// monster maker children use this to tell the monster maker that they have died.
 
 
@@ -170,21 +270,25 @@ public:
 
 	virtual void	TraceAttack( entvars_t *pevAttacker, float flDamage, Vector vecDir, TraceResult *ptr, int bitsDamageType);
 	virtual int		TakeDamage( entvars_t* pevInflictor, entvars_t* pevAttacker, float flDamage, int bitsDamageType );
-	virtual int		TakeHealth( float flHealth, int bitsDamageType );
+	virtual bool	TakeHealth( float flHealth, int bitsDamageType, int health_cap = 0 );
+	virtual bool	TakeArmor( float flArmor, int bitsDamageType, int armor_cap = 0 );
 	virtual void	Killed( entvars_t *pevAttacker, int iGib );
 	virtual int		BloodColor( void ) { return DONT_BLEED; }
 	virtual void	TraceBleed( float flDamage, Vector vecDir, TraceResult *ptr, int bitsDamageType );
 	virtual BOOL    IsTriggered( CBaseEntity *pActivator ) {return TRUE;}
 	virtual CBaseMonster *MyMonsterPointer( void ) { return NULL;}
 	virtual CSquadMonster *MySquadMonsterPointer( void ) { return NULL;}
+	virtual CBasePlayer *MyPlayerPointer( void ) { return NULL; }
+	virtual ICustomEntity *MyCustomPointer( void ) { return NULL; }
+	virtual CBasePlayerItem *MyItemPointer( void ) { return NULL; }
 	virtual	int		GetToggleState( void ) { return TS_AT_TOP; }
-	virtual void	AddPoints( int score, BOOL bAllowNegativeScore ) {}
-	virtual void	AddPointsToTeam( int score, BOOL bAllowNegativeScore ) {}
-	virtual BOOL	AddPlayerItem( CBasePlayerItem *pItem ) { return 0; }
-	virtual BOOL	RemovePlayerItem( CBasePlayerItem *pItem ) { return 0; }
-	virtual int 	GiveAmmo( int iAmount, char *szName, int iMax ) { return -1; };
+	virtual void	AddPoints( int score, bool bAllowNegativeScore ) {}
+	virtual void	AddPointsToTeam( int score, bool bAllowNegativeScore ) {}
+	virtual int		AddPlayerItem( CBasePlayerItem *pItem ) { return 0; }
+	virtual bool	RemovePlayerItem( CBasePlayerItem *pItem ) { return false; }
+	virtual int 	GiveAmmo( int iAmount, const char *szName, int iMax, bool fFromWeapon = true, int *piAmountGiven = NULL ) { return -1; };
 	virtual float	GetDelay( void ) { return 0; }
-	virtual int		IsMoving( void ) { return pev->velocity != g_vecZero; }
+	virtual int		IsMoving( void ) const { return pev->velocity != g_vecZero; }
 	virtual void	OverrideReset( void ) {}
 	virtual int		DamageDecal( int bitsDamageType );
 	// This is ONLY used by the node graph to test movement through a door
@@ -194,13 +298,19 @@ public:
 	virtual BOOL	OnControls( entvars_t *pev ) { return FALSE; }
 	virtual BOOL    IsSneaking( void ) { return FALSE; }
 	virtual BOOL	IsAlive( void ) { return (pev->deadflag == DEAD_NO) && pev->health > 0; }
-	virtual BOOL	IsBSPModel( void ) { return pev->solid == SOLID_BSP || pev->movetype == MOVETYPE_PUSHSTEP; }
+	virtual bool	IsDead( void ) { return pev->deadflag >= DEAD_DEAD; }
+	virtual BOOL	IsBSPModel( void ) { return pev->solid == SOLID_BSP || pev->movetype == MOVETYPE_PUSHSTEP || STRING( pev->model )[0] == '*'; }
 	virtual BOOL	ReflectGauss( void ) { return ( IsBSPModel() && !pev->takedamage ); }
 	virtual BOOL	HasTarget( string_t targetname ) { return FStrEq(STRING(targetname), STRING(pev->targetname) ); }
 	virtual BOOL    IsInWorld( void );
+	virtual bool	IsMonster( void ) { return false; }
 	virtual	BOOL	IsPlayer( void ) { return FALSE; }
 	virtual BOOL	IsNetClient( void ) { return FALSE; }
+	virtual bool	IsPointEnt( void );
+	virtual bool	IsBreakable( void ) { return false; }
+	virtual bool	IsMachine( void );
 	virtual const char *TeamID( void ) { return ""; }
+	virtual bool	CriticalRemove( void ) { return false; }
 
 
 //	virtual void	SetActivator( CBaseEntity *pActivator ) {}
@@ -235,7 +345,7 @@ public:
 	};
 #endif
 
-	void UpdateOnRemove( void );
+	virtual void UpdateOnRemove( void );
 
 	// common member functions
 	void EXPORT SUB_Remove( void );
@@ -244,17 +354,19 @@ public:
 	void EXPORT SUB_FadeOut ( void );
 	void EXPORT SUB_CallUseToggle( void ) { this->Use( this, this, USE_TOGGLE, 0 ); }
 	int			ShouldToggle( USE_TYPE useType, BOOL currentState );
-	void		FireBullets( ULONG	cShots, Vector  vecSrc, Vector	vecDirShooting,	Vector	vecSpread, float flDistance, int iBulletType, int iTracerFreq = 4, int iDamage = 0, entvars_t *pevAttacker = NULL  );
-	Vector		FireBulletsPlayer( ULONG	cShots, Vector  vecSrc, Vector	vecDirShooting,	Vector	vecSpread, float flDistance, int iBulletType, int iTracerFreq = 4, int iDamage = 0, entvars_t *pevAttacker = NULL, int shared_rand = 0 );
+	void FireBullets( ULONG cShots, Vector vecSrc, Vector vecDirShooting, Vector vecSpread,
+		float flDistance, int iBulletType, int iTracerFreq = 4, int iDamage = 0,
+		entvars_t *pevAttacker = NULL, FireBulletsDrawMode fDraw = FBDM_DRAW );
 
 	virtual CBaseEntity *Respawn( void ) { return NULL; }
 
-	void SUB_UseTargets( CBaseEntity *pActivator, USE_TYPE useType, float value );
+	virtual void SUB_UseTargets( CBaseEntity *pActivator, USE_TYPE useType, float value );
 	// Do the bounding boxes of these two intersect?
 	int		Intersects( CBaseEntity *pOther );
+	int		FindMonstersInWorld( CBaseEntity **pList, int listMax, int flagMask );
 	void	MakeDormant( void );
 	int		IsDormant( void );
-	BOOL    IsLockedByMaster( void ) { return FALSE; }
+	virtual BOOL IsLockedByMaster( void ) { return FALSE; }
 
 	static CBaseEntity *Instance( edict_t *pent )
 	{ 
@@ -326,22 +438,61 @@ public:
 
 
 	//
-	static CBaseEntity *Create( char *szName, const Vector &vecOrigin, const Vector &vecAngles, edict_t *pentOwner = NULL );
+	static CBaseEntity *Create( const char *szName, const Vector &vecOrigin, const Vector &vecAngles, bool fCreateAndDontSpawn, edict_t *pentOwner = NULL );
 
-	virtual BOOL FBecomeProne( void ) {return FALSE;};
+	virtual bool FBecomeProne( CBaseEntity *pOther ) { return false; }
 	edict_t *edict() { return ENT( pev ); };
 	EOFFSET eoffset( ) { return OFFSET( pev ); };
 	int	  entindex( ) { return ENTINDEX( edict() ); };
 
 	virtual Vector Center( ) { return (pev->absmax + pev->absmin) * 0.5; }; // center point of entity
-	virtual Vector EyePosition( ) { return pev->origin + pev->view_ofs; };			// position of eyes
-	virtual Vector EarPosition( ) { return pev->origin + pev->view_ofs; };			// position of ears
+	virtual Vector EyePosition( );													// position of eyes
+	virtual Vector EarPosition( ) { return pev->origin + pev->view_ofs * pev->scale; };	// position of ears
 	virtual Vector BodyTarget( const Vector &posSrc ) { return Center( ); };		// position to shoot at
 
+#ifdef CLIENT_DLL
+	int Illumination( ) { return GETENTITYILLUM( ENT( pev ) ); };
+#else
 	virtual int Illumination( ) { return GETENTITYILLUM( ENT( pev ) ); };
+#endif
 
-	virtual	BOOL FVisible ( CBaseEntity *pEntity );
 	virtual	BOOL FVisible ( const Vector &vecOrigin );
+	virtual	bool FVisible ( CBaseEntity *pEntity, bool fIgnoreGlass = true );
+	virtual bool FVisibleFromPos( const Vector &vecStart, const Vector &vecEnd );
+	virtual bool IsFacing( entvars_t *target, float fieldOfView );
+
+	bool			BlockedByEntity( CBaseEntity *pOther, float flDamage );
+	virtual float	GetPointsForDamage( float flDamage ) { return 0 * flDamage; }
+	virtual void GetDamagePoints( entvars_t *inflictor, entvars_t *attacker, float damage );
+
+	bool			IsPlayerAlly( void ) { return m_fPlayerAlly; }
+	virtual void	SetPlayerAlly( bool fState ) { m_fPlayerAlly = fState; }
+
+	virtual ~CBaseEntity();
+	virtual void OnCreate( void );
+	virtual void OnDestroy( void );
+	virtual void	OnSetOriginByMap( void ) { }
+	virtual bool	IsRevivable( void ) { return false; }
+	virtual void	BeginRevive( float flTimeUntilRevive ) { }
+	virtual void	EndRevive( float flTimeUntilRevive ) { }
+	virtual int		ShowHUDInfo( void ) { return 2; }
+	virtual bool	ShouldDisablePlayerCollisions( void ) const { return false; }
+	virtual CAttackVectors *GetAttackVectors( void ) const { return NULL; }
+	virtual void	Teleport( Vector vecOrigin, Vector vecAngles );
+	void			SetPlayerAllyDirect( bool fState ) { m_fPlayerAlly = fState; }
+
+	virtual void	SetTopColor( int color );
+	virtual void	SetBottomColor( int color );
+	virtual void	SetColors( int topColor, int bottomColor ) { SetTopColor( topColor ); SetBottomColor( bottomColor ); }
+	virtual int		GetTopColor( void ) { return m_iTopColor; }
+	virtual int		GetBottomColor( void ) { return m_iBottomColor; }
+	virtual void	UpdateColorMap( void ) { pev->colormap = m_iTopColor + ( m_iBottomColor << COLORMAP_BOTTOM_SHIFT ); }
+
+	bool			SetCustomKeyvalue( const char *szKeyName, const void *pValue, entvartype_s type, Ownership ownership );
+	void			*GetCustomKeyvalue( const char *szKeyName, entvartype_s &type );
+	bool			RemoveCustomKeyvalue( const char *szKeyName );
+	bool			HasCustomKeyvalue( const char *szKeyName );
+	void			*InitializeCustomKeyvalueWithDefault( const char *szKeyName, entvartype_s &type );
 
 	//We use this variables to store each ammo count.
 	int ammo_9mm;
@@ -360,7 +511,293 @@ public:
 
 	enum EGON_FIRESTATE { FIRE_OFF, FIRE_CHARGE };
 	int m_fireState;
+
+#ifndef CLIENT_DLL
+private:
+	void CreateUserData( void );
+	bool MandatoryKeyValue( KeyValueData *pkvd );
+#endif
 };
+
+inline int UTIL_ClampColormapColor( int color )
+{
+	if ( color > MAX_COLORMAP_COLOR )
+		return MAX_COLORMAP_COLOR;
+
+	if ( color < 0 )
+		return 0;
+
+	return color;
+}
+
+inline void CBaseEntity::KeyValue( KeyValueData *pkvd )
+{
+	if ( pkvd->szKeyName[0] == '$' )
+	{
+		SetCustomKeyvalue( pkvd->szKeyName, pkvd->szValue, VAR_CUSTOM, OWNERSHIP_BY_TYPE );
+		pkvd->fHandled = TRUE;
+	}
+	else if ( FStrEq( pkvd->szKeyName, "soundlist" ) )
+	{
+		m_iszSoundList = AllocStringLocal( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if ( FStrEq( pkvd->szKeyName, "classify" ) )
+	{
+		SetClassificationSpecial( strtol( pkvd->szValue, NULL, 10 ), true );
+		pkvd->fHandled = TRUE;
+	}
+	else if ( FStrEq( pkvd->szKeyName, "toutfiltertype" ) )
+	{
+		targetnameOutFilterType = strtol( pkvd->szValue, NULL, 10 );
+		pkvd->fHandled = TRUE;
+	}
+	else if ( FStrEq( pkvd->szKeyName, "coutfiltertype" ) )
+	{
+		classnameOutFilterType = strtol( pkvd->szValue, NULL, 10 );
+		pkvd->fHandled = TRUE;
+	}
+	else if ( FStrEq( pkvd->szKeyName, "tinfiltertype" ) )
+	{
+		targetnameInFilterType = strtol( pkvd->szValue, NULL, 10 );
+		pkvd->fHandled = TRUE;
+	}
+	else if ( FStrEq( pkvd->szKeyName, "cinfiltertype" ) )
+	{
+		classnameInFilterType = strtol( pkvd->szValue, NULL, 10 );
+		pkvd->fHandled = TRUE;
+	}
+	else if ( FStrEq( pkvd->szKeyName, "toutfilter" ) )
+	{
+		targetnameOutFilter = AllocStringLocal( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if ( FStrEq( pkvd->szKeyName, "coutfilter" ) )
+	{
+		classnameOutFilter = AllocStringLocal( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if ( FStrEq( pkvd->szKeyName, "tinfilter" ) )
+	{
+		targetnameInFilter = AllocStringLocal( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if ( FStrEq( pkvd->szKeyName, "cinfilter" ) )
+	{
+		classnameInFilter = AllocStringLocal( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if ( FStrEq( pkvd->szKeyName, "topcolor" ) )
+	{
+		// Players take their colors from their user info
+		if ( !IsPlayer() )
+			SetTopColor( strtol( pkvd->szValue, NULL, 10 ) );
+
+		pkvd->fHandled = TRUE;
+	}
+	else if ( FStrEq( pkvd->szKeyName, "bottomcolor" ) )
+	{
+		if ( !IsPlayer() )
+			SetBottomColor( strtol( pkvd->szValue, NULL, 10 ) );
+
+		pkvd->fHandled = TRUE;
+	}
+#ifndef CLIENT_DLL
+	else if ( MandatoryKeyValue( pkvd ) )
+	{
+	}
+#endif
+	else
+	{
+		pkvd->fHandled = FALSE;
+	}
+}
+
+inline void *CBaseEntity::GetKeyValue( const char *szKeyName, entvartype_s &type )
+{
+	if ( FStrEq( szKeyName, "soundlist" ) )
+	{
+		type = VAR_STRING;
+		return &m_iszSoundList;
+	}
+
+	if ( FStrEq( szKeyName, "classify" ) )
+	{
+		type = VAR_INTEGER;
+		return &m_iClassSelection;
+	}
+
+	if ( FStrEq( szKeyName, "toutfiltertype" ) )
+	{
+		type = VAR_INTEGER;
+		return &targetnameOutFilterType;
+	}
+
+	if ( FStrEq( szKeyName, "coutfiltertype" ) )
+	{
+		type = VAR_INTEGER;
+		return &classnameOutFilterType;
+	}
+
+	if ( FStrEq( szKeyName, "tinfiltertype" ) )
+	{
+		type = VAR_INTEGER;
+		return &targetnameInFilterType;
+	}
+
+	if ( FStrEq( szKeyName, "cinfiltertype" ) )
+	{
+		type = VAR_INTEGER;
+		return &classnameInFilterType;
+	}
+
+	if ( FStrEq( szKeyName, "toutfilter" ) )
+	{
+		type = VAR_STRING;
+		return &targetnameOutFilter;
+	}
+
+	if ( FStrEq( szKeyName, "coutfilter" ) )
+	{
+		type = VAR_STRING;
+		return &classnameOutFilter;
+	}
+
+	if ( FStrEq( szKeyName, "tinfilter" ) )
+	{
+		type = VAR_STRING;
+		return &targetnameInFilter;
+	}
+
+	if ( FStrEq( szKeyName, "cinfilter" ) )
+	{
+		type = VAR_STRING;
+		return &classnameInFilter;
+	}
+
+	if ( FStrEq( szKeyName, "topcolor" ) )
+	{
+		type = VAR_INTEGER;
+		return &m_iTopColor;
+	}
+
+	if ( FStrEq( szKeyName, "bottomcolor" ) )
+	{
+		type = VAR_INTEGER;
+		return &m_iBottomColor;
+	}
+
+	type = VAR_INVALID;
+	return NULL;
+}
+
+// Called after a value returned by GetKeyValue or an entity variable was changed directly
+inline void CBaseEntity::OnKeyValueUpdate( const char *szKeyName )
+{
+	if ( FStrEq( szKeyName, "classify" ) )
+	{
+		m_fOverrideClass = true;
+		pev->team = MAKE_STRING( GetClassificationTag() );
+	}
+	else if ( FStrEq( szKeyName, "topcolor" ) || FStrEq( szKeyName, "bottomcolor" ) )
+	{
+		if ( IsPlayer() )
+		{
+			m_iTopColor = pev->colormap & MAX_COLORMAP_COLOR;
+			m_iBottomColor = ( pev->colormap >> COLORMAP_BOTTOM_SHIFT ) & MAX_COLORMAP_COLOR;
+		}
+		else
+		{
+			m_iTopColor = UTIL_ClampColormapColor( m_iTopColor );
+			m_iBottomColor = UTIL_ClampColormapColor( m_iBottomColor );
+
+			UpdateColorMap();
+		}
+	}
+	else if ( FStrEq( szKeyName, "rendermode" ) )
+	{
+		m_iOriginalRenderMode = pev->rendermode;
+	}
+	else if ( FStrEq( szKeyName, "renderamt" ) )
+	{
+		m_flOriginalRenderAmount = pev->renderamt;
+	}
+	else if ( FStrEq( szKeyName, "rendercolor" ) )
+	{
+		m_vecOriginalRenderColor = pev->rendercolor;
+	}
+	else if ( FStrEq( szKeyName, "renderfx" ) )
+	{
+		m_iOriginalRenderFX = pev->renderfx;
+	}
+}
+
+inline void CBaseEntity::SetClassificationSpecial( int cl, bool fKeepOverride )
+{
+	if ( ( cl >= CLASS_MACHINE && cl <= CLASS_TEAM4 ) || cl == CLASS_BARNACLE )
+	{
+		m_fOverrideClass = true;
+		m_iClassSelection = cl;
+	}
+	else if ( cl == CLASS_FORCE_NONE )
+	{
+		m_fOverrideClass = true;
+		m_iClassSelection = CLASS_NONE;
+	}
+	else if ( !fKeepOverride )
+	{
+		m_fOverrideClass = false;
+		m_iClassSelection = CLASS_NONE;
+	}
+
+	pev->team = MAKE_STRING( GetClassificationTag() );
+}
+
+inline void CBaseEntity::SetClassificationFromEntity( CBaseEntity *pEntity )
+{
+	if ( pEntity )
+		SetClassification( pEntity->m_iClassSelection );
+}
+
+inline void CBaseEntity::ClearClassification( void )
+{
+	if ( !m_fOverrideClass )
+		return;
+
+	m_fOverrideClass = false;
+	m_iClassSelection = CLASS_NONE;
+	pev->team = 0;
+}
+
+inline bool CBaseEntity::IsMachine( void )
+{
+	const char *pszClassname = STRING( pev->classname );
+
+	return FStrEq( pszClassname, "monster_turret" )
+		|| FStrEq( pszClassname, "monster_miniturret" )
+		|| FStrEq( pszClassname, "monster_sentry" )
+		|| FStrEq( pszClassname, "monster_robogrunt" );
+}
+
+inline Vector CBaseEntity::EyePosition( void )
+{
+	if ( IsBSPModel() )
+		return Center();
+
+	return pev->origin + pev->view_ofs * pev->scale;
+}
+
+inline void CBaseEntity::SetTopColor( int color )
+{
+	m_iTopColor = UTIL_ClampColormapColor( color );
+	UpdateColorMap();
+}
+
+inline void CBaseEntity::SetBottomColor( int color )
+{
+	m_iBottomColor = UTIL_ClampColormapColor( color );
+	UpdateColorMap();
+}
 
 
 
@@ -416,8 +853,8 @@ void PlayLockSounds(entvars_t *pev, locksound_t *pls, int flocked, int fbutton);
 // MultiSouce
 //
 
-#define MAX_MULTI_TARGETS	16 // maximum number of targets a single multi_manager entity may be assigned.
-#define MS_MAX_TARGETS 32
+#define MAX_MULTI_TARGETS	64 // maximum number of targets a single multi_manager entity may be assigned.
+#define MS_MAX_TARGETS 64
 
 class CMultiSource : public CPointEntity
 {
@@ -447,8 +884,15 @@ public:
 class CBaseDelay : public CBaseEntity
 {
 public:
-	float		m_flDelay;
-	int			m_iszKillTarget;
+#ifndef CLIENT_DLL
+	CBaseDelay();
+#endif
+
+	float	m_flDelay;
+	int		m_iszKillTarget;
+#ifndef CLIENT_DLL
+	EHANDLE	m_hDelayActivator;
+#endif
 
 	virtual void	KeyValue( KeyValueData* pkvd);
 	virtual int		Save( CSave &save );
@@ -457,7 +901,12 @@ public:
 	static	TYPEDESCRIPTION m_SaveData[];
 	// common member functions
 	void SUB_UseTargets( CBaseEntity *pActivator, USE_TYPE useType, float value );
+#ifndef CLIENT_DLL
+	virtual void EXPORT DelayThink( void );
+	void EXPORT CallDelayThink( void ) { DelayThink(); }
+#else
 	void EXPORT DelayThink( void );
+#endif
 };
 
 
@@ -476,6 +925,8 @@ public:
 	int  LookupActivityHeaviest ( int activity );
 	int  LookupSequence ( const char *label );
 	void ResetSequenceInfo ( );
+	void ResetGaitSequenceInfo( void );
+	int GetSequenceActivityName( int iSequence );
 	void DispatchAnimEvents ( float flFutureInterval = 0.1 ); // Handle events that have happend since last time called up until X seconds into the future
 	virtual void HandleAnimEvent( MonsterEvent_t *pEvent ) { return; };
 	float SetBoneController ( int iController, float flValue );
@@ -485,8 +936,10 @@ public:
 	void GetAutomovement( Vector &origin, Vector &angles, float flInterval = 0.1 );
 	int  FindTransition( int iEndingSequence, int iGoalSequence, int *piDir );
 	void GetAttachment ( int iAttachment, Vector &origin, Vector &angles );
+	int GetAttachmentCount( void );
 	void SetBodygroup( int iGroup, int iValue );
 	int GetBodygroup( int iGroup );
+	int GetBodygroupSubmodelCount( int iGroup );
 	int ExtractBbox( int sequence, float *mins, float *maxs );
 	void SetSequenceBox( void );
 
@@ -494,6 +947,7 @@ public:
 	float				m_flFrameRate;		// computed FPS for current sequence
 	float				m_flGroundSpeed;	// computed linear movement rate for current sequence
 	float				m_flLastEventCheck;	// last time the event list was checked
+	float				m_flLastGaitEventCheck;	// last time the gait event list was checked
 	BOOL				m_fSequenceFinished;// flag set when StudioAdvanceFrame moves across a frame boundry
 	BOOL				m_fSequenceLoops;	// true if the sequence loops
 };
@@ -504,10 +958,15 @@ public:
 //
 #define	SF_ITEM_USE_ONLY	256 //  ITEM_USE_ONLY = BUTTON_USE_ONLY = DOOR_USE_ONLY!!! 
 
+class CInventoryRules;
+
 class CBaseToggle : public CBaseAnimating
 {
 public:
 	void				KeyValue( KeyValueData *pkvd );
+
+	void OnCreate( void );
+	void OnDestroy( void );
 
 	TOGGLE_STATE		m_toggle_state;
 	float				m_flActivateFinished;//like attack_finished, but for doors
@@ -539,12 +998,14 @@ public:
 	virtual int		GetToggleState( void ) { return m_toggle_state; }
 	virtual float	GetDelay( void ) { return m_flWait; }
 
+	virtual void RecalculateVectors( void ) { }
+
 	// common member functions
 	void LinearMove( Vector	vecDest, float flSpeed );
 	void EXPORT LinearMoveDone( void );
 	void AngularMove( Vector vecDestAngle, float flSpeed );
 	void EXPORT AngularMoveDone( void );
-	BOOL IsLockedByMaster( void );
+	virtual BOOL IsLockedByMaster( void );
 
 	static float		AxisValue( int flags, const Vector &angles );
 	static void			AxisDir( entvars_t *pev );
@@ -555,12 +1016,16 @@ public:
 							// of the switches in the multisource have been triggered, then
 							// the button will be allowed to operate. Otherwise, it will be
 							// deactivated.
+
+#ifndef CLIENT_DLL
+	CInventoryRules *m_pInventoryRules;
+#endif
 };
 #define SetMoveDone( a ) m_pfnCallWhenMoveDone = static_cast <void (CBaseToggle::*)(void)> (a)
 
 
 // people gib if their health is <= this at the time of death
-#define	GIB_HEALTH_VALUE	-30
+#define	GIB_HEALTH_VALUE	-50
 
 #define	ROUTE_SIZE			8 // how many waypoints a monster can store at one time
 #define MAX_OLD_ENEMIES		4 // how many old enemies to remember
@@ -583,6 +1048,8 @@ public:
 #define bits_CAP_MELEE_ATTACK2	( 1 << 14)// can do a melee attack 2
 
 #define bits_CAP_FLY			( 1 << 15)// can fly, move all around
+#define bits_CAP_USE_TANK		( 1 << 16)// can man a func_tank
+#define bits_CAP_FALL_DAMAGE	( 1 << 17)// hurt by falls (CBaseMonster::CheckFallDamage)
 
 #define bits_CAP_DOORS_GROUP    (bits_CAP_USE | bits_CAP_AUTO_DOORS | bits_CAP_OPEN_DOORS)
 
@@ -618,8 +1085,14 @@ public:
 #define DMG_SLOWFREEZE		(1 << 22)	// in a subzero freezer
 #define DMG_MORTAR			(1 << 23)	// Hit by air raid (done to distinguish grenade from mortar)
 
+#define DMG_SNIPER			(1 << 24)
+#define DMG_MEDKITHEAL		(1 << 25)
+#define DMG_BUCKSHOT			(1 << 26)
+#define DMG_LAUNCH			DMG_BUCKSHOT	// the AngelScript name for the same bit
+#define DMG_SHOCK_GLOW		( 1 << 27 )
+
 // these are the damage types that are allowed to gib corpses
-#define DMG_GIB_CORPSE		( DMG_CRUSH | DMG_FALL | DMG_BLAST | DMG_SONIC | DMG_CLUB )
+#define DMG_GIB_CORPSE		( DMG_CRUSH | DMG_FALL | DMG_BLAST | DMG_SONIC | DMG_CLUB | DMG_SHOCK )
 
 // these are the damage types that have client hud art
 #define DMG_SHOWNHUD		(DMG_POISON | DMG_ACID | DMG_FREEZE | DMG_SLOWFREEZE | DMG_DROWN | DMG_BURN | DMG_SLOWBURN | DMG_NERVEGAS | DMG_RADIATION | DMG_SHOCK)
@@ -671,7 +1144,7 @@ class CSound;
 #include "basemonster.h"
 
 
-char *ButtonSound( int sound );				// get string of button sound number
+const char *ButtonSound( int sound );				// get string of button sound number
 
 
 //
@@ -680,8 +1153,16 @@ char *ButtonSound( int sound );				// get string of button sound number
 class CBaseButton : public CBaseToggle
 {
 public:
+	CBaseButton() : m_iUseType( USE_TOGGLE ) {}
+
 	void Spawn( void );
 	virtual void Precache( void );
+#ifndef CLIENT_DLL
+	virtual void OnSetOriginByMap( void );
+	virtual void RecalculateVectors( void );
+	void UpdateOnRemove( void );
+#endif
+
 	void RotSpawn( void );
 	virtual void KeyValue( KeyValueData* pkvd);
 
@@ -720,6 +1201,7 @@ public:
 	BYTE	m_bUnlockedSound;	
 	BYTE	m_bUnlockedSentence;
 	int		m_sounds;
+	int		m_iUseType;
 };
 
 //
@@ -748,6 +1230,10 @@ template <class T> T * GetClassPtr( T *a )
 		// allocate private data 
 		a = new(pev) T;
 		a->pev = pev;
+
+#ifndef CLIENT_DLL
+		a->OnCreate();
+#endif
 	}
 	return a;
 }
@@ -796,7 +1282,29 @@ typedef struct _SelAmmo
 class CWorld : public CBaseEntity
 {
 public:
+#ifndef CLIENT_DLL
+	static CWorld *GetInstance( void );
+	void OnCreate( void );
+	void OnDestroy( void );
+	int ShowHUDInfo( void ) { return 0; }
+#endif
+
 	void Spawn( void );
 	void Precache( void );
 	void KeyValue( KeyValueData *pkvd );
+
+#ifndef CLIENT_DLL
+	void SetupEntVars( void );
+	const char *MODELREPLACEMENT_Find( const char *model );
+	void PrecacheGlobalCustomModels( string_t fileName );
+	void PrecacheStandardWeaponModels( void );
+	void WeaponModelKey( KeyValueData *pkvd );
+
+	char m_szSentenceFile[256];
+
+	CStringMap m_ModelReplacementMap;
+
+private:
+	static CWorld *m_pInstance;
+#endif
 };

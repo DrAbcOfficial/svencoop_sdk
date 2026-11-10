@@ -23,13 +23,14 @@
 #include <string.h>
 #include <stdio.h>
 #include "parsemsg.h"
+#include "IClient.h"
 
 DECLARE_MESSAGE( m_Message, HudText )
 DECLARE_MESSAGE( m_Message, GameTitle )
 
 // 1 Global client_textmessage_t for custom messages that aren't in the titles.txt
 client_textmessage_t	g_pCustomMessage;
-char *g_pCustomName = "Custom";
+const char *g_pCustomName = "Custom";
 char g_pCustomText[1024];
 
 int CHudMessage::Init(void)
@@ -89,59 +90,11 @@ float CHudMessage::FadeBlend( float fadein, float fadeout, float hold, float loc
 }
 
 
-int	CHudMessage::XPosition( float x, int width, int totalWidth )
-{
-	int xPos;
-
-	if ( x == -1 )
-	{
-		xPos = (ScreenWidth - width) / 2;
-	}
-	else
-	{
-		if ( x < 0 )
-			xPos = (1.0 + x) * ScreenWidth - totalWidth;	// Alight right
-		else
-			xPos = x * ScreenWidth;
-	}
-
-	if ( xPos + width > ScreenWidth )
-		xPos = ScreenWidth - width;
-	else if ( xPos < 0 )
-		xPos = 0;
-
-	return xPos;
-}
-
-
-int CHudMessage::YPosition( float y, int height )
-{
-	int yPos;
-
-	if ( y == -1 )	// Centered?
-		yPos = (ScreenHeight - height) * 0.5;
-	else
-	{
-		// Alight bottom?
-		if ( y < 0 )
-			yPos = (1.0 + y) * ScreenHeight - height;	// Alight bottom
-		else // align top
-			yPos = y * ScreenHeight;
-	}
-
-	if ( yPos + height > ScreenHeight )
-		yPos = ScreenHeight - height;
-	else if ( yPos < 0 )
-		yPos = 0;
-
-	return yPos;
-}
-
-
 void CHudMessage::MessageScanNextChar( void )
 {
 	int srcRed, srcGreen, srcBlue, destRed, destGreen, destBlue;
 	int blend;
+	int destAlpha = 0;
 
 	srcRed = m_parms.pMessage->r1;
 	srcGreen = m_parms.pMessage->g1;
@@ -176,10 +129,13 @@ void CHudMessage::MessageScanNextChar( void )
 				blend = 0;	// pure dest
 			else
 			{
+				float flFxTime = V_max( 0.01f, V_min( m_parms.pMessage->fxtime, 60.0f ) );
+
 				destRed = m_parms.pMessage->r2;
 				destGreen = m_parms.pMessage->g2;
 				destBlue = m_parms.pMessage->b2;
-				blend = 255 - (deltaTime * (1.0/m_parms.pMessage->fxtime) * 255.0 + 0.5);
+				destAlpha = m_parms.pMessage->a2;
+				blend = 255 - ( deltaTime * ( 1.0 / flFxTime ) * 255.0 + 0.5 );
 			}
 		}
 		break;
@@ -192,6 +148,7 @@ void CHudMessage::MessageScanNextChar( void )
 	m_parms.r = ((srcRed * (255-blend)) + (destRed * blend)) >> 8;
 	m_parms.g = ((srcGreen * (255-blend)) + (destGreen * blend)) >> 8;
 	m_parms.b = ((srcBlue * (255-blend)) + (destBlue * blend)) >> 8;
+	m_parms.a = m_parms.pMessage->a1 != 0 || destAlpha != 0;
 
 	if ( m_parms.pMessage->effect == 1 && m_parms.charTime != 0 )
 	{
@@ -246,7 +203,7 @@ void CHudMessage::MessageDrawScan( client_textmessage_t *pMessage, float time )
 {
 	int i, j, length, width;
 	const char *pText;
-	unsigned char line[80];
+	unsigned char line[256];
 
 	pText = pMessage->pMessage;
 	// Count lines
@@ -274,7 +231,7 @@ void CHudMessage::MessageDrawScan( client_textmessage_t *pMessage, float time )
 	m_parms.totalHeight = (m_parms.lines * gHUD.m_scrinfo.iCharHeight);
 
 
-	m_parms.y = YPosition( pMessage->y, m_parms.totalHeight );
+	m_parms.y = gHUD.CalcYPositionLegacy( pMessage->y, m_parms.totalHeight );
 	pText = pMessage->pMessage;
 
 	m_parms.charTime = 0;
@@ -296,7 +253,8 @@ void CHudMessage::MessageDrawScan( client_textmessage_t *pMessage, float time )
 		pText++;		// Skip LF
 		line[m_parms.lineLength] = 0;
 
-		m_parms.x = XPosition( pMessage->x, m_parms.width, m_parms.totalWidth );
+		m_parms.x = gHUD.CalcXPositionLegacy( pMessage->x, m_parms.width );
+		DRAW_DEBUG_RECT( m_parms.x, m_parms.y, m_parms.width, gHUD.m_scrinfo.iCharHeight );
 
 		for ( j = 0; j < m_parms.lineLength; j++ )
 		{
@@ -305,7 +263,7 @@ void CHudMessage::MessageDrawScan( client_textmessage_t *pMessage, float time )
 			MessageScanNextChar();
 			
 			if ( m_parms.x >= 0 && m_parms.y >= 0 && next <= ScreenWidth )
-				TextMessageDrawChar( m_parms.x, m_parms.y, m_parms.text, m_parms.r, m_parms.g, m_parms.b );
+				g_pEngineClient->DrawCharacterOpq( m_parms.x, m_parms.y, m_parms.text, m_parms.r, m_parms.g, m_parms.b, m_parms.a );
 			m_parms.x = next;
 		}
 
@@ -314,99 +272,101 @@ void CHudMessage::MessageDrawScan( client_textmessage_t *pMessage, float time )
 }
 
 
-int CHudMessage::Draw( float fTime )
+bool CHudMessage::DrawGameTitle( float fTime )
 {
-	int i, drawn;
+	if ( m_gameTitleTime <= 0 )
+		return false;
+
+	// Maybe timer isn't set yet
+	if ( m_gameTitleTime > gHUD.m_flTime )
+		m_gameTitleTime = gHUD.m_flTime;
+
+	float localTime = gHUD.m_flTime - m_gameTitleTime;
+
+	if ( localTime > (m_pGameTitle->fadein + m_pGameTitle->holdtime + m_pGameTitle->fadeout) )
+	{
+		m_gameTitleTime = 0;
+		return false;
+	}
+
+	float brightness = FadeBlend( m_pGameTitle->fadein, m_pGameTitle->fadeout, m_pGameTitle->holdtime, localTime );
+
+	int halfWidth = gHUD.GetSpriteRect(m_HUD_title_half).right - gHUD.GetSpriteRect(m_HUD_title_half).left;
+	int fullWidth = halfWidth + gHUD.GetSpriteRect(m_HUD_title_life).right - gHUD.GetSpriteRect(m_HUD_title_life).left;
+	int fullHeight = gHUD.GetSpriteRect(m_HUD_title_half).bottom - gHUD.GetSpriteRect(m_HUD_title_half).top;
+
+	int x = gHUD.CalcXPositionLegacy( m_pGameTitle->x, fullWidth );
+	int y = gHUD.CalcYPositionLegacy( m_pGameTitle->y, fullHeight );
+	int r = (int)(brightness * m_pGameTitle->r1);
+	int g = (int)(brightness * m_pGameTitle->g1);
+	int b = (int)(brightness * m_pGameTitle->b1);
+
+	gHUD.DrawSprite( x, y, gHUD.GetSprite(m_HUD_title_half), &gHUD.GetSpriteRect(m_HUD_title_half), r, g, b );
+	gHUD.DrawSprite( x + halfWidth, y, gHUD.GetSprite(m_HUD_title_life), &gHUD.GetSpriteRect(m_HUD_title_life), r, g, b );
+
+	return true;
+}
+
+
+bool CHudMessage::DrawHudMessages( float fTime )
+{
+	int i;
+	bool drawn = false;
 	client_textmessage_t *pMessage;
 	float endTime;
 
-	drawn = 0;
-
-	if ( m_gameTitleTime > 0 )
-	{
-		float localTime = gHUD.m_flTime - m_gameTitleTime;
-		float brightness;
-
-		// Maybe timer isn't set yet
-		if ( m_gameTitleTime > gHUD.m_flTime )
-			m_gameTitleTime = gHUD.m_flTime;
-
-		if ( localTime > (m_pGameTitle->fadein + m_pGameTitle->holdtime + m_pGameTitle->fadeout) )
-			m_gameTitleTime = 0;
-		else
-		{
-			brightness = FadeBlend( m_pGameTitle->fadein, m_pGameTitle->fadeout, m_pGameTitle->holdtime, localTime );
-
-			int halfWidth = gHUD.GetSpriteRect(m_HUD_title_half).right - gHUD.GetSpriteRect(m_HUD_title_half).left;
-			int fullWidth = halfWidth + gHUD.GetSpriteRect(m_HUD_title_life).right - gHUD.GetSpriteRect(m_HUD_title_life).left;
-			int fullHeight = gHUD.GetSpriteRect(m_HUD_title_half).bottom - gHUD.GetSpriteRect(m_HUD_title_half).top;
-
-			int x = XPosition( m_pGameTitle->x, fullWidth, fullWidth );
-			int y = YPosition( m_pGameTitle->y, fullHeight );
-
-
-			gHUD.DrawSprite(x, y, gHUD.GetSprite(m_HUD_title_half), &gHUD.GetSpriteRect(m_HUD_title_half), brightness * m_pGameTitle->r1, brightness * m_pGameTitle->g1, brightness * m_pGameTitle->b1, 0, SPR_ADDITIVE);
-			gHUD.DrawSprite(x + halfWidth, y, gHUD.GetSprite(m_HUD_title_life), &gHUD.GetSpriteRect(m_HUD_title_life), brightness * m_pGameTitle->r1, brightness * m_pGameTitle->g1, brightness * m_pGameTitle->b1, 0, SPR_ADDITIVE);
-
-			drawn = 1;
-		}
-	}
 	// Fixup level transitions
 	for ( i = 0; i < maxHUDMessages; i++ )
 	{
 		// Assume m_parms.time contains last time
-		if ( m_pMessages[i] )
-		{
-			pMessage = m_pMessages[i];
-			if ( m_startTime[i] > gHUD.m_flTime )
-				m_startTime[i] = gHUD.m_flTime + m_parms.time - m_startTime[i] + 0.2;	// Server takes 0.2 seconds to spawn, adjust for this
-		}
+		if ( m_pMessages[i] && m_startTime[i] > gHUD.m_flTime )
+			m_startTime[i] = gHUD.m_flTime + m_parms.time - m_startTime[i] + 0.2;	// Server takes 0.2 seconds to spawn, adjust for this
 	}
 
 	for ( i = 0; i < maxHUDMessages; i++ )
 	{
-		if ( m_pMessages[i] )
+		pMessage = m_pMessages[i];
+
+		if ( !pMessage )
+			continue;
+
+		// This is when the message is over
+		// Fade in is per character in scanning messages
+		if ( pMessage->effect == 2 )
+			endTime = m_startTime[i] + (pMessage->fadein * strlen( pMessage->pMessage )) + pMessage->fadeout + pMessage->holdtime;
+		else
+			endTime = m_startTime[i] + pMessage->fadein + pMessage->fadeout + pMessage->holdtime;
+
+		if ( fTime <= endTime )
 		{
-			pMessage = m_pMessages[i];
+			float messageTime = fTime - m_startTime[i];
 
-			// This is when the message is over
-			switch( pMessage->effect )
-			{
-			case 0:
-			case 1:
-				endTime = m_startTime[i] + pMessage->fadein + pMessage->fadeout + pMessage->holdtime;
-				break;
-			
-			// Fade in is per character in scanning messages
-			case 2:
-				endTime = m_startTime[i] + (pMessage->fadein * strlen( pMessage->pMessage )) + pMessage->fadeout + pMessage->holdtime;
-				break;
-			}
-
-			if ( fTime <= endTime )
-			{
-				float messageTime = fTime - m_startTime[i];
-
-				// Draw the message
-				// effect 0 is fade in/fade out
-				// effect 1 is flickery credits
-				// effect 2 is write out (training room)
-				MessageDrawScan( pMessage, messageTime );
-
-				drawn++;
-			}
-			else
-			{
-				// The message is over
-				m_pMessages[i] = NULL;
-			}
+			// Draw the message
+			// effect 0 is fade in/fade out
+			// effect 1 is flickery credits
+			// effect 2 is write out (training room)
+			MessageDrawScan( pMessage, messageTime );
+			drawn = true;
+		}
+		else
+		{
+			// The message is over
+			m_pMessages[i] = NULL;
 		}
 	}
 
 	// Remember the time -- to fix up level transitions
 	m_parms.time = gHUD.m_flTime;
+
+	return drawn;
+}
+
+
+int CHudMessage::Draw( float fTime )
+{
+	bool drawnTitle = DrawGameTitle( fTime );
 	// Don't call until we get another message
-	if ( !drawn )
+	if ( !DrawHudMessages( fTime ) && !drawnTitle )
 		m_iFlags &= ~HUD_ACTIVE;
 
 	return 1;
@@ -415,66 +375,71 @@ int CHudMessage::Draw( float fTime )
 
 void CHudMessage::MessageAdd( const char *pName, float time )
 {
-	int i,j;
 	client_textmessage_t *tempMessage;
+
+	// Trim off a leading # if it's there
+	if ( pName[0] == '#' )
+		tempMessage = TextMessageGet( pName + 1 );
+	else
+		tempMessage = TextMessageGet( pName );
+
+	// If we couldnt find it in the titles.txt, just create it
+	if ( !tempMessage )
+	{
+		g_pCustomMessage.effect = 2;
+		g_pCustomMessage.r1 = g_pCustomMessage.g1 = g_pCustomMessage.b1 = g_pCustomMessage.a1 = 100;
+		g_pCustomMessage.r2 = 240;
+		g_pCustomMessage.g2 = 110;
+		g_pCustomMessage.b2 = 0;
+		g_pCustomMessage.a2 = 0;
+		g_pCustomMessage.x = -1;		// Centered
+		g_pCustomMessage.y = 0.7;
+		g_pCustomMessage.fadein = 0.01;
+		g_pCustomMessage.fadeout = 1.5;
+		g_pCustomMessage.fxtime = 0.25;
+		g_pCustomMessage.holdtime = 5;
+		g_pCustomMessage.pName = g_pCustomName;
+		safe_strcpy( g_pCustomText, pName, sizeof( g_pCustomText ) );
+		g_pCustomMessage.pMessage = g_pCustomText;
+
+		tempMessage = &g_pCustomMessage;
+	}
+
+	for ( int i = 0; i < maxHUDMessages; i++ )
+	{
+		if ( m_pMessages[i] == tempMessage )
+		{
+			m_pMessages[i] = NULL;
+			break;
+		}
+	}
+
+	int i;
 
 	for ( i = 0; i < maxHUDMessages; i++ )
 	{
 		if ( !m_pMessages[i] )
+			break;
+	}
+
+	if ( i == maxHUDMessages )
+		return;
+
+	for ( int j = 0; j < maxHUDMessages; j++ )
+	{
+		client_textmessage_t *pMessage = m_pMessages[j];
+
+		if ( j != i && pMessage
+			&& strcmp( tempMessage->pMessage, pMessage->pMessage )
+			&& fabs( tempMessage->y - pMessage->y ) < 0.0001
+			&& fabs( tempMessage->x - pMessage->x ) < 0.0001 )
 		{
-			// Trim off a leading # if it's there
-			if ( pName[0] == '#' ) 
-				tempMessage = TextMessageGet( pName+1 );
-			else
-				tempMessage = TextMessageGet( pName );
-			// If we couldnt find it in the titles.txt, just create it
-			if ( !tempMessage )
-			{
-				g_pCustomMessage.effect = 2;
-				g_pCustomMessage.r1 = g_pCustomMessage.g1 = g_pCustomMessage.b1 = g_pCustomMessage.a1 = 100;
-				g_pCustomMessage.r2 = 240;
-				g_pCustomMessage.g2 = 110;
-				g_pCustomMessage.b2 = 0;
-				g_pCustomMessage.a2 = 0;
-				g_pCustomMessage.x = -1;		// Centered
-				g_pCustomMessage.y = 0.7;
-				g_pCustomMessage.fadein = 0.01;
-				g_pCustomMessage.fadeout = 1.5;
-				g_pCustomMessage.fxtime = 0.25;
-				g_pCustomMessage.holdtime = 5;
-				g_pCustomMessage.pName = g_pCustomName;
-				strcpy( g_pCustomText, pName );
-				g_pCustomMessage.pMessage = g_pCustomText;
-
-				tempMessage = &g_pCustomMessage;
-			}
-
-			for ( j = 0; j < maxHUDMessages; j++ )
-			{
-				if ( m_pMessages[j] )
-				{
-					// is this message already in the list
-					if ( !strcmp( tempMessage->pMessage, m_pMessages[j]->pMessage ) )
-					{
-						return;
-					}
-
-					// get rid of any other messages in same location (only one displays at a time)
-					if ( ffabs( tempMessage->y - m_pMessages[j]->y ) < 0.0001 )
-					{
-						if ( ffabs( tempMessage->x - m_pMessages[j]->x ) < 0.0001 )
-						{
-							m_pMessages[j] = NULL;
-						}
-					}
-				}
-			}
-
-			m_pMessages[i] = tempMessage;
-			m_startTime[i] = time;
-			return;
+			m_pMessages[j] = NULL;
 		}
 	}
+
+	m_pMessages[i] = tempMessage;
+	m_startTime[i] = time;
 }
 
 

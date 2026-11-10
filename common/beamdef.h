@@ -55,7 +55,7 @@ struct beam_s
 	int			endEntity;
 	int			modelIndex;
 	int			frameCount;
-	struct model_s		*pFollowModel;
+	struct model_s*	pFollowModel;
 	struct particle_s	*particles;
 };
 

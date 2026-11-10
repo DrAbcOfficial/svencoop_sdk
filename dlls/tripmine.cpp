@@ -21,6 +21,22 @@
 #include "player.h"
 #include "effects.h"
 #include "gamerules.h"
+#include "CClassicMode.h"
+#include "game.h"
+#include "server_sound.h"
+#include "customentity.h"
+
+#undef SET_MODEL
+#define SET_MODEL( entity, model ) SetModel_Intercept( entity, model )
+#undef PRECACHE_MODEL
+#define PRECACHE_MODEL( path ) UTIL_PrecacheModel( this, path )
+#undef PRECACHE_SOUND
+#define PRECACHE_SOUND( path ) PrecacheSound_Intercept( this, path )
+
+bool TripmineClassicMode( void )
+{
+	return CClassicMode::GetInstance()->IsEnabled();
+}
 
 #define	TRIPMINE_PRIMARY_VOLUME		450
 
@@ -43,8 +59,13 @@ enum tripmine_e {
 
 class CTripmineGrenade : public CGrenade
 {
+	friend class CTripmine;
+
 	void Spawn( void );
+	void Spawn( const char *model );
 	void Precache( void );
+	int Classify( void );
+	int ShowHUDInfo( void ) { return 0; }
 
 	virtual int		Save( CSave &save );
 	virtual int		Restore( CRestore &restore );
@@ -58,6 +79,10 @@ class CTripmineGrenade : public CGrenade
 	void EXPORT BeamBreakThink( void );
 	void EXPORT DelayDeathThink( void );
 	void Killed( entvars_t *pevAttacker, int iGib );
+	bool CheckAttacker( CBaseEntity *pAttacker );
+	bool CriticalRemove( void );
+	void UpdateOnRemove( void );
+	void Detonate( void );
 
 	void MakeBeam( void );
 	void KillBeam( void );
@@ -68,10 +93,16 @@ class CTripmineGrenade : public CGrenade
 	float		m_flBeamLength;
 
 	EHANDLE		m_hOwner;
-	CBeam		*m_pBeam;
+	EHANDLE		m_hBeam;
 	Vector		m_posOwner;
 	Vector		m_angleOwner;
-	edict_t		*m_pRealOwner;// tracelines don't hit PEV->OWNER, which means a player couldn't detonate his own trip mine, so we store the owner here.
+	EHANDLE		m_hRealOwner;
+	bool		m_fPlayerPlaced;
+	bool m_fSolid;
+	bool m_fPlayerTrip;
+
+	void PlayerTrip( void ) { m_fPlayerTrip = true; }
+	float m_flBeamLength2;
 };
 
 LINK_ENTITY_TO_CLASS( monster_tripmine, CTripmineGrenade );
@@ -83,69 +114,60 @@ TYPEDESCRIPTION	CTripmineGrenade::m_SaveData[] =
 	DEFINE_FIELD( CTripmineGrenade, m_vecEnd, FIELD_POSITION_VECTOR ),
 	DEFINE_FIELD( CTripmineGrenade, m_flBeamLength, FIELD_FLOAT ),
 	DEFINE_FIELD( CTripmineGrenade, m_hOwner, FIELD_EHANDLE ),
-	DEFINE_FIELD( CTripmineGrenade, m_pBeam, FIELD_CLASSPTR ),
+	DEFINE_FIELD( CTripmineGrenade, m_hBeam, FIELD_EHANDLE ),
 	DEFINE_FIELD( CTripmineGrenade, m_posOwner, FIELD_POSITION_VECTOR ),
 	DEFINE_FIELD( CTripmineGrenade, m_angleOwner, FIELD_VECTOR ),
-	DEFINE_FIELD( CTripmineGrenade, m_pRealOwner, FIELD_EDICT ),
+	DEFINE_FIELD( CTripmineGrenade, m_hRealOwner, FIELD_EHANDLE ),
 };
 
 IMPLEMENT_SAVERESTORE(CTripmineGrenade,CGrenade);
 
-
 void CTripmineGrenade :: Spawn( void )
 {
-	Precache( );
-	// motor
+	Spawn( TripmineClassicMode() ? "models/hlclassic/w_tripmine.mdl" : "models/w_tripmine.mdl" );
+}
+
+void CTripmineGrenade::Spawn( const char *model )
+{
+	Precache();
+
+	if ( !SetupModel() )
+		SET_MODEL( edict(), model );
+
 	pev->movetype = MOVETYPE_FLY;
 	pev->solid = SOLID_NOT;
-
-	SET_MODEL(ENT(pev), "models/v_tripmine.mdl");
-	pev->frame = 0;
-	pev->body = 3;
-	pev->sequence = TRIPMINE_WORLD;
-	ResetSequenceInfo( );
-	pev->framerate = 0;
-	
-	UTIL_SetSize(pev, Vector( -8, -8, -8), Vector(8, 8, 8));
-	UTIL_SetOrigin( pev, pev->origin );
-
-	if (pev->spawnflags & 1)
-	{
-		// power up quickly
-		m_flPowerUp = gpGlobals->time + 1.0;
-	}
-	else
-	{
-		// power up in 2.5 seconds
-		m_flPowerUp = gpGlobals->time + 2.5;
-	}
-
-	SetThink( &CTripmineGrenade::PowerupThink );
-	pev->nextthink = gpGlobals->time + 0.2;
-
 	pev->takedamage = DAMAGE_YES;
-	pev->dmg = gSkillData.plrDmgTripmine;
-	pev->health = 1; // don't let die normally
 
-	if (pev->owner != NULL)
+	if ( pev->dmg <= 0.0f )
+		pev->dmg = sk_plr_tripmine.value;
+
+	pev->health = 1;
+	pev->sequence = 1;
+	UTIL_SetSize( pev, Vector( -8, -8, -8 ), Vector( 8, 8, 8 ) );
+	UTIL_SetOrigin( pev, pev->origin );
+	m_fSolid = false;
+	m_flPowerUp = gpGlobals->time + ( ( pev->spawnflags & 1 ) ? 1.0 : 2.5 );
+
+	if ( pev->owner )
 	{
-		// play deploy sound
-		EMIT_SOUND( ENT(pev), CHAN_VOICE, "weapons/mine_deploy.wav", 1.0, ATTN_NORM );
-		EMIT_SOUND( ENT(pev), CHAN_BODY, "weapons/mine_charge.wav", 0.2, ATTN_NORM ); // chargeup
-
-		m_pRealOwner = pev->owner;// see CTripmineGrenade for why.
+		EMIT_SOUND_DYN( edict(), CHAN_VOICE, "weapons/mine_deploy.wav", 1.0, ATTN_NORM, 0, PITCH_NORM, 0, false, g_vecZero );
+		EMIT_SOUND_DYN( edict(), CHAN_BODY, "weapons/mine_charge.wav", 0.2, ATTN_NORM, 0, PITCH_NORM, 0, false, g_vecZero );
+		m_hRealOwner = CBaseEntity::Instance( pev->owner );
 	}
 
 	UTIL_MakeAimVectors( pev->angles );
-
 	m_vecDir = gpGlobals->v_forward;
 	m_vecEnd = pev->origin + m_vecDir * 2048;
+	SetThink( &CTripmineGrenade::PowerupThink );
+	pev->nextthink = gpGlobals->time + 0.2;
 }
-
 
 void CTripmineGrenade :: Precache( void )
 {
-	PRECACHE_MODEL("models/v_tripmine.mdl");
+	CBaseEntity::Precache();
+
+	if ( !pev->model )
+		PRECACHE_MODEL( TripmineClassicMode() ? "models/hlclassic/w_tripmine.mdl" : "models/w_tripmine.mdl" );
 	PRECACHE_SOUND("weapons/mine_deploy.wav");
 	PRECACHE_SOUND("weapons/mine_activate.wav");
 	PRECACHE_SOUND("weapons/mine_charge.wav");
@@ -162,7 +184,6 @@ void CTripmineGrenade :: WarningThink( void  )
 	pev->nextthink = gpGlobals->time + 1.0;
 }
 
-
 void CTripmineGrenade :: PowerupThink( void  )
 {
 	TraceResult tr;
@@ -172,7 +193,7 @@ void CTripmineGrenade :: PowerupThink( void  )
 		// find an owner
 		edict_t *oldowner = pev->owner;
 		pev->owner = NULL;
-		UTIL_TraceLine( pev->origin + m_vecDir * 8, pev->origin - m_vecDir * 32, dont_ignore_monsters, ENT( pev ), &tr );
+		UTIL_TraceLine( pev->origin + m_vecDir * 8, pev->origin - m_vecDir * 32, dont_ignore_monsters, edict(), &tr );
 		if (tr.fStartSolid || (oldowner && tr.pHit == oldowner))
 		{
 			pev->owner = oldowner;
@@ -189,8 +210,8 @@ void CTripmineGrenade :: PowerupThink( void  )
 		}
 		else
 		{
-			STOP_SOUND( ENT(pev), CHAN_VOICE, "weapons/mine_deploy.wav" );
-			STOP_SOUND( ENT(pev), CHAN_BODY, "weapons/mine_charge.wav" );
+			STOP_SOUND( edict(), CHAN_VOICE, "weapons/mine_deploy.wav" );
+			STOP_SOUND( edict(), CHAN_BODY, "weapons/mine_charge.wav" );
 			SetThink(&CTripmineGrenade::SUB_Remove );
 			pev->nextthink = gpGlobals->time + 0.1;
 			ALERT( at_console, "WARNING:Tripmine at %.0f, %.0f, %.0f removed\n", pev->origin.x, pev->origin.y, pev->origin.z );
@@ -200,10 +221,9 @@ void CTripmineGrenade :: PowerupThink( void  )
 	}
 	else if (m_posOwner != m_hOwner->pev->origin || m_angleOwner != m_hOwner->pev->angles)
 	{
-		// disable
-		STOP_SOUND( ENT(pev), CHAN_VOICE, "weapons/mine_deploy.wav" );
-		STOP_SOUND( ENT(pev), CHAN_BODY, "weapons/mine_charge.wav" );
-		CBaseEntity *pMine = Create( "weapon_tripmine", pev->origin + m_vecDir * 24, pev->angles );
+		EMIT_SOUND_DYN( edict(), CHAN_VOICE, "weapons/mine_deploy.wav", 0, 0, SND_STOP, PITCH_NORM, 0, false, g_vecZero );
+		EMIT_SOUND_DYN( edict(), CHAN_BODY, "weapons/mine_charge.wav", 0, 0, SND_STOP, PITCH_NORM, 0, false, g_vecZero );
+		CBaseEntity *pMine = Create( "weapon_tripmine", pev->origin + m_vecDir * 24, pev->angles, false );
 		pMine->pev->spawnflags |= SF_NORESPAWN;
 
 		SetThink( &CTripmineGrenade::SUB_Remove );
@@ -212,17 +232,23 @@ void CTripmineGrenade :: PowerupThink( void  )
 		return;
 	}
 	// ALERT( at_console, "%d %.0f %.0f %0.f\n", pev->owner, m_pOwner->pev->origin.x, m_pOwner->pev->origin.y, m_pOwner->pev->origin.z );
- 
-	if (gpGlobals->time > m_flPowerUp)
-	{
-		// make solid
-		pev->solid = SOLID_BBOX;
-		UTIL_SetOrigin( pev, pev->origin );
 
+	if ( !( gpGlobals->time <= m_flPowerUp ) )
+	{
+		UTIL_SetOrigin( pev, pev->origin );
+		pev->solid = SOLID_BBOX;
 		MakeBeam( );
 
 		// play enabled sound
-        EMIT_SOUND_DYN( ENT(pev), CHAN_VOICE, "weapons/mine_activate.wav", 0.5, ATTN_NORM, 1.0, 75 );
+        EMIT_SOUND_DYN( edict(), CHAN_VOICE, "weapons/mine_activate.wav", 0.5, ATTN_NORM, 1, 75, 0, false, g_vecZero );
+
+		CBaseEntity *entities[16];
+
+		if ( UTIL_EntitiesInBox( entities, ARRAYSIZE( entities ), pev->origin + pev->mins, pev->origin + pev->maxs, FL_CLIENT | FL_MONSTER ) > 0 )
+		{
+			Detonate();
+			return;
+		}
 	}
 	pev->nextthink = gpGlobals->time + 0.1;
 }
@@ -230,81 +256,121 @@ void CTripmineGrenade :: PowerupThink( void  )
 
 void CTripmineGrenade :: KillBeam( void )
 {
-	if ( m_pBeam )
+	CBaseEntity *beam = m_hBeam;
+
+	if ( beam )
 	{
-		UTIL_Remove( m_pBeam );
-		m_pBeam = NULL;
+		UTIL_Remove( beam );
+		m_hBeam = NULL;
 	}
 }
 
+bool CTripmineGrenade::CheckAttacker( CBaseEntity *pAttacker )
+{
+	return false;
+}
+
+int CTripmineGrenade::Classify( void )
+{
+	return m_fPlayerPlaced ? CLASS_PLAYER_ALLY : CLASS_ALIEN_BIOWEAPON;
+}
+
+bool CTripmineGrenade::CriticalRemove( void )
+{
+	TakeDamage( VARS( INDEXENT( 0 ) ), VARS( INDEXENT( 0 ) ), 10.0f, DMG_GENERIC );
+	return true;
+}
+
+void CTripmineGrenade::UpdateOnRemove( void )
+{
+	CGrenade::UpdateOnRemove();
+	KillBeam();
+}
+
+void CTripmineGrenade::Detonate( void )
+{
+	CBaseEntity *owner = m_hRealOwner;
+
+	pev->owner = owner ? owner->edict() : NULL;
+	pev->health = 0;
+	Killed( VARS( pev->owner ), GIB_NORMAL );
+}
 
 void CTripmineGrenade :: MakeBeam( void )
 {
 	TraceResult tr;
+	TraceResult trOffset;
+	edict_t *oldOwner = pev->owner;
 
-	// ALERT( at_console, "serverflags %f\n", gpGlobals->serverflags );
-
-	UTIL_TraceLine( pev->origin, m_vecEnd, dont_ignore_monsters, ENT( pev ), &tr );
+	pev->owner = NULL;
+	UTIL_TraceLine( pev->origin, m_vecEnd, dont_ignore_monsters, edict(), &tr );
 
 	m_flBeamLength = tr.flFraction;
+	UTIL_TraceLine( pev->origin + m_vecDir * 8, m_vecEnd, dont_ignore_monsters, edict(), &trOffset );
+	m_flBeamLength2 = trOffset.flFraction;
 
 	// set to follow laser spot
 	SetThink( &CTripmineGrenade::BeamBreakThink );
 	pev->nextthink = gpGlobals->time + 0.1;
 
 	Vector vecTmpEnd = pev->origin + m_vecDir * 2048 * m_flBeamLength;
+	CBeam *beam = CBeam::BeamCreate( g_pModelNameLaser, 10 );
 
-	m_pBeam = CBeam::BeamCreate( g_pModelNameLaser, 10 );
-	m_pBeam->PointEntInit( vecTmpEnd, entindex() );
-	m_pBeam->SetColor( 0, 214, 198 );
-	m_pBeam->SetScrollRate( 255 );
-	m_pBeam->SetBrightness( 64 );
+	m_hBeam = beam;
+	beam->PointEntInit( vecTmpEnd, entindex() );
+	beam->SetColor( 0, 214, 198 );
+	beam->SetScrollRate( 255 );
+	beam->SetBrightness( 64 );
+	pev->owner = oldOwner;
+
+	if ( tr.flFraction >= 1.0f )
+		beam->SetFlags( beam->GetFlags() | BEAM_FSHADEIN );
 }
-
 
 void CTripmineGrenade :: BeamBreakThink( void  )
 {
-	BOOL bBlowup = 0;
+	if ( !m_fSolid )
+	{
+		CBaseEntity *entities[2];
+		int count = UTIL_EntitiesInBox( entities, ARRAYSIZE( entities ), pev->origin - Vector( 12, 12, 12 ),
+		                                pev->origin + Vector( 12, 12, 12 ), FL_MONSTER );
+		bool occupied = false;
+
+		for ( int i = 0; i < count; ++i )
+		{
+			if ( entities[i] != this )
+				occupied = true;
+		}
+
+		if ( !occupied )
+		{
+			pev->solid = SOLID_BBOX;
+			UTIL_SetSize( pev, Vector( -8, -8, -8 ), Vector( 8, 8, 8 ) );
+			m_fSolid = true;
+		}
+	}
 
 	TraceResult tr;
+	edict_t *oldOwner = pev->owner;
+
+	pev->owner = NULL;
 
 	// HACKHACK Set simple box using this really nice global!
 	gpGlobals->trace_flags = FTRACE_SIMPLEBOX;
-	UTIL_TraceLine( pev->origin, m_vecEnd, dont_ignore_monsters, ENT( pev ), &tr );
+	UTIL_TraceLine( pev->origin + m_vecDir * 8, m_vecEnd, dont_ignore_monsters, edict(), &tr );
+	pev->owner = oldOwner;
 
-	// ALERT( at_console, "%f : %f\n", tr.flFraction, m_flBeamLength );
-
-	// respawn detect. 
-	if ( !m_pBeam )
+	if ( !m_hBeam )
 	{
 		MakeBeam( );
 		if ( tr.pHit )
 			m_hOwner = CBaseEntity::Instance( tr.pHit );	// reset owner too
 	}
 
-	if (ffabs( m_flBeamLength - tr.flFraction ) > 0.001)
+	if (fabs( m_flBeamLength2 - tr.flFraction ) > 0.001 || !m_hOwner ||
+	     m_posOwner != m_hOwner->pev->origin || m_angleOwner != m_hOwner->pev->angles)
 	{
-		bBlowup = 1;
-	}
-	else
-	{
-		if (m_hOwner == NULL)
-			bBlowup = 1;
-		else if (m_posOwner != m_hOwner->pev->origin)
-			bBlowup = 1;
-		else if (m_angleOwner != m_hOwner->pev->angles)
-			bBlowup = 1;
-	}
-
-	if (bBlowup)
-	{
-		// a bit of a hack, but all CGrenade code passes pev->owner along to make sure the proper player gets credit for the kill
-		// so we have to restore pev->owner from pRealOwner, because an entity's tracelines don't strike it's pev->owner which meant
-		// that a player couldn't trigger his own tripmine. Now that the mine is exploding, it's safe the restore the owner so the 
-		// CGrenade code knows who the explosive really belongs to.
-		pev->owner = m_pRealOwner;
-		pev->health = 0;
-		Killed( VARS( pev->owner ), GIB_NORMAL );
+		Detonate();
 		return;
 	}
 
@@ -313,32 +379,25 @@ void CTripmineGrenade :: BeamBreakThink( void  )
 
 int CTripmineGrenade :: TakeDamage( entvars_t *pevInflictor, entvars_t *pevAttacker, float flDamage, int bitsDamageType )
 {
-	if (gpGlobals->time < m_flPowerUp && flDamage < pev->health)
-	{
-		// disable
-		// Create( "weapon_tripmine", pev->origin + m_vecDir * 24, pev->angles );
-		SetThink( &CTripmineGrenade::SUB_Remove );
+	if ( m_flPowerUp <= gpGlobals->time || pev->health <= flDamage )
+		return CBaseMonster::TakeDamage( pevInflictor, pevAttacker, flDamage, bitsDamageType );
+
+	SetThink( &CTripmineGrenade::SUB_Remove );
 		pev->nextthink = gpGlobals->time + 0.1;
 		KillBeam();
 		return FALSE;
 	}
-	return CGrenade::TakeDamage( pevInflictor, pevAttacker, flDamage, bitsDamageType );
-}
 
 void CTripmineGrenade::Killed( entvars_t *pevAttacker, int iGib )
 {
 	pev->takedamage = DAMAGE_NO;
-	
+
 	if ( pevAttacker && ( pevAttacker->flags & FL_CLIENT ) )
-	{
-		// some client has destroyed this mine, he'll get credit for any kills
-		pev->owner = ENT( pevAttacker );
-	}
+		m_fPlayerPlaced = true;
 
 	SetThink( &CTripmineGrenade::DelayDeathThink );
 	pev->nextthink = gpGlobals->time + RANDOM_FLOAT( 0.1, 0.3 );
-
-	EMIT_SOUND( ENT(pev), CHAN_BODY, "common/null.wav", 0.5, ATTN_NORM ); // shut off chargeup
+	EMIT_SOUND_DYN( edict(), CHAN_BODY, "common/null.wav", 0.5, ATTN_NORM, 0, PITCH_NORM, 0, false, g_vecZero ); // shut off chargeup
 }
 
 
@@ -346,7 +405,14 @@ void CTripmineGrenade::DelayDeathThink( void )
 {
 	KillBeam();
 	TraceResult tr;
-	UTIL_TraceLine ( pev->origin + m_vecDir * 8, pev->origin - m_vecDir * 64,  dont_ignore_monsters, ENT(pev), & tr);
+	UTIL_TraceLine ( pev->origin + m_vecDir * 8, pev->origin - m_vecDir * 64,  dont_ignore_monsters, edict(), & tr);
+
+	CBaseEntity *owner = m_hRealOwner;
+
+	if ( owner )
+		pev->owner = owner->edict();
+	else
+		pev->owner = NULL;
 
 	Explode( &tr, DMG_BLAST );
 }
@@ -354,47 +420,46 @@ void CTripmineGrenade::DelayDeathThink( void )
 
 LINK_ENTITY_TO_CLASS( weapon_tripmine, CTripmine );
 
-void CTripmine::Spawn( )
+void CTripmine::Spawn( void )
 {
 	Precache( );
-	m_iId = WEAPON_TRIPMINE;
-	SET_MODEL(ENT(pev), "models/v_tripmine.mdl");
-	pev->frame = 0;
-	pev->body = 3;
-	pev->sequence = TRIPMINE_GROUND;
-	// ResetSequenceInfo( );
-	pev->framerate = 0;
-
-	FallInit();// get ready to fall down
+	SET_MODEL( edict(), GetW_Model( TripmineClassicMode() ? "models/hlclassic/w_tripmine.mdl" : "models/w_tripmine.mdl" ) );
+	m_iId = WEAPON_TRIPMINE;// get ready to fall down
 
 	m_iDefaultAmmo = TRIPMINE_DEFAULT_GIVE;
+	m_flCustomDmg = pev->dmg;
+	CBasePhysicsObject::Spawn();
 
-#ifdef CLIENT_DLL
-	if ( !bIsMultiplayer() )
-#else
 	if ( !g_pGameRules->IsDeathmatch() )
-#endif
 	{
-		UTIL_SetSize(pev, Vector(-16, -16, 0), Vector(16, 16, 28) ); 
+		m_vecMinHullSize = Vector(-16, -16, 0);
+		m_vecMaxHullSize = Vector(16, 16, 28);
 	}
 }
 
 void CTripmine::Precache( void )
 {
-	PRECACHE_MODEL ("models/v_tripmine.mdl");
-	PRECACHE_MODEL ("models/p_tripmine.mdl");
-	UTIL_PrecacheOther( "monster_tripmine" );
+	PrecacheCustomModels();
 
-	m_usTripFire = PRECACHE_EVENT( 1, "events/tripfire.sc" );
+	bool classic = TripmineClassicMode();
+
+	PRECACHE_MODEL( classic ? "models/hlclassic/v_tripmine.mdl" : "models/v_tripmine.mdl");
+	PRECACHE_MODEL ( classic ? "models/hlclassic/w_tripmine.mdl" : "models/w_tripmine.mdl" );
+	PRECACHE_MODEL( classic ? "models/hlclassic/p_tripmine.mdl" : "models/p_tripmine.mdl");
+	UTIL_PrecacheOther( "monster_tripmine" );
 }
 
-int CTripmine::GetItemInfo(ItemInfo *p)
+bool CTripmine::GetItemInfo(ItemInfo *p)
 {
 	p->pszName = STRING(pev->classname);
 	p->pszAmmo1 = "Trip Mine";
 	p->iMaxAmmo1 = TRIPMINE_MAX_CARRY;
+	p->pszAmmo1Entity = "weapon_tripmine";
+	p->iAmmo1Drop = 1;
 	p->pszAmmo2 = NULL;
 	p->iMaxAmmo2 = -1;
+	p->pszAmmo2Entity = NULL;
+	p->iAmmo2Drop = AMMO_DROP_NONE;
 	p->iMaxClip = WEAPON_NOCLIP;
 	p->iSlot = 4;
 	p->iPosition = 2;
@@ -402,53 +467,44 @@ int CTripmine::GetItemInfo(ItemInfo *p)
 	p->iWeight = TRIPMINE_WEIGHT;
 	p->iFlags = ITEM_FLAG_LIMITINWORLD | ITEM_FLAG_EXHAUSTIBLE;
 
-	return 1;
+	return true;
 }
 
-BOOL CTripmine::Deploy( )
+bool CTripmine::Deploy( void )
 {
-	//pev->body = 0;
-	return DefaultDeploy( "models/v_tripmine.mdl", "models/p_tripmine.mdl", TRIPMINE_DRAW, "trip" );
-}
+	pev->body = 0;
 
+	if ( TripmineClassicMode() )
+		return DefaultDeploy( GetV_Model( "models/hlclassic/v_tripmine.mdl" ), GetP_Model( "models/hlclassic/p_tripmine.mdl" ), TRIPMINE_DRAW, "trip" );
+
+	return DefaultDeploy( GetV_Model( "models/v_tripmine.mdl" ), GetP_Model( "models/p_tripmine.mdl" ), TRIPMINE_DRAW, "trip" );
+}
 
 void CTripmine::Holster( int skiplocal /* = 0 */ )
 {
-	m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 0.5;
+	m_hPlayer->m_flNextAttack = 0.5;
+	m_fInReload = false;
 
-	if (!m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType])
+	if (!m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType])
 	{
-		// out of mines
-		m_pPlayer->pev->weapons &= ~(1<<WEAPON_TRIPMINE);
 		SetThink( &CTripmine::DestroyItem );
 		pev->nextthink = gpGlobals->time + 0.1;
 	}
 
-	SendWeaponAnim( TRIPMINE_HOLSTER );
-	EMIT_SOUND(ENT(m_pPlayer->pev), CHAN_WEAPON, "common/null.wav", 1.0, ATTN_NORM);
+	EMIT_SOUND_DYN(m_hPlayer->edict(), CHAN_WEAPON, "common/null.wav", 1.0, ATTN_NORM, 0, PITCH_NORM, 0, false, g_vecZero );
+	m_hPlayer->pev->viewmodel = 0;
 }
 
 void CTripmine::PrimaryAttack( void )
 {
-	if (m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0)
+	if (m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0)
 		return;
 
-	UTIL_MakeVectors( m_pPlayer->pev->v_angle + m_pPlayer->pev->punchangle );
-	Vector vecSrc	 = m_pPlayer->GetGunPosition( );
-	Vector vecAiming = gpGlobals->v_forward;
-
+	UTIL_MakeVectors( m_hPlayer->pev->v_angle + m_hPlayer->pev->punchangle );
+	Vector vecSrc	 = m_hPlayer->GetGunPosition( );
 	TraceResult tr;
 
-	UTIL_TraceLine( vecSrc, vecSrc + vecAiming * 128, dont_ignore_monsters, ENT( m_pPlayer->pev ), &tr );
-
-	int flags;
-#ifdef CLIENT_WEAPONS
-	flags = FEV_NOTHOST;
-#else
-	flags = 0;
-#endif
-
-	PLAYBACK_EVENT_FULL( flags, m_pPlayer->edict(), m_usTripFire, 0.0, (float *)&g_vecZero, (float *)&g_vecZero, 0.0, 0.0, 0, 0, 0, 0 );
+	UTIL_TraceLine( vecSrc, vecSrc + gpGlobals->v_forward * 128, dont_ignore_monsters, m_hPlayer->edict(), &tr );
 
 	if (tr.flFraction < 1.0)
 	{
@@ -456,41 +512,42 @@ void CTripmine::PrimaryAttack( void )
 		if ( pEntity && !(pEntity->pev->flags & FL_CONVEYOR) )
 		{
 			Vector angles = UTIL_VecToAngles( tr.vecPlaneNormal );
+			CTripmineGrenade *pEnt = (CTripmineGrenade *) Create( "monster_tripmine", tr.vecEndPos + tr.vecPlaneNormal * 8, angles, true, m_hPlayer->edict() );
 
-			CBaseEntity *pEnt = CBaseEntity::Create( "monster_tripmine", tr.vecEndPos + tr.vecPlaneNormal * 8, angles, m_pPlayer->edict() );
+			pEnt->pev->sequence = 1;
+			pEnt->pev->dmg = m_flCustomDmg;
 
-			m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType]--;
+			if ( m_flCustomDmg <= 0.0f )
+				pEnt->pev->dmg = sk_plr_tripmine.value;
+
+			pEnt->Spawn( GetW_Model( TripmineClassicMode() ? "models/hlclassic/w_tripmine.mdl" : "models/w_tripmine.mdl" ) );
+			pEnt->m_fPlayerPlaced = true;
+			--m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType];
 
 			// player "shoot" animation
-			m_pPlayer->SetAnimation( PLAYER_ATTACK1 );
-			
-			if ( m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 )
+			m_hPlayer->SetAnimation( PLAYER_ATTACK1 );
+
+			if ( m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 )
 			{
-				// no more mines! 
+				// no more mines!
 				RetireWeapon();
 				return;
 			}
-		}
-		else
-		{
-			// ALERT( at_console, "no deploy\n" );
-		}
-	}
-	else
-	{
 
+			SendWeaponAnim( TRIPMINE_DRAW );
+		}
 	}
-	
-	m_flNextPrimaryAttack = GetNextAttackDelay(0.3);
-	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_pPlayer->random_seed, 10, 15 );
+
+	m_flNextPrimaryAttack = gpGlobals->time + 0.3;
+	m_flTimeWeaponIdle = gpGlobals->time + RANDOM_FLOAT( 10, 15 );
 }
 
 void CTripmine::WeaponIdle( void )
 {
-	if ( m_flTimeWeaponIdle > UTIL_WeaponTimeBase() )
+	if ( !( m_flTimeWeaponIdle <= gpGlobals->time ) )
 		return;
 
-	if ( m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] > 0 )
+	if ( m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType] > 0 )
 	{
 		SendWeaponAnim( TRIPMINE_DRAW );
 	}
@@ -501,21 +558,21 @@ void CTripmine::WeaponIdle( void )
 	}
 
 	int iAnim;
-	float flRand = UTIL_SharedRandomFloat( m_pPlayer->random_seed, 0, 1 );
-	if (flRand <= 0.25)
+	float flRand = RANDOM_FLOAT( 0, 1 );
+	if ( !( flRand > 0.25f ) )
 	{
 		iAnim = TRIPMINE_IDLE1;
-		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 90.0 / 30.0;
+		m_flTimeWeaponIdle = gpGlobals->time + 90.0 / 30.0;
 	}
-	else if (flRand <= 0.75)
+	else if ( !( flRand > 0.75f ) )
 	{
 		iAnim = TRIPMINE_IDLE2;
-		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 60.0 / 30.0;
+		m_flTimeWeaponIdle = gpGlobals->time + 60.0 / 30.0;
 	}
 	else
 	{
 		iAnim = TRIPMINE_FIDGET;
-		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 100.0 / 30.0;
+		m_flTimeWeaponIdle = gpGlobals->time + 100.0 / 30.0;
 	}
 
 	SendWeaponAnim( iAnim );

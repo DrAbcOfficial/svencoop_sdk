@@ -3,6 +3,7 @@
 #include <memory.h>
 
 #include "hud.h"
+#include "clientobject.h"
 #include "cl_util.h"
 #include "const.h"
 #include "entity_types.h"
@@ -14,6 +15,12 @@
 #include "pm_shared.h"
 #include "bench.h"
 #include "Exports.h"
+#include "com_weapons.h"
+#include "parsemsg.h"
+#include "client_sound.h"
+#include "particle_engine.h"
+#include "particle_effects.h"
+#include "IClient.h"
 
 #include "particleman.h"
 extern IParticleMan *g_pParticleMan;
@@ -24,43 +31,60 @@ extern vec3_t v_origin;
 
 int g_iAlive = 1;
 
+static short On;
+static cl_entity_t mymodel;
+
+int __MsgFunc_OnTank( const char *pszName, int iSize, void *pbuf )
+{
+	BEGIN_READ( pbuf, iSize );
+	On = READ_BYTE();
+	return 1;
+}
+
+void MakeSpot( void )
+{
+	if ( !On )
+		return;
+
+	cl_entity_t *player = gEngfuncs.GetLocalPlayer();
+
+	if ( !player )
+		return;
+
+	int modelindex;
+	model_t *model = gEngfuncs.CL_LoadModel( "sprites/laserdot.spr", &modelindex );
+
+	memcpy( &mymodel, player, sizeof( mymodel ) );
+	mymodel.player = 0;
+	mymodel.model = model;
+	mymodel.curstate.modelindex = modelindex;
+	mymodel.curstate.rendermode = kRenderGlow;
+	mymodel.curstate.renderfx = kRenderFxNoDissipation;
+	mymodel.curstate.renderamt = 255;
+	mymodel.curstate.scale = 1;
+
+	vec3_t forward, right, up;
+	vec3_t viewheight( 0, 0, 28 );
+
+	AngleVectors( v_angles, forward, right, up );
+	gEngfuncs.pEventAPI->EV_LocalPlayerViewheight( viewheight );
+
+	vec3_t start = player->origin + viewheight;
+	vec3_t end = start + forward * 8192;
+	pmtrace_t trace = *gEngfuncs.PM_TraceLine( start, end, PM_STUDIO_IGNORE, 2, -1 );
+
+	mymodel.origin = trace.endpos;
+	gEngfuncs.CL_CreateVisibleEntity( ET_NORMAL, &mymodel );
+}
+
 /*
 ========================
 HUD_AddEntity
 	Return 0 to filter entity from visible list for rendering
 ========================
 */
-int CL_DLLEXPORT HUD_AddEntity( int type, struct cl_entity_s *ent, const char *modelname )
+int DLLEXPORT HUD_AddEntity( int type, cl_entity_t *ent, const char *modelname )
 {
-//	RecClAddEntity(type, ent, modelname);
-
-	switch ( type )
-	{
-	case ET_NORMAL:
-		Bench_CheckEntity( type, ent, modelname );
-		break;
-	case ET_PLAYER:
-	case ET_BEAM:
-	case ET_TEMPENTITY:
-	case ET_FRAGMENTED:
-	default:
-		break;
-	}
-	// each frame every entity passes this function, so the overview hooks it to filter the overview entities
-	// in spectator mode:
-	// each frame every entity passes this function, so the overview hooks 
-	// it to filter the overview entities
-
-	if ( g_iUser1 )
-	{
-		gHUD.m_Spectator.AddOverviewEntity( type, ent, modelname );
-
-		if ( (	g_iUser1 == OBS_IN_EYE || gHUD.m_Spectator.m_pip->value == INSET_IN_EYE ) &&
-				ent->index == g_iUser2 )
-			return 0;	// don't draw the player we are following in eye
-
-	}
-
 	return 1;
 }
 
@@ -73,7 +97,7 @@ playerstate update in entity_state_t.  In order for these overrides to eventuall
 structure, we need to copy them into the state structure at this point.
 =========================
 */
-void CL_DLLEXPORT HUD_TxferLocalOverrides( struct entity_state_s *state, const struct clientdata_s *client )
+void DLLEXPORT HUD_TxferLocalOverrides( entity_state_t *state, const clientdata_t *client )
 {
 //	RecClTxferLocalOverrides(state, client);
 
@@ -88,6 +112,7 @@ void CL_DLLEXPORT HUD_TxferLocalOverrides( struct entity_state_s *state, const s
 
 	// Fire prevention
 	state->iuser4 = client->iuser4;
+	state->fuser4 = client->fuser4;
 }
 
 /*
@@ -98,7 +123,7 @@ We have received entity_state_t for this player over the network.  We need to co
 playerstate structure
 =========================
 */
-void CL_DLLEXPORT HUD_ProcessPlayerState( struct entity_state_s *dst, const struct entity_state_s *src )
+void DLLEXPORT HUD_ProcessPlayerState( entity_state_t *dst, const entity_state_t *src )
 {
 //	RecClProcessPlayerState(dst, src);
 
@@ -142,6 +167,7 @@ void CL_DLLEXPORT HUD_ProcessPlayerState( struct entity_state_s *dst, const stru
 	dst->playerclass			= src->playerclass;
 	dst->team					= src->team;
 	dst->colormap				= src->colormap;
+	dst->fuser4					= src->fuser4;
 
 #if defined( _TFC )
 	dst->fuser1					= src->fuser1;
@@ -151,12 +177,10 @@ void CL_DLLEXPORT HUD_ProcessPlayerState( struct entity_state_s *dst, const stru
 	cl_entity_t *player = gEngfuncs.GetLocalPlayer();	// Get the local player's index
 	if ( dst->number == player->index )
 	{
-		g_iPlayerClass = dst->playerclass;
 		g_iTeamNumber = dst->team;
 
 		g_iUser1 = src->iuser1;
 		g_iUser2 = src->iuser2;
-		g_iUser3 = src->iuser3;
 	}
 }
 
@@ -170,7 +194,7 @@ Because we can predict an arbitrary number of frames before the server responds 
  update is occupying.
 =========================
 */
-void CL_DLLEXPORT HUD_TxferPredictionData ( struct entity_state_s *ps, const struct entity_state_s *pps, struct clientdata_s *pcd, const struct clientdata_s *ppcd, struct weapon_data_s *wd, const struct weapon_data_s *pwd )
+void DLLEXPORT HUD_TxferPredictionData ( entity_state_t *ps, const entity_state_t *pps, clientdata_t *pcd, const clientdata_t *ppcd, weapon_data_t *wd, const weapon_data_t *pwd )
 {
 //	RecClTxferPredictionData(ps, pps, pcd, ppcd, wd, pwd);
 
@@ -209,7 +233,6 @@ void CL_DLLEXPORT HUD_TxferPredictionData ( struct entity_state_s *ps, const str
 		// iuser3 is not used for duck prevention (since the spectator can't duck at all)
 		pcd->iuser1 = g_iUser1;	// observer mode
 		pcd->iuser2 = g_iUser2; // first target
-		pcd->iuser3 = g_iUser3; // second target
 	}
 
 	// Fire prevention
@@ -217,13 +240,18 @@ void CL_DLLEXPORT HUD_TxferPredictionData ( struct entity_state_s *ps, const str
 
 	pcd->fuser2					= ppcd->fuser2;
 	pcd->fuser3					= ppcd->fuser3;
+	pcd->fuser4					= ppcd->fuser4;
 
 	VectorCopy( ppcd->vuser1, pcd->vuser1 );
 	VectorCopy( ppcd->vuser2, pcd->vuser2 );
 	VectorCopy( ppcd->vuser3, pcd->vuser3 );
 	VectorCopy( ppcd->vuser4, pcd->vuser4 );
 
-	memcpy( wd, pwd, 32 * sizeof( weapon_data_t ) );
+	memmove( wd, pwd, MAX_WEAPONS * sizeof( weapon_data_t ) );
+	gHUD.m_Ammo.UpdateWeaponList( wd );
+
+	if ( g_iUser1 == OBS_IN_EYE )
+		HUD_SendWeaponAnim( pcd->weaponanim, pcd->iuser3, 1 );
 }
 
 #if defined( BEAM_TEST )
@@ -304,7 +332,7 @@ HUD_CreateEntities
 Gives us a chance to add additional entities to the render this frame
 =========================
 */
-void CL_DLLEXPORT HUD_CreateEntities( void )
+void DLLEXPORT HUD_CreateEntities( void )
 {
 //	RecClCreateEntities();
 
@@ -312,7 +340,7 @@ void CL_DLLEXPORT HUD_CreateEntities( void )
 	Beams();
 #endif
 
-	Bench_AddObjects();
+	MakeSpot();
 
 	// Add in any game specific objects
 	Game_AddObjects();
@@ -332,7 +360,7 @@ The entity's studio model description indicated an event was
 fired during this frame, handle the event by it's tag ( e.g., muzzleflash, sound )
 =========================
 */
-void CL_DLLEXPORT HUD_StudioEvent( const struct mstudioevent_s *event, const struct cl_entity_s *entity )
+void DLLEXPORT HUD_StudioEvent( const mstudioevent_t *event, const cl_entity_t *entity )
 {
 //	RecClStudioEvent(event, entity);
 
@@ -368,11 +396,135 @@ void CL_DLLEXPORT HUD_StudioEvent( const struct mstudioevent_s *event, const str
 		break;
 	// Client side sound
 	case 5004:		
-		gEngfuncs.pfnPlaySoundByNameAtLocation( (char *)event->options, 1.0, (float *)&entity->attachment[0] );
+		if (event->options[0])
+		{
+			CClient_SoundEngine::GetSoundEngine()->PlayFMODSound(0, entity->index,
+				entity->attachment[0], CHAN_AUTO, event->options, 1.0, ATTN_NORM, 0, PITCH_NORM, -1, 0);
+			g_pEngineClient->QueueDemoSound((float *)&entity->attachment[0], CHAN_AUTO,
+				event->options, 1.0f, ATTN_NORM, 0, PITCH_NORM);
+		}
+		break;
+	case 5005:
+	case 5006:
+		if (event->options[0])
+			ParticleEngine()->PlayMuzzleScriptByName((cl_entity_t *)entity, event->options);
 		break;
 	default:
 		break;
 	}
+}
+
+static const char *pGlassSounds[] =
+{
+	"debris/glass1.wav",
+	"debris/glass2.wav",
+	"debris/glass3.wav",
+	"debris/glass4.wav",
+};
+
+static const char *pMetalSounds[] =
+{
+	"debris/metal1.wav",
+	"debris/metal2.wav",
+	"debris/metal3.wav",
+	"debris/metal4.wav",
+};
+
+static const char *pFleshSounds[] =
+{
+	"debris/flesh1.wav",
+	"debris/flesh2.wav",
+	"debris/flesh3.wav",
+	"debris/flesh5.wav",
+	"debris/flesh6.wav",
+	"debris/flesh7.wav",
+};
+
+static const char *pWoodSounds[] =
+{
+	"debris/wood1.wav",
+	"debris/wood2.wav",
+	"debris/wood3.wav",
+};
+
+static const char *pShrapSounds[] =
+{
+	"weapons/debris3.wav",
+};
+
+static const char *pShellSounds[] =
+{
+	"player/pl_shell1.wav",
+	"player/pl_shell2.wav",
+	"player/pl_shell3.wav",
+};
+
+static const char *pConcreteSounds[] =
+{
+	"debris/concrete1.wav",
+	"debris/concrete2.wav",
+	"debris/concrete3.wav",
+};
+
+static const char *pShotShellSounds[] =
+{
+	"weapons/sshell1.wav",
+	"weapons/sshell2.wav",
+	"weapons/sshell3.wav",
+};
+
+void PlayDebrisImpact(TEMPENTITY *pTemp, float damp)
+{
+	if (damp <= 0)
+		return;
+
+	float speed = fabs(pTemp->entity.baseline.origin[2]);
+
+	if (speed < 100)
+		return;
+
+	const char *sample;
+
+	switch (pTemp->hitSound)
+	{
+	case BOUNCE_GLASS:
+		sample = pGlassSounds[gEngfuncs.pfnRandomLong(0, ARRAYSIZE(pGlassSounds) - 1)];
+		break;
+	case BOUNCE_METAL:
+		sample = pMetalSounds[gEngfuncs.pfnRandomLong(0, ARRAYSIZE(pMetalSounds) - 1)];
+		break;
+	case BOUNCE_FLESH:
+		sample = pFleshSounds[gEngfuncs.pfnRandomLong(0, ARRAYSIZE(pFleshSounds) - 1)];
+		break;
+	case BOUNCE_WOOD:
+		sample = pWoodSounds[gEngfuncs.pfnRandomLong(0, ARRAYSIZE(pWoodSounds) - 1)];
+		break;
+	case BOUNCE_SHRAP:
+		sample = pShrapSounds[gEngfuncs.pfnRandomLong(0, ARRAYSIZE(pShrapSounds) - 1)];
+		break;
+	case BOUNCE_SHELL:
+		sample = pShellSounds[gEngfuncs.pfnRandomLong(0, ARRAYSIZE(pShellSounds) - 1)];
+		break;
+	case BOUNCE_CONCRETE:
+		sample = pConcreteSounds[gEngfuncs.pfnRandomLong(0, ARRAYSIZE(pConcreteSounds) - 1)];
+		break;
+	case BOUNCE_SHOTSHELL:
+		sample = pShotShellSounds[gEngfuncs.pfnRandomLong(0, ARRAYSIZE(pShotShellSounds) - 1)];
+		break;
+	default:
+		return;
+	}
+
+	float volume = speed / 300.0f;
+
+	if (volume >= 1.0f)
+		volume = 1.0f;
+
+	int pitch = gEngfuncs.pfnRandomLong(0, 12) + 94;
+
+	CClient_SoundEngine::GetSoundEngine()->PlayFMODSound(SOUNDMSG_ORIGIN, -1, pTemp->entity.origin,
+		CHAN_AUTO, sample, volume, 1.0f, 0, pitch, -1, 0);
+	g_pEngineClient->QueueDemoSound(pTemp->entity.origin, CHAN_AUTO, sample, volume, 1.0f, 0, pitch);
 }
 
 /*
@@ -382,7 +534,7 @@ CL_UpdateTEnts
 Simulation and cleanup of temporary entities
 =================
 */
-void CL_DLLEXPORT HUD_TempEntUpdate (
+void DLLEXPORT HUD_TempEntUpdate (
 	double frametime,   // Simulation time
 	double client_time, // Absolute time on client
 	double cl_gravity,  // True gravity on client
@@ -394,9 +546,11 @@ void CL_DLLEXPORT HUD_TempEntUpdate (
 //	RecClTempEntUpdate(frametime, client_time, cl_gravity, ppTempEntFree, ppTempEntActive, Callback_AddVisibleEntity, Callback_TempEntPlaySound);
 
 	static int gTempEntFrame = 0;
+	const int FTENT_COLLIDED = 0x00100000;
+
 	int			i;
 	TEMPENTITY	*pTemp, *pnext, *pprev;
-	float		freq, gravity, gravitySlow, life, fastFreq;
+	float		gravity, gravitySlow, life, fastFreq;
 
 	Vector		vAngles;
 
@@ -405,12 +559,8 @@ void CL_DLLEXPORT HUD_TempEntUpdate (
 	if ( g_pParticleMan )
 		 g_pParticleMan->SetVariables( cl_gravity, vAngles );
 
-	// Nothing to simulate
-	if ( !*ppTempEntActive )		
-		return;
-
 	// in order to have tents collide with players, we have to run the player prediction code so
-	// that the client has the player list. We run this code once when we detect any COLLIDEALL 
+	// that the client has the player list. We run this code once when we detect any COLLIDEALL
 	// tent, then set this BOOL to true so the code doesn't get run again if there's more than
 	// one COLLIDEALL ent for this update. (often are).
 	gEngfuncs.pEventAPI->EV_SetUpPlayerPrediction( false, true );
@@ -423,6 +573,8 @@ void CL_DLLEXPORT HUD_TempEntUpdate (
 
 	// !!!BUGBUG	-- This needs to be time based
 	gTempEntFrame = (gTempEntFrame+1) & 31;
+
+	ClientObject_Think();
 
 	pTemp = *ppTempEntActive;
 
@@ -441,7 +593,6 @@ void CL_DLLEXPORT HUD_TempEntUpdate (
 	}
 
 	pprev = NULL;
-	freq = client_time * 0.01;
 	fastFreq = client_time * 5.5;
 	gravity = -frametime * cl_gravity;
 	gravitySlow = gravity * 0.5;
@@ -479,8 +630,10 @@ void CL_DLLEXPORT HUD_TempEntUpdate (
 		}
 		else
 		{
+			int previousContents = gEngfuncs.PM_PointContents( pTemp->entity.origin, NULL );
+
 			pprev = pTemp;
-			
+
 			VectorCopy( pTemp->entity.origin, pTemp->entity.prevstate.origin );
 
 			if ( pTemp->flags & FTENT_SPARKSHOWER )
@@ -528,10 +681,6 @@ void CL_DLLEXPORT HUD_TempEntUpdate (
 			}
 			else if ( pTemp->flags & FTENT_SPIRAL )
 			{
-				float s, c;
-				s = sin( pTemp->entity.baseline.origin[2] + fastFreq );
-				c = cos( pTemp->entity.baseline.origin[2] + fastFreq );
-
 				pTemp->entity.origin[0] += pTemp->entity.baseline.origin[0] * frametime + 8 * sin( client_time * 20 + (int)pTemp );
 				pTemp->entity.origin[1] += pTemp->entity.baseline.origin[1] * frametime + 4 * sin( client_time * 30 + (int)pTemp );
 				pTemp->entity.origin[2] += pTemp->entity.baseline.origin[2] * frametime;
@@ -542,7 +691,16 @@ void CL_DLLEXPORT HUD_TempEntUpdate (
 				for ( i = 0; i < 3; i++ ) 
 					pTemp->entity.origin[i] += pTemp->entity.baseline.origin[i] * frametime;
 			}
-			
+
+			vec3_t position = pTemp->entity.origin;
+
+			if ( gEngfuncs.PM_PointContents( position, NULL ) == CONTENTS_WATER &&
+			     previousContents != CONTENTS_WATER && previousContents != CONTENTS_SOLID &&
+			     Length( pTemp->entity.baseline.origin ) > 512 )
+			{
+				MakeWaterSplash( position, 0 );
+			}
+
 			if ( pTemp->flags & FTENT_SPRANIMATE )
 			{
 				pTemp->entity.curstate.frame += frametime * pTemp->entity.curstate.framerate;
@@ -590,26 +748,22 @@ void CL_DLLEXPORT HUD_TempEntUpdate (
 				if ( pTemp->flags & FTENT_COLLIDEALL )
 				{
 					pmtrace_t pmtrace;
-					physent_t *pe;
 				
 					gEngfuncs.pEventAPI->EV_SetTraceHull( 2 );
 
 					gEngfuncs.pEventAPI->EV_PlayerTrace( pTemp->entity.prevstate.origin, pTemp->entity.origin, PM_STUDIO_BOX, -1, &pmtrace );
 
 
-					if ( pmtrace.fraction != 1 )
+					if ( pmtrace.fraction != 1 &&
+						!( pmtrace.startsolid && gEngfuncs.PM_PointContents( position, NULL ) == CONTENTS_EMPTY ) )
 					{
-						pe = gEngfuncs.pEventAPI->EV_GetPhysent( pmtrace.ent );
-
-						if ( !pmtrace.ent || ( pe->info != pTemp->clientIndex ) )
-						{
-							traceFraction = pmtrace.fraction;
+						gEngfuncs.pEventAPI->EV_GetPhysent( pmtrace.ent );
+						traceFraction = pmtrace.fraction;
 							VectorCopy( pmtrace.plane.normal, traceNormal );
 
-							if ( pTemp->hitcallback )
+							if ( pTemp->hitcallback && !( pTemp->flags & FTENT_COLLIDED ) )
 							{
 								(*pTemp->hitcallback)( pTemp, &pmtrace );
-							}
 						}
 					}
 				}
@@ -619,9 +773,9 @@ void CL_DLLEXPORT HUD_TempEntUpdate (
 					
 					gEngfuncs.pEventAPI->EV_SetTraceHull( 2 );
 
-					gEngfuncs.pEventAPI->EV_PlayerTrace( pTemp->entity.prevstate.origin, pTemp->entity.origin, PM_STUDIO_BOX | PM_WORLD_ONLY, -1, &pmtrace );					
+					gEngfuncs.pEventAPI->EV_PlayerTrace( pTemp->entity.prevstate.origin, pTemp->entity.origin, PM_WORLD_ONLY, -1, &pmtrace );
 
-					if ( pmtrace.fraction != 1 )
+					if ( pmtrace.fraction != 1 && !pmtrace.startsolid )
 					{
 						traceFraction = pmtrace.fraction;
 						VectorCopy( pmtrace.plane.normal, traceNormal );
@@ -656,22 +810,28 @@ void CL_DLLEXPORT HUD_TempEntUpdate (
 					if ( pTemp->flags & (FTENT_GRAVITY|FTENT_SLOWGRAVITY) )
 					{
 						damp *= 0.5;
-						if ( traceNormal[2] > 0.9 )		// Hit floor?
+						if ( pTemp->flags & FTENT_COLLIDED )
 						{
-							if ( pTemp->entity.baseline.origin[2] <= 0 && pTemp->entity.baseline.origin[2] >= gravity*3 )
+							pTemp->bounceFactor = 0;
+							damp = 0;
+
+							if ( gEngfuncs.PM_PointContents( position, NULL ) != CONTENTS_WATER )
 							{
-								damp = 0;		// Stop
 								pTemp->flags &= ~(FTENT_ROTATE|FTENT_GRAVITY|FTENT_SLOWGRAVITY|FTENT_COLLIDEWORLD|FTENT_SMOKETRAIL);
+								pTemp->entity.baseline.angles[0] = 0;
+								pTemp->entity.baseline.angles[2] = 0;
 								pTemp->entity.angles[0] = 0;
 								pTemp->entity.angles[2] = 0;
+								pTemp->entity.curstate.angles[0] = 0;
+								pTemp->entity.curstate.angles[2] = 0;
 							}
+
+							VectorCopy( pTemp->entity.angles, pTemp->entity.latched.prevangles );
 						}
 					}
 
-					if (pTemp->hitSound)
-					{
-						Callback_TempEntPlaySound(pTemp, damp);
-					}
+					if ( !( pTemp->flags & FTENT_COLLIDED ) )
+						PlayDebrisImpact(pTemp, damp);
 
 					if (pTemp->flags & FTENT_COLLIDEKILL)
 					{
@@ -685,19 +845,22 @@ void CL_DLLEXPORT HUD_TempEntUpdate (
 						if ( damp != 0 )
 						{
 							proj = DotProduct( pTemp->entity.baseline.origin, traceNormal );
+
+							for ( i = 0; i < 3; i++ )
+								pTemp->entity.baseline.origin[i] -= proj * traceNormal[i] * frametime;
+
+							proj = DotProduct( pTemp->entity.baseline.origin, traceNormal );
 							VectorMA( pTemp->entity.baseline.origin, -proj*2, traceNormal, pTemp->entity.baseline.origin );
-							// Reflect rotation (fake)
-
-							pTemp->entity.angles[1] = -pTemp->entity.angles[1];
 						}
-						
-						if ( damp != 1 )
-						{
 
-							VectorScale( pTemp->entity.baseline.origin, damp, pTemp->entity.baseline.origin );
-							VectorScale( pTemp->entity.angles, 0.9, pTemp->entity.angles );
-						}
+						VectorScale( pTemp->entity.baseline.origin, damp, pTemp->entity.baseline.origin );
 					}
+
+					pTemp->flags |= FTENT_COLLIDED;
+				}
+				else
+				{
+					pTemp->flags &= ~FTENT_COLLIDED;
 				}
 			}
 
@@ -719,7 +882,27 @@ void CL_DLLEXPORT HUD_TempEntUpdate (
 			}
 
 			if ( pTemp->flags & FTENT_GRAVITY )
-				pTemp->entity.baseline.origin[2] += gravity;
+			{
+				if ( gEngfuncs.PM_PointContents( pTemp->entity.origin, NULL ) == CONTENTS_WATER )
+				{
+					for ( i = 0; i < 3; i++ )
+					{
+						pTemp->entity.baseline.origin[i] -= pTemp->entity.baseline.origin[i] * 0.95 * frametime;
+
+						if ( pTemp->entity.baseline.angles[i] > 50 )
+							pTemp->entity.baseline.angles[i] -= pTemp->entity.baseline.angles[i] * 0.95 * frametime;
+					}
+
+					if ( pTemp->entity.baseline.origin[2] < -500 )
+						pTemp->entity.baseline.origin[2] *= 0.5;
+
+					pTemp->entity.baseline.origin[2] += gEngfuncs.pfnRandomLong( 50, 100 ) * frametime;
+				}
+				else
+				{
+					pTemp->entity.baseline.origin[2] += gravity;
+				}
+			}
 			else if ( pTemp->flags & FTENT_SLOWGRAVITY )
 				pTemp->entity.baseline.origin[2] += gravitySlow;
 
@@ -763,7 +946,7 @@ If you specify negative numbers for beam start and end point entities, then
 Indices must start at 1, not zero.
 =================
 */
-cl_entity_t CL_DLLEXPORT *HUD_GetUserEntity( int index )
+cl_entity_t DLLEXPORT *HUD_GetUserEntity( int index )
 {
 //	RecClGetUserEntity(index);
 

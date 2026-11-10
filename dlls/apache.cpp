@@ -17,25 +17,44 @@
 #include "extdll.h"
 #include "util.h"
 #include "cbase.h"
+#include "CClassicMode.h"
 #include "monsters.h"
 #include "weapons.h"
 #include "nodes.h"
 #include "effects.h"
+#include "soundent.h"
+#include "sound_message.h"
+#include "server_sound.h"
 
 extern DLL_GLOBAL int		g_iSkillLevel;
+
+extern cvar_t sk_apache_health;
+extern cvar_t sk_apache_enable_rockets;
 
 #define SF_WAITFORTRIGGER	(0x04 | 0x40) // UNDONE: Fix!
 #define SF_NOWRECKAGE		0x08
 
 class CApache : public CBaseMonster
 {
+public:
+	void OnDestroy( void ) { CBaseMonster::OnDestroy(); }
+	void UpdateOnRemove( void )
+	{
+		CBaseMonster::UpdateOnRemove();
+
+		EMIT_SOUND_DYN( edict(), CHAN_STATIC, "apache/ap_rotor2.wav", 0, 0, SND_STOP, PITCH_NORM );
+	}
+
+private:
 	int		Save( CSave &save );
 	int		Restore( CRestore &restore );
 	static	TYPEDESCRIPTION m_SaveData[];
 
 	void Spawn( void );
 	void Precache( void );
-	int  Classify( void ) { return CLASS_HUMAN_MILITARY; };
+	void Look( int iDistance );
+	int  Classify( void ) { return GetClassification( CLASS_HUMAN_MILITARY ); };
+	float GetPointsForDamage( float flDamage );
 	int  BloodColor( void ) { return DONT_BLEED; }
 	void Killed( entvars_t *pevAttacker, int iGib );
 	void GibMonster( void );
@@ -89,6 +108,7 @@ class CApache : public CBaseMonster
 	CBeam *m_pBeam;
 };
 LINK_ENTITY_TO_CLASS( monster_apache, CApache );
+LINK_ENTITY_TO_CLASS( monster_blkop_apache, CApache );
 
 TYPEDESCRIPTION	CApache::m_SaveData[] = 
 {
@@ -113,21 +133,170 @@ TYPEDESCRIPTION	CApache::m_SaveData[] =
 };
 IMPLEMENT_SAVERESTORE( CApache, CBaseMonster );
 
+float CApache::GetPointsForDamage( float flDamage )
+{
+	return ( pev->max_health / sk_apache_health.value ) * 30.0f
+	       * ( flDamage / pev->max_health );
+}
+
+
+#define APACHE_LOOK_MAX_ENTITIES	100
+#define APACHE_LOOK_MIN_DISTANCE	128
+#define APACHE_TURN_MIN_SPEED		1200
+
+// Sight for a gunship: it can't aim at what is almost beneath it, and it also
+// sees brush entities, so a map can give it targets like a func_breakable
+void CApache::Look( int iDistance )
+{
+	int iSighted = 0;
+
+	ClearConditions( bits_COND_SEE_HATE | bits_COND_SEE_DISLIKE | bits_COND_SEE_ENEMY | bits_COND_SEE_FEAR | bits_COND_SEE_NEMESIS | bits_COND_SEE_CLIENT );
+
+	m_pLink = NULL;
+	m_pSightLink = NULL;
+
+	if ( FBitSet( pev->spawnflags, SF_MONSTER_PRISONER ) )
+		return;
+
+	CBaseEntity *pList[APACHE_LOOK_MAX_ENTITIES];
+	Vector delta( iDistance, iDistance, iDistance );
+	int count = UTIL_EntitiesInBox( pList, APACHE_LOOK_MAX_ENTITIES, pev->origin - delta, pev->origin + delta, FL_CLIENT | FL_MONSTER );
+
+	for ( int i = 0; i < count; i++ )
+	{
+		CBaseEntity *pSightEnt = pList[i];
+
+		if ( !pSightEnt )
+			continue;
+
+		if ( ( pSightEnt->Center() - Center() ).Length2D() < APACHE_LOOK_MIN_DISTANCE || pSightEnt == this
+		     || FBitSet( pSightEnt->pev->spawnflags, SF_MONSTER_PRISONER ) || !FVisible( pSightEnt, true ) )
+			continue;
+
+		if ( pSightEnt->pev->health > 0 && FInViewCone( pSightEnt ) )
+		{
+			if ( pSightEnt->IsPlayer() )
+			{
+				if ( pev->spawnflags & SF_MONSTER_WAIT_TILL_SEEN )
+				{
+					if ( !pSightEnt->MyMonsterPointer()->FInViewCone( this ) )
+						continue;
+
+					pev->spawnflags &= ~SF_MONSTER_WAIT_TILL_SEEN;
+				}
+
+				iSighted |= bits_COND_SEE_CLIENT;
+			}
+
+			pSightEnt->m_pLink = m_pLink;
+			m_pLink = pSightEnt;
+
+			if ( pSightEnt == m_hEnemy )
+				iSighted |= bits_COND_SEE_ENEMY;
+
+			switch ( IRelationship( pSightEnt ) )
+			{
+				case R_NM:
+					iSighted |= bits_COND_SEE_NEMESIS;
+					break;
+				case R_HT:
+					iSighted |= bits_COND_SEE_HATE;
+					break;
+				case R_DL:
+					iSighted |= bits_COND_SEE_DISLIKE;
+					break;
+				case R_FR:
+					iSighted |= bits_COND_SEE_FEAR;
+					break;
+				default:
+					break;
+			}
+		}
+
+		pSightEnt->m_pSightLink = m_pSightLink;
+		m_pSightLink = pSightEnt;
+	}
+
+	count = UTIL_BrushEntsInBox( pList, APACHE_LOOK_MAX_ENTITIES, pev->origin - delta, pev->origin + delta );
+
+	for ( int i = 0; i < count; i++ )
+	{
+		CBaseEntity *pSightEnt = pList[i];
+
+		if ( !pSightEnt || pSightEnt == this || pSightEnt->pev->health <= 0 )
+			continue;
+
+		if ( IRelationship( pSightEnt ) == R_NO && pSightEnt != m_hEnemy )
+			continue;
+
+		if ( !FVisible( pSightEnt, true ) )
+			continue;
+
+		if ( FInViewCone( pSightEnt ) )
+		{
+			pSightEnt->m_pLink = m_pLink;
+			m_pLink = pSightEnt;
+
+			if ( pSightEnt == m_hEnemy )
+				iSighted |= bits_COND_SEE_ENEMY;
+
+			switch ( IRelationship( pSightEnt ) )
+			{
+				case R_NM:
+					iSighted |= bits_COND_SEE_NEMESIS;
+					break;
+				case R_HT:
+					iSighted |= bits_COND_SEE_HATE;
+					break;
+				case R_DL:
+					iSighted |= bits_COND_SEE_DISLIKE;
+					break;
+				case R_FR:
+					iSighted |= bits_COND_SEE_FEAR;
+					break;
+				default:
+					break;
+			}
+		}
+
+		pSightEnt->m_pSightLink = m_pSightLink;
+		m_pSightLink = pSightEnt;
+	}
+
+	SetConditions( iSighted );
+}
 
 void CApache :: Spawn( void )
 {
 	Precache( );
+
+	if ( !SetupModel() )
+	{
+		const char *model = "models/apache.mdl";
+
+		if ( FClassnameIs( pev, "monster_blkop_apache" ) )
+			model = "models/blkop_apache.mdl";
+		else if ( CClassicMode::GetInstance()->IsEnabled() )
+			model = "models/hlclassic/apache.mdl";
+
+		UTIL_SetModel( this, model );
+	}
+
+	if ( pev->scale <= 0.0f )
+		pev->scale = 1.0f;
+
 	// motor
 	pev->movetype = MOVETYPE_FLY;
 	pev->solid = SOLID_BBOX;
-
-	SET_MODEL(ENT(pev), "models/apache.mdl");
 	UTIL_SetSize( pev, Vector( -32, -32, -64 ), Vector( 32, 32, 0 ) );
 	UTIL_SetOrigin( pev, pev->origin );
 
 	pev->flags |= FL_MONSTER;
 	pev->takedamage		= DAMAGE_AIM;
-	pev->health			= gSkillData.apacheHealth;
+	if ( pev->health == 0.0f )
+		pev->health			= sk_apache_health.value;
+
+	pev->max_health = pev->health;
 
 	m_flFieldOfView = -0.707; // 270 degrees
 
@@ -154,23 +323,32 @@ void CApache :: Spawn( void )
 
 void CApache::Precache( void )
 {
-	PRECACHE_MODEL("models/apache.mdl");
+	CBaseEntity::Precache();
 
-	PRECACHE_SOUND("apache/ap_rotor1.wav");
+	if ( FStringNull( pev->model ) )
+	{
+		const char *model = "models/apache.mdl";
+
+		if ( CClassicMode::GetInstance()->IsEnabled() )
+			model = "models/hlclassic/apache.mdl";
+		else if ( FClassnameIs( pev, "monster_blkop_apache" ) )
+			model = "models/blkop_apache.mdl";
+
+		UTIL_PrecacheModel( this, model );
+	}
+
 	PRECACHE_SOUND("apache/ap_rotor2.wav");
-	PRECACHE_SOUND("apache/ap_rotor3.wav");
-	PRECACHE_SOUND("apache/ap_whine1.wav");
 
 	PRECACHE_SOUND("weapons/mortarhit.wav");
 
-	m_iSpriteTexture = PRECACHE_MODEL( "sprites/white.spr" );
-
 	PRECACHE_SOUND("turret/tu_fire1.wav");
 
-	PRECACHE_MODEL("sprites/lgtning.spr");
+	UTIL_PrecacheModel( this, "sprites/lgtning.spr");
 
-	m_iExplode	= PRECACHE_MODEL( "sprites/fexplo.spr" );
-	m_iBodyGibs = PRECACHE_MODEL( "models/metalplategibs_green.mdl" );
+	m_iSpriteTexture = UTIL_PrecacheModel( this, "sprites/white.spr" );
+
+	m_iExplode	= UTIL_PrecacheModel( this, "sprites/fexplo.spr" );
+	m_iBodyGibs = UTIL_PrecacheModel( this, "models/metalplategibs_green.mdl" );
 
 	UTIL_PrecacheOther( "hvr_rocket" );
 }
@@ -194,6 +372,14 @@ void CApache::StartupUse( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYP
 
 void CApache :: Killed( entvars_t *pevAttacker, int iGib )
 {
+	CBaseEntity *pOwner = CBaseEntity::Instance( pev->owner );
+
+	if ( pOwner )
+		pOwner->DeathNotice( pev );
+
+	pev->deadflag = DEAD_DYING;
+	FCheckAITrigger();
+
 	pev->movetype = MOVETYPE_TOSS;
 	pev->gravity = 0.3;
 
@@ -222,6 +408,15 @@ void CApache :: DyingThink( void )
 	pev->nextthink = gpGlobals->time + 0.1;
 
 	pev->avelocity = pev->avelocity * 1.02;
+	pev->avelocity.x += RANDOM_LONG( 1, -1 );
+	pev->avelocity.z += RANDOM_LONG( 1, -1 );
+
+	UTIL_MakeVectors( pev->angles );
+	pev->velocity = pev->velocity + gpGlobals->v_up * 100;
+	pev->movetype = MOVETYPE_TOSS;
+	pev->gravity = 0.8;
+
+	CSoundEnt::InsertSound( bits_SOUND_DANGER, pev->origin + pev->velocity * 0.5, 1024, 0.2, this );
 
 	// still falling?
 	if (m_flNextRocket > gpGlobals->time )
@@ -229,23 +424,41 @@ void CApache :: DyingThink( void )
 		// random explosions
 		MESSAGE_BEGIN( MSG_PVS, SVC_TEMPENTITY, pev->origin );
 			WRITE_BYTE( TE_EXPLOSION);		// This just makes a dynamic light now
-			WRITE_COORD( pev->origin.x + RANDOM_FLOAT( -150, 150 ));
-			WRITE_COORD( pev->origin.y + RANDOM_FLOAT( -150, 150 ));
-			WRITE_COORD( pev->origin.z + RANDOM_FLOAT( -150, -50 ));
+			WRITE_COORD( pev->origin.x + RANDOM_FLOAT( -150, 150 ) * pev->scale );
+			WRITE_COORD( pev->origin.y + RANDOM_FLOAT( -150, 150 ) * pev->scale );
+			WRITE_COORD( pev->origin.z + RANDOM_FLOAT( -150, -50 ) * pev->scale );
 			WRITE_SHORT( g_sModelIndexFireball );
-			WRITE_BYTE( RANDOM_LONG(0,29) + 30  ); // scale * 10
+			WRITE_BYTE( (int) ( pev->scale * 30 + RANDOM_LONG( 0, 29 ) ) ); // scale * 10
 			WRITE_BYTE( 12  ); // framerate
-			WRITE_BYTE( TE_EXPLFLAG_NONE );
+			WRITE_BYTE( TE_EXPLFLAG_NOSOUND );
 		MESSAGE_END();
+
+		const char *sound;
+
+		switch ( RANDOM_LONG( 0, 2 ) )
+		{
+			case 0:
+				sound = "weapons/explode3.wav";
+				break;
+			case 1:
+				sound = "weapons/explode4.wav";
+				break;
+			default:
+				sound = "weapons/explode5.wav";
+				break;
+		}
+
+		CServer_SoundEngine::GetSoundEngine()->PlaySound( NULL, CHAN_AUTO, (char *) sound,
+		                                                  1.0f, 0.3f, 0, PITCH_NORM, 0, true, pev->origin, 0 );
 
 		// lots of smoke
 		MESSAGE_BEGIN( MSG_PVS, SVC_TEMPENTITY, pev->origin );
 			WRITE_BYTE( TE_SMOKE );
-			WRITE_COORD( pev->origin.x + RANDOM_FLOAT( -150, 150 ));
-			WRITE_COORD( pev->origin.y + RANDOM_FLOAT( -150, 150 ));
-			WRITE_COORD( pev->origin.z + RANDOM_FLOAT( -150, -50 ));
+			WRITE_COORD( pev->origin.x + RANDOM_FLOAT( -150, 150 ) * pev->scale );
+			WRITE_COORD( pev->origin.y + RANDOM_FLOAT( -150, 150 ) * pev->scale );
+			WRITE_COORD( pev->origin.z + RANDOM_FLOAT( -150, -50 ) * pev->scale );
 			WRITE_SHORT( g_sModelIndexSmoke );
-			WRITE_BYTE( 100 ); // scale * 10
+			WRITE_BYTE( (int) ( pev->scale * 100 ) ); // scale * 10
 			WRITE_BYTE( 10  ); // framerate
 		MESSAGE_END();
 
@@ -259,17 +472,17 @@ void CApache :: DyingThink( void )
 			WRITE_COORD( vecSpot.z );
 
 			// size
-			WRITE_COORD( 400 );
-			WRITE_COORD( 400 );
-			WRITE_COORD( 132 );
+			WRITE_COORD( pev->scale * 400 );
+			WRITE_COORD( pev->scale * 400 );
+			WRITE_COORD( pev->scale * 132 );
 
 			// velocity
-			WRITE_COORD( pev->velocity.x ); 
-			WRITE_COORD( pev->velocity.y );
-			WRITE_COORD( pev->velocity.z );
+			WRITE_COORD( pev->scale * pev->velocity.x );
+			WRITE_COORD( pev->scale * pev->velocity.y );
+			WRITE_COORD( pev->scale * pev->velocity.z );
 
 			// randomization
-			WRITE_BYTE( 50 ); 
+			WRITE_BYTE( 50 );
 
 			// Model
 			WRITE_SHORT( m_iBodyGibs );	//model id#
@@ -311,12 +524,12 @@ void CApache :: DyingThink( void )
 			WRITE_BYTE( TE_SPRITE );
 			WRITE_COORD( vecSpot.x );
 			WRITE_COORD( vecSpot.y );
-			WRITE_COORD( vecSpot.z + 256 );
+			WRITE_COORD( vecSpot.z + pev->scale * 256 );
 			WRITE_SHORT( m_iExplode );
-			WRITE_BYTE( 120 ); // scale * 10
+			WRITE_BYTE( (int) ( pev->scale * 120 ) ); // scale * 10
 			WRITE_BYTE( 255 ); // brightness
 		MESSAGE_END();
-		
+
 		// big smoke
 		MESSAGE_BEGIN( MSG_PVS, SVC_TEMPENTITY, vecSpot );
 			WRITE_BYTE( TE_SMOKE );
@@ -324,9 +537,11 @@ void CApache :: DyingThink( void )
 			WRITE_COORD( vecSpot.y );
 			WRITE_COORD( vecSpot.z + 512 );
 			WRITE_SHORT( g_sModelIndexSmoke );
-			WRITE_BYTE( 250 ); // scale * 10
+			WRITE_BYTE( (int) ( pev->scale * 250 ) ); // scale * 10
 			WRITE_BYTE( 5  ); // framerate
 		MESSAGE_END();
+
+		UTIL_ScreenShake( pev->origin, pev->scale * 35, 3.0, 2.5, pev->scale * 900 );
 
 		// blast circle
 		MESSAGE_BEGIN( MSG_PVS, SVC_TEMPENTITY, pev->origin );
@@ -336,12 +551,12 @@ void CApache :: DyingThink( void )
 			WRITE_COORD( pev->origin.z);
 			WRITE_COORD( pev->origin.x);
 			WRITE_COORD( pev->origin.y);
-			WRITE_COORD( pev->origin.z + 2000 ); // reach damage radius over .2 seconds
+			WRITE_COORD( pev->origin.z + pev->scale * 2000 ); // reach damage radius over .2 seconds
 			WRITE_SHORT( m_iSpriteTexture );
 			WRITE_BYTE( 0 ); // startframe
 			WRITE_BYTE( 0 ); // framerate
 			WRITE_BYTE( 4 ); // life
-			WRITE_BYTE( 32 );  // width
+			WRITE_BYTE( (int) ( pev->scale * 32 ) );  // width
 			WRITE_BYTE( 0 );   // noise
 			WRITE_BYTE( 255 );   // r, g, b
 			WRITE_BYTE( 255 );   // r, g, b
@@ -352,13 +567,13 @@ void CApache :: DyingThink( void )
 
 		EMIT_SOUND(ENT(pev), CHAN_STATIC, "weapons/mortarhit.wav", 1.0, 0.3);
 
-		RadiusDamage( pev->origin, pev, pev, 300, CLASS_NONE, DMG_BLAST );
+		RadiusDamage( pev->origin, pev, pev, pev->scale * 300, CLASS_NONE, DMG_BLAST );
 
 		if (/*!(pev->spawnflags & SF_NOWRECKAGE) && */(pev->flags & FL_ONGROUND))
 		{
-			CBaseEntity *pWreckage = Create( "cycler_wreckage", pev->origin, pev->angles );
+			CBaseEntity *pWreckage = Create( "cycler_wreckage", pev->origin, pev->angles , false);
 			// SET_MODEL( ENT(pWreckage->pev), STRING(pev->model) );
-			UTIL_SetSize( pWreckage->pev, Vector( -200, -200, -128 ), Vector( 200, 200, -32 ) );
+			UTIL_SetSize( pWreckage->pev, Vector( -200, -200, -128 ) * pev->scale, Vector( 200, 200, -32 ) * pev->scale );
 			pWreckage->pev->frame = pev->frame;
 			pWreckage->pev->sequence = pev->sequence;
 			pWreckage->pev->framerate = 0;
@@ -376,17 +591,17 @@ void CApache :: DyingThink( void )
 			WRITE_COORD( vecSpot.z + 64);
 
 			// size
-			WRITE_COORD( 400 );
-			WRITE_COORD( 400 );
-			WRITE_COORD( 128 );
+			WRITE_COORD( pev->scale * 400 );
+			WRITE_COORD( pev->scale * 400 );
+			WRITE_COORD( pev->scale * 128 );
 
 			// velocity
-			WRITE_COORD( 0 ); 
+			WRITE_COORD( 0 );
 			WRITE_COORD( 0 );
 			WRITE_COORD( 200 );
 
 			// randomization
-			WRITE_BYTE( 30 ); 
+			WRITE_BYTE( 30 );
 
 			// Model
 			WRITE_SHORT( m_iBodyGibs );	//model id#
@@ -460,7 +675,7 @@ void CApache :: HuntThink( void )
 
 	// if (m_hEnemy == NULL)
 	{
-		Look( 4092 );
+		Look( (int) ( pev->scale * 4092 ) );
 		m_hEnemy = BestVisibleEnemy( );
 	}
 
@@ -504,6 +719,18 @@ void CApache :: HuntThink( void )
 			}
 		}
 	}
+	else if (m_hEnemy != NULL)
+	{
+		// hold position in the open air above the enemy
+		TraceResult tr;
+
+		UTIL_TraceLine( m_hEnemy->Center() + Vector( 0, 0, 256 ), m_hEnemy->Center() + Vector( 0, 0, 512 ), ignore_monsters, edict(), &tr );
+
+		if (tr.flFraction == 1.0)
+			m_posDesired = tr.vecEndPos;
+		else
+			m_posDesired = pev->origin;
+	}
 	else
 	{
 		m_posDesired = pev->origin;
@@ -513,7 +740,8 @@ void CApache :: HuntThink( void )
 	{
 		// float flLength2 = (m_posTarget - pev->origin).Length() * (1.5 - DotProduct((m_posTarget - pev->origin).Normalize(), pev->velocity.Normalize() ));
 		// if (flLength2 < flLength)
-		if (m_flLastSeen + 90 > gpGlobals->time && DotProduct( (m_posTarget - pev->origin).Normalize(), (m_posDesired - pev->origin).Normalize( )) > 0.25)
+		if (pev->velocity.Length() < APACHE_TURN_MIN_SPEED
+			|| (m_flLastSeen + 90 > gpGlobals->time && DotProduct( (m_posTarget - pev->origin).Normalize(), (m_posDesired - pev->origin).Normalize( )) > 0.25))
 		{
 			m_vecDesired = (m_posTarget - pev->origin).Normalize( );
 		}
@@ -535,12 +763,12 @@ void CApache :: HuntThink( void )
 		if (FireGun( ))
 		{
 			// slow down if we're fireing
-			if (m_flGoalSpeed > 400)
-				m_flGoalSpeed = 400;
+			if (m_flGoalSpeed > pev->scale * 400)
+				m_flGoalSpeed = pev->scale * 400;
 		}
 
 		// don't fire rockets and gun on easy mode
-		if (g_iSkillLevel == SKILL_EASY)
+		if ( sk_apache_enable_rockets.value < 1.0f )
 			m_flNextRocket = gpGlobals->time + 10.0;
 	}
 
@@ -570,7 +798,7 @@ void CApache :: HuntThink( void )
 					TraceResult tr;
 					
 					UTIL_TraceLine( pev->origin, pev->origin + vecEst * 4096, ignore_monsters, edict(), &tr );
-					if ((tr.vecEndPos - m_posTarget).Length() < 512)
+					if ((tr.vecEndPos - m_posTarget).Length() < 512 && (pev->origin - tr.vecEndPos).Length() > 1024)
 						FireRocket( );
 				}
 			}
@@ -580,7 +808,7 @@ void CApache :: HuntThink( void )
 				
 				UTIL_TraceLine( pev->origin, pev->origin + vecEst * 4096, dont_ignore_monsters, edict(), &tr );
 				// just fire when close
-				if ((tr.vecEndPos - m_posTarget).Length() < 512)
+				if ((tr.vecEndPos - m_posTarget).Length() < 512 && (pev->origin - tr.vecEndPos).Length() > 1024)
 					FireRocket( );
 			}
 		}
@@ -590,6 +818,9 @@ void CApache :: HuntThink( void )
 
 void CApache :: Flight( void )
 {
+	if ( m_fShockGlow && gpGlobals->time > m_flShockGlowTime )
+		ShockGlowEffect( false );
+
 	// tilt model 5 degrees
 	Vector vecAdj = Vector( 5.0, 0, 0 );
 
@@ -604,14 +835,14 @@ void CApache :: Flight( void )
 	{
 		if (pev->avelocity.y < 60)
 		{
-			pev->avelocity.y += 8; // 9 * (3.0/2.0);
+			pev->avelocity.y += 16; // 9 * (3.0/2.0);
 		}
 	}
 	else
 	{
 		if (pev->avelocity.y > -60)
 		{
-			pev->avelocity.y -= 8; // 9 * (3.0/2.0);
+			pev->avelocity.y -= 16; // 9 * (3.0/2.0);
 		}
 	}
 	pev->avelocity.y *= 0.98;
@@ -705,7 +936,7 @@ void CApache :: Flight( void )
 	// make rotor, engine sounds
 	if (m_iSoundState == 0)
 	{
-		EMIT_SOUND_DYN(ENT(pev), CHAN_STATIC, "apache/ap_rotor2.wav", 1.0, 0.3, 0, 110 );
+		EMIT_SOUND_DYN(ENT(pev), CHAN_STATIC, "apache/ap_rotor2.wav", 1.0, 0.3, SOUNDMSG_FOLLOW_ENTITY, 110 );
 		// EMIT_SOUND_DYN(ENT(pev), CHAN_STATIC, "apache/ap_whine1.wav", 0.5, 0.2, 0, 110 );
 
 		m_iSoundState = SND_CHANGE_PITCH; // hack for going through level transitions
@@ -721,7 +952,7 @@ void CApache :: Flight( void )
 
 			float pitch = DotProduct( pev->velocity - pPlayer->pev->velocity, (pPlayer->pev->origin - pev->origin).Normalize() );
 
-			pitch = (int)(100 + pitch / 50.0);
+			pitch = ceil( 100 + pitch / 50.0 );
 
 			if (pitch > 250) 
 				pitch = 250;
@@ -734,7 +965,7 @@ void CApache :: Flight( void )
 			if (flVol > 1.0) 
 				flVol = 1.0;
 
-			EMIT_SOUND_DYN(ENT(pev), CHAN_STATIC, "apache/ap_rotor2.wav", 1.0, 0.3, SND_CHANGE_PITCH | SND_CHANGE_VOL, pitch);
+			EMIT_SOUND_DYN(ENT(pev), CHAN_STATIC, "apache/ap_rotor2.wav", 1.0, 0.3, SOUNDMSG_FOLLOW_ENTITY | SND_CHANGE_PITCH | SND_CHANGE_VOL, pitch);
 		}
 		// EMIT_SOUND_DYN(ENT(pev), CHAN_STATIC, "apache/ap_whine1.wav", flVol, 0.2, SND_CHANGE_PITCH | SND_CHANGE_VOL, pitch);
 	
@@ -773,9 +1004,9 @@ void CApache :: FireRocket( void )
 		WRITE_BYTE( 12 ); // framerate
 	MESSAGE_END();
 
-	CBaseEntity *pRocket = CBaseEntity::Create( "hvr_rocket", vecSrc, pev->angles, edict() );
+	CBaseEntity *pRocket = CBaseEntity::Create( "hvr_rocket", vecSrc, pev->angles, false, edict() );
 	if (pRocket)
-		pRocket->pev->velocity = pev->velocity + gpGlobals->v_forward * 100;
+		pRocket->pev->velocity = gpGlobals->v_forward * 100;
 
 	m_iRockets--;
 
@@ -812,13 +1043,13 @@ BOOL CApache :: FireGun( )
 		angles.x = angles.x + 360;
 
 	if (angles.x > m_angGun.x)
-		m_angGun.x = min( angles.x, m_angGun.x + 12 );
+		m_angGun.x = V_min( angles.x, m_angGun.x + 12 );
 	if (angles.x < m_angGun.x)
-		m_angGun.x = max( angles.x, m_angGun.x - 12 );
+		m_angGun.x = V_max( angles.x, m_angGun.x - 12 );
 	if (angles.y > m_angGun.y)
-		m_angGun.y = min( angles.y, m_angGun.y + 12 );
+		m_angGun.y = V_min( angles.y, m_angGun.y + 12 );
 	if (angles.y < m_angGun.y)
-		m_angGun.y = max( angles.y, m_angGun.y - 12 );
+		m_angGun.y = V_max( angles.y, m_angGun.y - 12 );
 
 	m_angGun.y = SetBoneController( 0, m_angGun.y );
 	m_angGun.x = SetBoneController( 1, m_angGun.x );
@@ -832,6 +1063,7 @@ BOOL CApache :: FireGun( )
 #if 1
 		FireBullets( 1, posGun, vecGun, VECTOR_CONE_4DEGREES, 8192, BULLET_MONSTER_12MM, 1 );
 		EMIT_SOUND(ENT(pev), CHAN_WEAPON, "turret/tu_fire1.wav", 1, 0.3);
+		CSoundEnt::InsertSound( bits_SOUND_COMBAT, pev->origin, 1024, 0.3, this );
 #else
 		static float flNext;
 		TraceResult tr;
@@ -888,7 +1120,16 @@ void CApache :: ShowDamage( void )
 
 int CApache :: TakeDamage( entvars_t* pevInflictor, entvars_t* pevAttacker, float flDamage, int bitsDamageType )
 {
-	if (pevInflictor->owner == edict())
+	if ( ( bitsDamageType & DMG_SHOCK_GLOW ) && !m_fShockGlow )
+	{
+		ShockGlowEffect( true );
+		m_flShockGlowTime = gpGlobals->time + 0.65;
+	}
+
+	if (pevInflictor->owner == edict() || pevAttacker == NULL)
+		return 0;
+
+	if ( CheckAttacker( CBaseEntity::Instance( pevAttacker ) ) )
 		return 0;
 
 	if (bitsDamageType & DMG_BLAST)

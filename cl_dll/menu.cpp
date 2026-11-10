@@ -27,6 +27,7 @@
 #include "vgui_TeamFortressViewport.h"
 
 #define MAX_MENU_STRING	512
+#define MENU_FROM_ANGELSCRIPT	0x80	// ShowMenu "need more" byte: sent by an AngelScript text menu
 char g_szMenuString[MAX_MENU_STRING];
 char g_szPrelocalisedMenuString[MAX_MENU_STRING];
 
@@ -50,12 +51,15 @@ void CHudMenu :: InitHUDData( void )
 	m_fMenuDisplayed = 0;
 	m_bitsValidSlots = 0;
 	Reset();
+	m_bIsASMenu = false;
 }
 
 void CHudMenu :: Reset( void )
 {
 	g_szPrelocalisedMenuString[0] = 0;
 	m_fWaitingForMore = FALSE;
+	m_fMenuDisplayed = 0;
+	m_iFlags &= ~HUD_ACTIVE;
 }
 
 int CHudMenu :: VidInit( void )
@@ -75,12 +79,17 @@ int CHudMenu :: VidInit( void )
    \d : Dim (gray) text
    \y : Yellow text
    \r : Red text
+   \g : Green text
+   \o : Orange text
+   \c : Cyan text
+   \m : Magenta text
    \R : Right-align (just for the remainder of the current line)
 =================================*/
 
-static int menu_r, menu_g, menu_b, menu_x, menu_ralign;
+static int menu_r, menu_g, menu_b, menu_x;
+static bool menu_ralign;
 
-static inline const char* ParseEscapeToken( const char* token )
+static inline const char* ParseEscapeToken( const char* token, int rightEdge )
 {
 	if ( *token != '\\' )
 		return token;
@@ -116,8 +125,32 @@ static inline const char* ParseEscapeToken( const char* token )
 		menu_b = 0;
 		break;
 
+	case 'g':
+		menu_r = 24;
+		menu_g = 210;
+		menu_b = 0;
+		break;
+
+	case 'o':
+		menu_r = 250;
+		menu_g = 128;
+		menu_b = 10;
+		break;
+
+	case 'c':
+		menu_r = 10;
+		menu_g = 250;
+		menu_b = 250;
+		break;
+
+	case 'm':
+		menu_r = 250;
+		menu_g = 10;
+		menu_b = 250;
+		break;
+
 	case 'R':
-		menu_x = ScreenWidth/2;
+		menu_x = rightEdge;
 		menu_ralign = TRUE;
 		break;
 	}
@@ -155,12 +188,14 @@ int CHudMenu :: Draw( float flTime )
 	}
 
 	// center it
-	int y = (ScreenHeight/2) - ((nlc/2)*12) - 40; // make sure it is above the say text
+	int y = (ScreenHeight/2) - ((nlc/2)* gHUD.m_scrinfo.iCharHeight) - 40;
+	int leftEdge = gHUD.GetBorderSize() + 5;
+	int rightEdge = ScreenWidth / 2 - gHUD.GetBorderSize() - 5; // make sure it is above the say text
 
 	menu_r		= 255;
 	menu_g		= 255;
 	menu_b		= 255;
-	menu_x		= 20;
+	menu_x		= leftEdge;
 	menu_ralign	 = FALSE;
 
 	const char* sptr = g_szMenuString;
@@ -169,35 +204,35 @@ int CHudMenu :: Draw( float flTime )
 	{
 		if ( *sptr == '\\' )
 		{
-			sptr = ParseEscapeToken( sptr );
+			sptr = ParseEscapeToken( sptr, rightEdge );
 		}
 		else if ( *sptr == '\n' )
 		{
 			menu_ralign	 = FALSE;
-			menu_x		 = 20;
-			y			+= (12);
+			menu_x		 = leftEdge;
+			y			+= gHUD.m_scrinfo.iCharHeight;
 			
 			sptr++;
 		}
 		else
 		{
-			char menubuf[ 80 ];
+			char menubuf[ MAX_MENU_STRING ];
 			const char *ptr = sptr;
 			while ( *sptr != '\0' && *sptr != '\n' && *sptr != '\\')
 			{
 				sptr++;
 			}
-			strncpy( menubuf, ptr, min( ( sptr - ptr), (int)sizeof( menubuf ) ));
-			menubuf[ min( ( sptr - ptr), (int)(sizeof( menubuf )-1) ) ] = '\0';
+			strncpy( menubuf, ptr, V_min( ( sptr - ptr), (int)sizeof( menubuf ) ));
+			menubuf[ V_min( ( sptr - ptr), (int)(sizeof( menubuf )-1) ) ] = '\0';
 			
 			if ( menu_ralign )
 			{		
 				// IMPORTANT: Right-to-left rendered text does not parse escape tokens!
-				menu_x = gHUD.DrawStringReverse( menu_x, y, 0, menubuf, menu_r, menu_g, menu_b );
+				menu_x = gHUD.DrawStringReverse( menu_x, y, 0, menubuf, menu_r, menu_g, menu_b, 0 );
 			}
 			else
 			{
-				menu_x = gHUD.DrawString( menu_x, y, 320, menubuf, menu_r, menu_g, menu_b );
+				menu_x = gHUD.DrawString( menu_x, y, rightEdge, menubuf, menu_r, menu_g, menu_b, 0 );
 			}
 		}
 	}
@@ -212,7 +247,8 @@ void CHudMenu :: SelectMenuItem( int menu_item )
 	if ( (menu_item > 0) && (m_bitsValidSlots & (1 << (menu_item-1))) )
 	{
 		char szbuf[32];
-		sprintf( szbuf, "menuselect %d\n", menu_item );
+
+		UTIL_FormatString( szbuf, "%s %d\n", m_bIsASMenu ? "as_menuselect" : "menuselect", menu_item );
 		EngineClientCmd( szbuf );
 
 		// remove the menu
@@ -228,7 +264,7 @@ void CHudMenu :: SelectMenuItem( int menu_item )
 //		char : the duration, in seconds, the menu should stay up. -1 means is stays until something is chosen.
 //		byte : a boolean, TRUE if there is more string yet to be received before displaying the menu, FALSE if it's the last string
 //		string: menu string to display
-// if this message is never received, then scores will simply be the combined totals of the players.
+// The high bit of the continuation byte selects the AngelScript menu callback
 int CHudMenu :: MsgFunc_ShowMenu( const char *pszName, int iSize, void *pbuf )
 {
 	char *temp = NULL;
@@ -239,6 +275,9 @@ int CHudMenu :: MsgFunc_ShowMenu( const char *pszName, int iSize, void *pbuf )
 	int DisplayTime = READ_CHAR();
 	int NeedMore = READ_BYTE();
 
+	m_bIsASMenu = (NeedMore & MENU_FROM_ANGELSCRIPT) != 0;
+	NeedMore &= ~MENU_FROM_ANGELSCRIPT;
+
 	if ( DisplayTime > 0 )
 		m_flShutoffTime = DisplayTime + gHUD.m_flTime;
 	else
@@ -248,22 +287,21 @@ int CHudMenu :: MsgFunc_ShowMenu( const char *pszName, int iSize, void *pbuf )
 	{
 		if ( !m_fWaitingForMore ) // this is the start of a new menu
 		{
-			strncpy( g_szPrelocalisedMenuString, READ_STRING(), MAX_MENU_STRING );
+			safe_strcpy( g_szPrelocalisedMenuString, READ_STRING(), MAX_MENU_STRING );
 		}
 		else
 		{  // append to the current menu string
-			strncat( g_szPrelocalisedMenuString, READ_STRING(), MAX_MENU_STRING - strlen(g_szPrelocalisedMenuString) );
+			UTIL_AppendString( g_szPrelocalisedMenuString, READ_STRING(), MAX_MENU_STRING );
 		}
-		g_szPrelocalisedMenuString[MAX_MENU_STRING-1] = 0;  // ensure null termination (strncat/strncpy does not)
 
 		if ( !NeedMore )
 		{  // we have the whole string, so we can localise it now
-			strcpy( g_szMenuString, gHUD.m_TextMessage.BufferedLocaliseTextString( g_szPrelocalisedMenuString ) );
+			safe_strcpy( g_szMenuString, gHUD.m_TextMessage.BufferedLocaliseTextString( g_szPrelocalisedMenuString ), MAX_MENU_STRING );
 
 			// Swap in characters
 			if ( KB_ConvertString( g_szMenuString, &temp ) )
 			{
-				strcpy( g_szMenuString, temp );
+				safe_strcpy( g_szMenuString, temp, MAX_MENU_STRING );
 				free( temp );
 			}
 		}
@@ -277,7 +315,7 @@ int CHudMenu :: MsgFunc_ShowMenu( const char *pszName, int iSize, void *pbuf )
 		m_iFlags &= ~HUD_ACTIVE;
 	}
 
-	m_fWaitingForMore = NeedMore;
+	m_fWaitingForMore = NeedMore != 0;
 
 	return 1;
 }

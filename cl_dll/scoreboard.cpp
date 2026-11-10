@@ -131,18 +131,18 @@ int CHudScoreboard :: Draw( float fTime )
 	int	xpos = NAME_RANGE_MIN + xpos_rel;
 
 	if ( !gHUD.m_Teamplay ) 
-		gHUD.DrawHudString( xpos, ypos, NAME_RANGE_MAX + xpos_rel, "Player", 255, 140, 0 );
+		gHUD.DrawString( xpos, ypos, NAME_RANGE_MAX + xpos_rel, "Player", 255, 140, 0, 0 );
 	else
-		gHUD.DrawHudString( xpos, ypos, NAME_RANGE_MAX + xpos_rel, "Teams", 255, 140, 0 );
+		gHUD.DrawString( xpos, ypos, NAME_RANGE_MAX + xpos_rel, "Teams", 255, 140, 0, 0 );
 
-	gHUD.DrawHudStringReverse( KILLS_RANGE_MAX + xpos_rel, ypos, 0, "kills", 255, 140, 0 );
-	gHUD.DrawHudString( DIVIDER_POS + xpos_rel, ypos, ScreenWidth, "/", 255, 140, 0 );
-	gHUD.DrawHudString( DEATHS_RANGE_MIN + xpos_rel + 5, ypos, ScreenWidth, "deaths", 255, 140, 0 );
-	gHUD.DrawHudString( PING_RANGE_MAX + xpos_rel - 35, ypos, ScreenWidth, "latency", 255, 140, 0 );
+	gHUD.DrawStringReverse( KILLS_RANGE_MAX + xpos_rel, ypos, 0, "kills", 255, 140, 0, 0 );
+	gHUD.DrawString( DIVIDER_POS + xpos_rel, ypos, ScreenWidth, "/", 255, 140, 0, 0 );
+	gHUD.DrawString( DEATHS_RANGE_MIN + xpos_rel + 5, ypos, ScreenWidth, "deaths", 255, 140, 0, 0 );
+	gHUD.DrawString( PING_RANGE_MAX + xpos_rel - 35, ypos, ScreenWidth, "latency", 255, 140, 0, 0 );
 
 	if ( can_show_packetloss )
 	{
-		gHUD.DrawHudString( PL_RANGE_MAX + xpos_rel - 35, ypos, ScreenWidth, "pkt loss", 255, 140, 0 );
+		gHUD.DrawString( PL_RANGE_MAX + xpos_rel - 35, ypos, ScreenWidth, "pkt loss", 255, 140, 0, 0 );
 	}
 
 	FAR_RIGHT = can_show_packetloss ? PL_RANGE_MAX : PING_RANGE_MAX;
@@ -260,19 +260,19 @@ int CHudScoreboard :: Draw( float fTime )
 		}
 
 		// draw their name (left to right)
-		gHUD.DrawHudString( xpos, ypos, NAME_RANGE_MAX + xpos_rel, team_info->name, r, g, b );
+		gHUD.DrawString( xpos, ypos, NAME_RANGE_MAX + xpos_rel, team_info->name, r, g, b, 0 );
 
 		// draw kills (right to left)
 		xpos = KILLS_RANGE_MAX + xpos_rel;
-		gHUD.DrawHudNumberString( xpos, ypos, KILLS_RANGE_MIN + xpos_rel, team_info->frags, r, g, b );
+		gHUD.DrawNumberString( xpos, ypos, KILLS_RANGE_MIN + xpos_rel, team_info->frags, r, g, b );
 
 		// draw divider
 		xpos = DIVIDER_POS + xpos_rel;
-		gHUD.DrawHudString( xpos, ypos, xpos + 20, "/", r, g, b );
+		gHUD.DrawString( xpos, ypos, xpos + 20, "/", r, g, b, 0 );
 
 		// draw deaths
 		xpos = DEATHS_RANGE_MAX + xpos_rel;
-		gHUD.DrawHudNumberString( xpos, ypos, DEATHS_RANGE_MIN + xpos_rel, team_info->deaths, r, g, b );
+		gHUD.DrawNumberString( xpos, ypos, DEATHS_RANGE_MIN + xpos_rel, team_info->deaths, r, g, b );
 
 		// draw ping
 		// draw ping & packetloss
@@ -280,7 +280,7 @@ int CHudScoreboard :: Draw( float fTime )
 		sprintf( buf, "%d", team_info->ping );
 		xpos = ((PING_RANGE_MAX - PING_RANGE_MIN) / 2) + PING_RANGE_MIN + xpos_rel + 25;
 		UnpackRGB( r, g, b, RGB_YELLOWISH );
-		gHUD.DrawHudStringReverse( xpos, ypos, xpos - 50, buf, r, g, b );
+		gHUD.DrawStringReverse( xpos, ypos, xpos - 50, buf, r, g, b, 0 );
 
 	//  Packetloss removed on Kelly 'shipping nazi' Bailey's orders
 		if ( can_show_packetloss )
@@ -288,7 +288,7 @@ int CHudScoreboard :: Draw( float fTime )
 			xpos = ((PL_RANGE_MAX - PL_RANGE_MIN) / 2) + PL_RANGE_MIN + xpos_rel + 25;
 		
 			sprintf( buf, "  %d", team_info->packetloss );
-			gHUD.DrawHudString( xpos, ypos, xpos+50, buf, r, g, b );
+			gHUD.DrawString( xpos, ypos, xpos+50, buf, r, g, b, 0 );
 		}
 
 		team_info->already_drawn = TRUE;  // set the already_drawn to be TRUE, so this team won't get drawn again
@@ -381,25 +381,25 @@ int CHudScoreboard :: DrawPlayers( int xpos_rel, float list_slot, int nameoffset
 		}
 
 		// draw their name (left to right)
-		gHUD.DrawHudString( xpos + nameoffset, ypos, NAME_RANGE_MAX + xpos_rel, pl_info->name, r, g, b );
+		gHUD.DrawString( xpos + nameoffset, ypos, NAME_RANGE_MAX + xpos_rel, pl_info->name, r, g, b, 0 );
 
 		// draw kills (right to left)
 		xpos = KILLS_RANGE_MAX + xpos_rel;
-		gHUD.DrawHudNumberString( xpos, ypos, KILLS_RANGE_MIN + xpos_rel, g_PlayerExtraInfo[best_player].frags, r, g, b );
+		gHUD.DrawNumberString( xpos, ypos, KILLS_RANGE_MIN + xpos_rel, g_PlayerExtraInfo[best_player].frags, r, g, b );
 
 		// draw divider
 		xpos = DIVIDER_POS + xpos_rel;
-		gHUD.DrawHudString( xpos, ypos, xpos + 20, "/", r, g, b );
+		gHUD.DrawString( xpos, ypos, xpos + 20, "/", r, g, b, 0 );
 
 		// draw deaths
 		xpos = DEATHS_RANGE_MAX + xpos_rel;
-		gHUD.DrawHudNumberString( xpos, ypos, DEATHS_RANGE_MIN + xpos_rel, g_PlayerExtraInfo[best_player].deaths, r, g, b );
+		gHUD.DrawNumberString( xpos, ypos, DEATHS_RANGE_MIN + xpos_rel, g_PlayerExtraInfo[best_player].deaths, r, g, b );
 
 		// draw ping & packetloss
 		static char buf[64];
 		sprintf( buf, "%d", g_PlayerInfoList[best_player].ping );
 		xpos = ((PING_RANGE_MAX - PING_RANGE_MIN) / 2) + PING_RANGE_MIN + xpos_rel + 25;
-		gHUD.DrawHudStringReverse( xpos, ypos, xpos - 50, buf, r, g, b );
+		gHUD.DrawStringReverse( xpos, ypos, xpos - 50, buf, r, g, b, 0 );
 
 		//  Packetloss removed on Kelly 'shipping nazi' Bailey's orders
 		if ( can_show_packetloss )
@@ -416,7 +416,7 @@ int CHudScoreboard :: DrawPlayers( int xpos_rel, float list_slot, int nameoffset
 
 			xpos = ((PL_RANGE_MAX - PL_RANGE_MIN) / 2) + PL_RANGE_MIN + xpos_rel + 25;
 		
-			gHUD.DrawHudString( xpos, ypos, xpos+50, buf, r, g, b );
+			gHUD.DrawString( xpos, ypos, xpos+50, buf, r, g, b, 0 );
 		}
 	
 		pl_info->name = NULL;  // set the name to be NULL, so this client won't get drawn again
@@ -513,7 +513,7 @@ int CHudScoreboard :: MsgFunc_TeamInfo( const char *pszName, int iSize, void *pb
 				if ( g_TeamInfo[j].name[0] == '\0' )
 					break;
 			}
-			m_iNumTeams = max( j, m_iNumTeams );
+			m_iNumTeams = V_max( j, m_iNumTeams );
 
 			strncpy( g_TeamInfo[j].name, g_PlayerExtraInfo[i].teamname, MAX_TEAM_NAME );
 			g_TeamInfo[j].players = 0;

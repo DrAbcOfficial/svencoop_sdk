@@ -173,6 +173,13 @@ float READ_HIRESANGLE( void )
 	return (float)(READ_SHORT() * (360.0/65536));
 }
 
+void READ_VECTOR( float *vec )
+{
+	vec[0] = READ_COORD();
+	vec[1] = READ_COORD();
+	vec[2] = READ_COORD();
+}
+
 //--------------------------------------------------------------------------------------------------------------
 BufferWriter::BufferWriter()
 {

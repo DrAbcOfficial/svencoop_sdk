@@ -18,10 +18,12 @@
 #pragma once
 #endif
 
+typedef struct usercmd_s usercmd_t;
 typedef struct usercmd_s
 {
 	short	lerp_msec;      // Interpolation time on client
 	byte	msec;           // Duration in ms of command
+
 	vec3_t	viewangles;     // Command view angles.
 
 // intended velocities
@@ -35,6 +37,7 @@ typedef struct usercmd_s
 
 // Experimental player impact stuff.
 	int		impact_index;
+
 	vec3_t	impact_position;
 } usercmd_t;
 
