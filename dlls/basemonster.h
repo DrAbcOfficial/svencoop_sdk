@@ -16,10 +16,8 @@
 #ifndef BASEMONSTER_H
 #define BASEMONSTER_H
 
-#ifndef CLIENT_DLL
 #include "TypedEntityHandle.h"
 #include "EntityHandle.h"
-#endif
 
 // Ospreys are targeted at whichever of these bones is closer to the shooter
 #define OSPREY_FIRST_TARGET_BONE	4
@@ -68,9 +66,7 @@ public:
 		EHANDLE				m_hTargetEnt;	 // the entity that the monster is trying to reach
 		EHANDLE				m_hHealTarget;	 // the entity a medic is healing or reviving
 
-#ifndef CLIENT_DLL
 		EHANDLE				m_hSelectedTank;
-#endif
 
 		EHANDLE				m_hOldEnemy[ MAX_OLD_ENEMIES ];
 		Vector				m_vecOldEnemy[ MAX_OLD_ENEMIES ];
@@ -90,9 +86,7 @@ public:
 	
 		int					m_iTaskStatus;
 		Schedule_t			*m_pSchedule;
-#ifndef CLIENT_DLL
 		Schedule_t			*m_pScheduleSaved;
-#endif
 		int					m_iScheduleIndex;
 
 		WayPoint_t			m_Route[ ROUTE_SIZE ];	// Positions of movement
@@ -102,9 +96,7 @@ public:
 		float				m_moveradius;			// a blocked move within this of m_vecMoveGoal counts as arrived
 
 		Vector				m_vecMoveGoal; // kept around for node graph moves, so we know our ultimate goal
-#ifndef CLIENT_DLL
 		Vector				m_vecLadderEnd;
-#endif
 		Activity			m_movementActivity;	// When moving, set this activity
 		bool				m_fTriangulateFlip;	// mirrors the triangulation bias after a failed search
 
@@ -152,11 +144,7 @@ public:
 
 // Scripted sequence Info
 	SCRIPTSTATE			m_scriptState;		// internal cinematic state
-#ifndef CLIENT_DLL
 	CEntityHandle<CCineMonster> m_pCine;
-#else
-	CCineMonster		*m_pCine;
-#endif
 	EHANDLE				m_hCineBlocker;		// a player in the way inside the sequence's moveto_radius
 	float				m_flMoveToRadius;	// copied from the sequence that possesses us
 	bool				m_fInAIScript;		// possessed by an aiscripted_sequence
@@ -172,7 +160,6 @@ public:
 	Vector				m_vecAlignAngles;	// ...its angles then,
 	Vector				m_vecAlignNormal;	// ...and the ground's normal
 
-#ifndef CLIENT_DLL
 	string_t			m_FormattedName;
 	bool				m_fFreeRoamMode2;
 	bool				m_fFreeRoamMode1;
@@ -221,17 +208,14 @@ public:
 	float				m_flEffectRespiration;
 	float				m_flEffectGravity;
 	float				m_flEffectFriction;
-#endif
 
 	float				m_flEffectSpeed;
 
-#ifndef CLIENT_DLL
 	float				m_flEffectDamage;
 
 	// Saved gravity and friction multipliers
 	float				m_flOriginalGravity;
 	float				m_flOriginalFriction;
-#endif
 
 	bool				m_fCheckCreatureDanger;	// flees creatures that grab their victims
 	bool				m_fIgnoreCreatureDanger;	// ...but never interrupts a schedule for it
@@ -283,7 +267,6 @@ public:
 		virtual void EndRevive( float flTimeUntilRevive );
 		void EXPORT ReviveThink( void );
 
-#ifndef CLIENT_DLL
 		void OnCreate( void );
 		void OnDestroy( void );
 		void ResetEffects( void );
@@ -298,7 +281,6 @@ public:
 		void EvaluatePaths( void );
 		bool StartPathWaypointTask( Task_t *pTask );
 		bool RunPathWaypointTask( Task_t *pTask );
-#endif
 
 		virtual void BecomeDead( float flSavedHealth );
 		void AlignToGround( void );
@@ -401,9 +383,7 @@ public:
 		BOOL FRouteClear ( void );
 		void RouteSimplify( CBaseEntity *pTargetEnt );
 		void AdvanceRoute ( float distance );
-#ifndef CLIENT_DLL
 		void LadderMoveDone( void );
-#endif
 		virtual BOOL FTriangulate ( const Vector &vecStart , const Vector &vecEnd, float flDist, CBaseEntity *pTargetEnt, Vector *pApex, Vector *pApex2 = NULL, bool fNoExtension = false );
 		virtual BOOL FTriangulateExtension ( const Vector &vecStart, const Vector &vecEnd, float flDist, CBaseEntity *pTargetEnt, Vector *pApex );
 		void MakeIdealYaw( Vector vecTarget );
@@ -608,7 +588,6 @@ public:
 	CBaseEntity* DropItem ( const char *pszItemName, const Vector &vecPos, const Vector &vecAng );// drop an item.
 	CBaseEntity *DropWeapon( const char *name, bool force );
 
-#ifndef CLIENT_DLL
 	CBaseEntity *DropItem( CBaseEntity *item, const Vector &position, const Vector &angles );
 
 	void CheckSelectedTank( void );
@@ -616,15 +595,12 @@ public:
 	CFuncTank *FindTank( void );
 
 	virtual void HandleStep( void );
-#endif
 
 	virtual void PlayStepSound( int step, float volume );
 
-#ifndef CLIENT_DLL
 	int  m_iStepLeft;
 	char m_szTextureName[16];
 	char m_chTextureType;
-#endif
 };
 
 

@@ -25,25 +25,13 @@ extern enginefuncs_t g_engfuncs;
 #define GETPLAYERUSERID (*g_engfuncs.pfnGetPlayerUserId)
 class CBaseEntity;
 
-#ifdef CLIENT_DLL
-#define PRECACHE_MODEL	(*g_engfuncs.pfnPrecacheModel)
-#else
 int PrecacheModel_Intercept( CBaseEntity *entity, const char *model );
 #define PRECACHE_MODEL( model )	PrecacheModel_Intercept( NULL, model )
-#endif
-#ifdef CLIENT_DLL
-#define PRECACHE_SOUND	(*g_engfuncs.pfnPrecacheSound)
-#else
 void PrecacheSound_Intercept( CBaseEntity *entity, const char *sample );
 #define PRECACHE_SOUND( sample )	PrecacheSound_Intercept( NULL, sample )
-#endif
 #define PRECACHE_GENERIC	(*g_engfuncs.pfnPrecacheGeneric)
-#ifdef CLIENT_DLL
-#define SET_MODEL		(*g_engfuncs.pfnSetModel)
-#else
 void SetModel_Intercept( edict_t *entity, const char *model );
 #define SET_MODEL( entity, model )	SetModel_Intercept( entity, model )
-#endif
 #define MODEL_INDEX		(*g_engfuncs.pfnModelIndex)
 #define MODEL_FRAMES	(*g_engfuncs.pfnModelFrames)
 #define SET_SIZE		(*g_engfuncs.pfnSetSize)
@@ -58,12 +46,8 @@ void SetModel_Intercept( edict_t *entity, const char *model );
 #define MAKE_VECTORS	(*g_engfuncs.pfnMakeVectors)
 #define CREATE_ENTITY	(*g_engfuncs.pfnCreateEntity)
 #define REMOVE_ENTITY	(*g_engfuncs.pfnRemoveEntity)
-#ifdef CLIENT_DLL
-#define CREATE_NAMED_ENTITY		(*g_engfuncs.pfnCreateNamedEntity)
-#else
 edict_t *CreateNamedEntity_Intercept( int className );
 #define CREATE_NAMED_ENTITY		CreateNamedEntity_Intercept
-#endif
 #define MAKE_STATIC		(*g_engfuncs.pfnMakeStatic)
 #define ENT_IS_ON_FLOOR	(*g_engfuncs.pfnEntIsOnFloor)
 #define DROP_TO_FLOOR	(*g_engfuncs.pfnDropToFloor)
@@ -92,14 +76,10 @@ edict_t *CreateNamedEntity_Intercept( int className );
 #define RANDOM_FLOAT	(*g_engfuncs.pfnRandomFloat)
 #define GETPLAYERAUTHID	(*g_engfuncs.pfnGetPlayerAuthId)
 
-#ifndef CLIENT_DLL
 void Message_Begin_Intercept( int msg_dest, int msg_type, const float *origin, edict_t *entity );
-#endif
 
 inline void MESSAGE_BEGIN( int msg_dest, int msg_type, const float *pOrigin = NULL, edict_t *ed = NULL ) {
-#ifndef CLIENT_DLL
 	Message_Begin_Intercept( msg_dest, msg_type, pOrigin, ed );
-#endif
 	(*g_engfuncs.pfnMessageBegin)(msg_dest, msg_type, pOrigin, ed);
 }
 #define MESSAGE_END		(*g_engfuncs.pfnMessageEnd)
@@ -134,18 +114,10 @@ inline void *GET_PRIVATE( edict_t *pent )
 #define GETENTITYILLUM	(*g_engfuncs.pfnGetEntityIllum)
 #define FIND_ENTITY_IN_SPHERE		(*g_engfuncs.pfnFindEntityInSphere)
 #define FIND_CLIENT_IN_PVS			(*g_engfuncs.pfnFindClientInPVS)
-#ifdef CLIENT_DLL
-#define EMIT_AMBIENT_SOUND			(*g_engfuncs.pfnEmitAmbientSound)
-#else
 #define EMIT_AMBIENT_SOUND			UTIL_EmitAmbientSound
-#endif
 #define GET_MODEL_PTR				(*g_engfuncs.pfnGetModelPtr)
-#ifdef CLIENT_DLL
-#define REG_USER_MSG				(*g_engfuncs.pfnRegUserMsg)
-#else
 int RegUserMsg_Intercept(const char *name, int size);
 #define REG_USER_MSG				RegUserMsg_Intercept
-#endif
 #define GET_BONE_POSITION			(*g_engfuncs.pfnGetBonePosition)
 #define FUNCTION_FROM_NAME			(*g_engfuncs.pfnFunctionFromName)
 #define NAME_FOR_FUNCTION			(*g_engfuncs.pfnNameForFunction)

@@ -240,10 +240,8 @@ extern void			UTIL_ParticleEffect		( const Vector &vecOrigin, const Vector &vecD
 extern void			UTIL_ScreenShake		( const Vector &center, float amplitude, float frequency, float duration, float radius );
 extern void			UTIL_ScreenShakeAll		( const Vector &center, float amplitude, float frequency, float duration );
 
-#ifndef CLIENT_DLL
 extern void UTIL_SendTextMenu( entvars_t *const *entityVars, int validSlots, int displayTime,
 	char *text, unsigned int textLength );
-#endif
 
 extern void			UTIL_ShowMessage		( const char *pString, CBaseEntity *pPlayer );
 extern void			UTIL_ShowMessageAll		( const char *pString );
@@ -275,30 +273,21 @@ extern void			UTIL_GunshotDecalTrace( TraceResult *pTrace, int decalNumber );
 extern void			UTIL_Sparks( const Vector &position );
 extern void			UTIL_Ricochet( const Vector &position, float scale );
 
-#ifdef CLIENT_DLL
-extern void			UTIL_StringToVector( float *pVector, const char *pString );
-extern void			UTIL_StringToIntArray( int *pVector, int count, const char *pString );
-#else
 bool UTIL_StringToVector(float *values, const char *text, char separator = ' ');
 void UTIL_StringToIntArray(int *values, int count, const char *text,
 	char separator = ' ', char *remaining = NULL, int remainingSize = 0);
-#endif
 
 extern Vector		UTIL_ClampVectorToBox( const Vector &input, const Vector &clampSize );
 extern float		UTIL_Approach( float target, float value, float speed );
 extern float		UTIL_ApproachAngle( float target, float value, float speed );
-#ifndef CLIENT_DLL
 void AlignToGroundStatic( CBaseEntity *entity, float speed );
-#endif
 extern float		UTIL_AngleDistance( float next, float cur );
 
 extern char			*UTIL_VarArgs( const char *format, ... );
 
 extern string_t g_szSoundReplacement;
-#ifndef CLIENT_DLL
 extern bool g_iActiveIdle;
 extern int g_iMapForGameVersion;
-#endif
 const char *FindSoundReplacementSample( CBaseEntity *entity, const char *sample );
 const char *FindSoundReplacementSample( edict_t *entity, const char *sample );
 void PrecacheSound_Intercept( CBaseEntity *entity, const char *sample );
@@ -319,18 +308,14 @@ extern void			UTIL_BubbleTrail( Vector from, Vector to, int count );
 
 // allows precacheing of other entities
 extern void			UTIL_PrecacheOther( const char *szClassname );
-#ifndef CLIENT_DLL
 void UTIL_PrecacheMonster( const char *className, bool ally );
-#endif
 
 int PrecacheModel_Intercept( CBaseEntity *entity, const char *model );
 void SetModel_Intercept( edict_t *entity, const char *model );
 
-#ifndef CLIENT_DLL
 extern string_t g_szModelReplacement;
 void SetModelWithBounds( CBaseEntity *entity, const char *model );
 void UTIL_SetModel( CBaseEntity *entity, const char *model );
-#endif
 int UTIL_PrecacheModel( CBaseEntity *entity, const char *model );
 
 // prints a message to each client
@@ -343,7 +328,6 @@ inline void			UTIL_CenterPrintAll( const char *msg_name, const char *param1 = NU
 class CBasePlayerItem;
 class CBasePlayer;
 
-#ifndef CLIENT_DLL
 #include "IPlayerInVolumeListener.h"
 
 extern CBasePlayer *UTIL_PlayerBySteamId( const char *authId );
@@ -353,7 +337,6 @@ extern int UTIL_GetPrecachedModelCount( void );
 extern void UTIL_ResetPrecachedModelCount( void );
 extern int UTIL_CountPlayersInBrushVolume( bool ignoreDeadPlayers, CBaseEntity *volume, int &inside,
                                            int &outside, IPlayerInVolumeListener *listener );
-#endif
 
 extern bool CanHaveXtra( int kind, CBasePlayer *player );
 extern CBaseEntity *UTIL_RandomTargetname( const char *targetname );

@@ -17,15 +17,11 @@
 
 #include <assert.h>
 // The player movement code is built with Vector, like the rest of the game code
-#ifdef CLIENT_DLL
-#include "util_vector.h"
-#else
 #include <math.h>
 typedef float vec_t;
 #include "vector.h"
 #define DID_VEC3_T_DEFINE
 #define vec3_t Vector
-#endif
 #include "mathlib.h"
 #include "const.h"
 #include "usercmd.h"
@@ -40,20 +36,9 @@ typedef float vec_t;
 #include <stdlib.h> // atoi
 #include <ctype.h>  // isspace
 
-#ifdef CLIENT_DLL
-#include "client_sound.h"
-#include "particle_effects.h"
-
-int iHasNewViewAngles;
-int iHasNewViewOrigin;
-int iIsSpectator;
-float vecNewViewAngles[3];
-float vecNewViewOrigin[3];
-#else
 extern "C" void PM_PlaySoundFX_SERVER(int playerIndex, float *origin, int channel,
 	char *sample, float volume, float attenuation, int flags, int pitch);
 extern "C" char PM_FindMaterialType_SERVER(char *name);
-#endif
 
 #pragma warning( disable : 4305 )
 
@@ -195,9 +180,7 @@ int CPlayerMove::PlayerShouldBypassEntity( physent_t *entity )
 			return false;
 	}
 
-#ifndef CLIENT_DLL
 	rgOverlappingEntity[pmove->player_index] = entity->info;
-#endif
 
 	return true;
 }
@@ -210,11 +193,7 @@ int pfnPlayerShouldBypassEntity( physent_t *entity )
 
 char PM_FindTextureType( char *name )
 {
-#ifdef CLIENT_DLL
-	return PM_FindMaterialType_CLIENT(name);
-#else
 	return PM_FindMaterialType_SERVER(name);
-#endif
 }
 
 void CPlayerMove::PlaySoundFX(int playerIndex, float *origin, int channel, char *sample, float volume, float attenuation, int flags, int pitch)
@@ -222,11 +201,7 @@ void CPlayerMove::PlaySoundFX(int playerIndex, float *origin, int channel, char 
 	if (!pmove->runfuncs)
 		return;
 
-#ifdef CLIENT_DLL
-	PM_PlaySoundFX_CLIENT(playerIndex, origin, channel, sample, volume, attenuation, flags, pitch);
-#else
 	PM_PlaySoundFX_SERVER(playerIndex + 1, origin, channel, sample, volume, attenuation, flags, pitch);
-#endif
 }
 
 void CPlayerMove::PlayStepSound(int step, float volume, bool force)
@@ -297,25 +272,6 @@ void CPlayerMove::PlayStepSound(int step, float volume, bool force)
 	PlaySoundFX(pmove->player_index, pmove->origin, channel, (char *)sounds[step][irand], volume, ATTN_NORM, 0, PITCH_NORM);
 }
 
-#ifdef CLIENT_DLL
-void CPlayerMove::GenericSplashSearch(void)
-{
-	if (Length(pmove->velocity) > 150 && pmove->waterlevel > 0 && pmove->waterlevel != 3)
-	{
-		vec3_t origin;
-
-		VectorCopy(pmove->origin, origin);
-		origin[2] += 36;
-		origin[0] += pmove->RandomLong(-8, 8);
-		origin[1] += pmove->RandomLong(-8, 8);
-
-		while (pmove->PM_PointContents(origin, NULL) == CONTENTS_EMPTY)
-			origin[2] -= 1;
-
-		MakeWaterSplash(origin, 0);
-	}
-}
-#endif
 
 int CPlayerMove::MapTextureTypeStepType(char chTextureType)
 {
@@ -450,9 +406,6 @@ void CPlayerMove::UpdateStepSound( bool force )
 			fvol = 0.65;
 			pmove->flTimeStepSound = 600;
 
-#ifdef CLIENT_DLL
-			GenericSplashSearch();
-#endif
 		}
 		else if (pmove->PM_PointContents(feet, NULL) == CONTENTS_WATER || pmove->waterlevel)
 		{
@@ -460,9 +413,6 @@ void CPlayerMove::UpdateStepSound( bool force )
 			fvol = fWalking ? 0.2 : 0.5;
 			pmove->flTimeStepSound = fWalking ? 400 : 300;
 
-#ifdef CLIENT_DLL
-			GenericSplashSearch();
-#endif
 		}
 		else
 		{
@@ -1670,10 +1620,6 @@ SpectatorMove
 */
 void CPlayerMove::SpectatorMove(void)
 {
-#ifdef CLIENT_DLL
-	if (pmove->runfuncs)
-		iIsSpectator = 1;
-#endif
 
 	if (pmove->iuser2)
 	{
@@ -1696,10 +1642,6 @@ void CPlayerMove::SpectatorMove(void)
 			angles[1] = pmove->physents[target].angles[1];
 			angles[2] = pmove->physents[target].angles[2];
 
-#ifdef CLIENT_DLL
-			if (pmove->runfuncs)
-				iIsSpectator |= 6;
-#endif
 		}
 		else
 		{
@@ -1717,15 +1659,6 @@ void CPlayerMove::SpectatorMove(void)
 		VectorCopy(angles, pmove->angles);
 		VectorCopy(vec3_origin, pmove->velocity);
 
-#ifdef CLIENT_DLL
-		if (pmove->runfuncs)
-		{
-			VectorCopy(pmove->angles, vecNewViewAngles);
-			iHasNewViewAngles = 1;
-			VectorCopy(pmove->origin, vecNewViewOrigin);
-			iHasNewViewOrigin = 1;
-		}
-#endif
 		return;
 	}
 
@@ -2964,9 +2897,7 @@ void CPlayerMove::PlayerMove ( bool server )
 {
 	m_pLadder = NULL;
 
-#ifndef CLIENT_DLL
 	rgOverlappingEntity[pmove->player_index] = 0;
-#endif
 
 	// Are we running server code?
 	pmove->server = server;                
@@ -2985,14 +2916,6 @@ void CPlayerMove::PlayerMove ( bool server )
 	// Convert view angles to vectors
 	AngleVectors (pmove->angles, pmove->forward, pmove->right, pmove->up);
 
-#ifdef CLIENT_DLL
-	if (pmove->runfuncs)
-	{
-		iIsSpectator = 0;
-		iHasNewViewAngles = 0;
-		iHasNewViewOrigin = 0;
-	}
-#endif
 
 	// Special handling for spectator and observers. (iuser1 is set if the player's in observer mode)
 	if ( pmove->spectator || pmove->iuser1 > 0 )
@@ -3014,7 +2937,6 @@ void CPlayerMove::PlayerMove ( bool server )
 	// Now that we are "unstuck", see where we are ( waterlevel and type, pmove->onground ).
 	CategorizePosition();
 
-#ifndef CLIENT_DLL
 	if ( server && rgOverlappingEntity[pmove->player_index] > 0 )
 	{
 		vec3_t direction;
@@ -3025,14 +2947,10 @@ void CPlayerMove::PlayerMove ( bool server )
 		VectorNormalize( direction );
 		Accelerate( direction, 270, 270 );
 	}
-#endif
 
 	// Store off the starting water level
 	pmove->oldwaterlevel = pmove->waterlevel;
 
-#ifdef CLIENT_DLL
-	PM_UpdateWaterLevel_CLIENT( pmove->waterlevel );
-#endif
 
 	// If we are not on ground, store off how fast we are moving down
 	if ( pmove->onground == -1 )

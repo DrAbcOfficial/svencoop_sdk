@@ -43,7 +43,6 @@ enum squeak_e {
 	SQUEAK_THROW
 };
 
-#ifndef CLIENT_DLL
 
 float CSqueakGrenade::m_flNextBounceSoundTime = 0;
 
@@ -377,7 +376,6 @@ void CSqueakGrenade::SuperBounceTouch( CBaseEntity *pOther )
 	m_flNextBounceSoundTime = gpGlobals->time + 0.5;// half second.
 }
 
-#endif
 
 LINK_ENTITY_TO_CLASS( weapon_snark, CSqueak );
 

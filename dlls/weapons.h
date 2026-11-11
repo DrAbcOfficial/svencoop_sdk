@@ -19,9 +19,6 @@
 
 #include "weapon_iteminfo.h"
 
-#if defined( CLIENT_DLL )
-#include "hl/hl_weapons.h"
-#else
 #include "effects.h"
 #include "CBasePickupObject.h"
 #include "TypedEntityHandle.h"
@@ -58,12 +55,8 @@ public:
 	void EXPORT ExplodeTouch( CBaseEntity *pOther );
 	void EXPORT DangerSoundThink( void );
 	void EXPORT PreDetonate( void );
-#ifdef CLIENT_DLL
-	void EXPORT Detonate( void );
-#else
 	virtual void EXPORT Detonate( void );
 	void EXPORT CallDetonate( void ) { Detonate(); }
-#endif
 	void EXPORT DetonateUse( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
 	void EXPORT TumbleThink( void );
 	void EXPORT ClusterThink( void );
@@ -325,10 +318,8 @@ class CBasePlayerItem : public CBasePickupObject
 public:
 	CBasePlayerItem() : m_bIsBeingRemoved( false ), m_bIsNotAmmoItem( false ), m_bExclusiveHold( false ), m_iszCustomSpriteDir( 0 ) {}
 
-#ifndef CLIENT_DLL
 	int ObjectCaps( void );
 	void UpdateOnRemove( void );
-#endif
 
 	void OnCreate( void );
 	void PostSpawn( void );
@@ -404,9 +395,7 @@ public:
 	string_t        m_iszCustomSpriteDir;
 	string_t        m_iszWorldModel;
 
-#ifndef CLIENT_DLL
 	float           m_flLastBounce;
-#endif
 
 	virtual int iItemSlot( void ) { return 0; }			// return 0 to MAX_ITEMS_SLOTS, used in hud
 
@@ -549,9 +538,7 @@ public:
 
 	unsigned short m_usBurstFire;
 
-#ifndef CLIENT_DLL
 	float m_flNextBurstRound;
-#endif
 
 };
 
@@ -670,10 +657,6 @@ public:
 void PackWeapons( CBasePlayer *player, CWeaponBox *box );
 void PackAmmo( CBasePlayer *player, CWeaponBox *box );
 
-#ifdef CLIENT_DLL
-bool bIsMultiplayer ( void );
-void LoadVModel ( const char *szViewModel, CBasePlayer *m_hPlayer );
-#endif
 
 class CGlock : public CBasePlayerWeapon
 {
@@ -846,11 +829,9 @@ class CRpg : public CBasePlayerWeapon
 {
 public:
 
-#ifndef CLIENT_DLL
 	int		Save( CSave &save );
 	int		Restore( CRestore &restore );
 	static	TYPEDESCRIPTION m_SaveData[];
-#endif
 
 	void Spawn( void );
 	void Precache( void );
@@ -897,11 +878,7 @@ public:
 
 	int		m_iTrail;
 	float	m_flIgniteTime;
-#ifdef CLIENT_DLL
-	CRpg	*m_pLauncher;
-#else
 	EHANDLE	m_hLauncher;
-#endif
 	float m_flCustomDmg;
 };
 
@@ -948,11 +925,9 @@ class CSatchel : public CBasePlayerWeapon
 {
 public:
 
-#ifndef CLIENT_DLL
 	int		Save( CSave &save );
 	int		Restore( CRestore &restore );
 	static	TYPEDESCRIPTION m_SaveData[];
-#endif
 
 	void Spawn( void );
 	void Precache( void );
@@ -1030,5 +1005,4 @@ public:
 #include "pipewrench.h"
 #include "medkit.h"
 
-#endif // CLIENT_DLL
 #endif // WEAPONS_H

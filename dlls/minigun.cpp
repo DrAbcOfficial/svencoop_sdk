@@ -23,9 +23,7 @@
 #include "event_flags.h"
 #include "minigun.h"
 
-#ifndef CLIENT_DLL
 #include "server_support.h"
-#endif
 
 LINK_ENTITY_TO_CLASS( weapon_minigun, CMinigun );
 
@@ -43,11 +41,7 @@ void CMinigun::Spawn( void )
 	m_fSpunUp = false;
 	m_iSecondaryAmmoType = 0;
 
-#ifdef CLIENT_DLL
-	FallInit();
-#else
 	CBasePhysicsObject::Spawn();
-#endif
 
 	m_iSpeedState = MINIGUN_SPEED_NONE;
 	m_flSpeedReduction = 0;
@@ -57,20 +51,6 @@ void CMinigun::Precache( void )
 {
 	PrecacheCustomModels();
 
-#ifdef CLIENT_DLL
-	PRECACHE_MODEL( "models/v_minigun.mdl" );
-	PRECACHE_MODEL( "models/p_minigunidle.mdl" );
-	PRECACHE_MODEL( "models/p_minigunspin.mdl" );
-	PRECACHE_MODEL( "models/w_minigun.mdl" );
-	PRECACHE_MODEL( "models/w_saw_clip.mdl" );
-
-	m_iShell = PRECACHE_MODEL( "models/saw_shell.mdl" );// brass shell
-
-	PRECACHE_SOUND( "minigun/hw_shoot1.wav" );
-	PRECACHE_SOUND( "hassault/hw_spinup.wav" );
-	PRECACHE_SOUND( "hassault/hw_spindown.wav" );
-	PRECACHE_SOUND( "hassault/hw_spin.wav" );
-#else
 	UTIL_PrecacheModel( this, "models/v_minigun.mdl" );
 	UTIL_PrecacheModel( this, "models/p_minigunidle.mdl" );
 	UTIL_PrecacheModel( this, "models/p_minigunspin.mdl" );
@@ -81,7 +61,6 @@ void CMinigun::Precache( void )
 	PrecacheSound_Intercept( this, "hassault/hw_spinup.wav" );
 	PrecacheSound_Intercept( this, "hassault/hw_spindown.wav" );
 	PrecacheSound_Intercept( this, "hassault/hw_spin.wav" );
-#endif
 
 	m_usMinigunFire = PRECACHE_EVENT( 1, "events/minigun.sc" );
 	m_usMinigunSpin = PRECACHE_EVENT( 1, "events/minigun_spin.sc" );
@@ -115,11 +94,7 @@ bool CMinigun::AddToPlayer( CBasePlayer *pPlayer )
 		AddToPlayerMessage();
 		m_flSpeedReduction = 0;
 
-#ifdef CLIENT_DLL
-		m_hPlayer->SwitchWeapon( this );
-#else
 		pPlayer->SwitchWeapon( this );
-#endif
 
 		return true;
 	}
@@ -198,10 +173,8 @@ void CMinigun::PrimaryAttack( void )
 	if ( m_hPlayer->pev->weaponanim != MINIGUN_SPINFIRE )
 		SendWeaponAnim( MINIGUN_SPINFIRE );
 
-#ifndef CLIENT_DLL
 	if ( m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 )
 		m_hPlayer->SetSuitUpdate( "!HEV_AMO0", FALSE, 0 );
-#endif
 
 	m_flNextPrimaryAttack = m_flNextPrimaryAttack + 0.06;
 
@@ -295,9 +268,6 @@ bool CMinigun::Deploy( void )
 	m_fSpinning = false;
 	m_flDeployTime = UTIL_WeaponTimeBase() + 2.0;
 
-#ifdef CLIENT_DLL
-	return DefaultDeploy( GetV_Model( "models/v_minigun.mdl" ), GetP_Model( "models/p_minigunidle.mdl" ), MINIGUN_DRAW, "minigun" );
-#else
 	const char *viewModel = GetV_Model( "models/v_minigun.mdl" );
 
 	m_hPlayer->pev->viewmodel = MAKE_STRING( viewModel );
@@ -309,7 +279,6 @@ bool CMinigun::Deploy( void )
 	SendWeaponAnim( MINIGUN_DRAW );
 	m_hPlayer->SetAnimation( PLAYER_DEPLOY );
 	return true;
-#endif
 }
 
 CBasePlayerItem *CMinigun::DropItem( void )
@@ -379,11 +348,7 @@ void CMinigun::OnCreate( void )
 
 void CMinigun::Materialize( void )
 {
-#ifdef CLIENT_DLL
-	CBasePlayerWeapon::Materialize();
-#else
 	CBasePickupObject::Materialize();
-#endif
 }
 
 void CMinigun::TouchedWorld( bool firstTouch )
@@ -455,9 +420,7 @@ void CMinigun::SetPlayerSpeed( int iState )
 	else
 		m_hPlayer->pev->fuser4 = 0;
 
-#ifndef CLIENT_DLL
 	m_hPlayer->UpdatePlayerSpeed();
-#endif
 
 	m_iSpeedState = iState;
 }
@@ -475,15 +438,3 @@ void CMinigun::SetWeaponData( weapon_data_t *data )
 	m_hPlayer->m_rgAmmo[ m_iPrimaryAmmoType ] = data->iuser2;
 	m_fSpunUp = data->fuser1 != 0;
 }
-
-#ifdef CLIENT_DLL
-class CMinigunChainammo : public CPlayerAmmo
-{
-public:
-	CMinigunChainammo() : CPlayerAmmo( AMMO_556_GIVE, "556", _556_MAX_CARRY ) { }
-
-	const char *GetDefaultModel( void ) { return "models/w_saw_clip.mdl"; }
-};
-
-LINK_ENTITY_TO_CLASS( ammo_556, CMinigunChainammo );
-#endif

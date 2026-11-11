@@ -15,15 +15,11 @@
 
 typedef int BOOL;
 // The player movement code is built with Vector, like the rest of the game code
-#ifdef CLIENT_DLL
-#include "util_vector.h"
-#else
 #include <math.h>
 typedef float vec_t;
 #include "vector.h"
 #define DID_VEC3_T_DEFINE
 #define vec3_t Vector
-#endif
 #include "mathlib.h"
 #include "const.h"
 #include "usercmd.h"

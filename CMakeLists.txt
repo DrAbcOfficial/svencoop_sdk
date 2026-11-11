@@ -1,12 +1,11 @@
-# Sven Co-op SDK - cross-platform CMake build
+# Sven Co-op SDK - dedicated server CMake build
 #
-# Builds the two GoldSrc modules shipped by this repository:
-#   * server  (server.dll / hl_i386.so / hl_i386.dylib)
-#   * client  (client.dll / client.so / client.dylib)
+# Builds only the server module:
+#   * server.dll  (Windows, 32-bit)
+#   * hl_i386.so  (Linux, 32-bit)
 #
-# The code is 32-bit only: the GoldSrc engine and the prebuilt dependencies
-# (vgui, SDL2, FMOD Ex, Discord RPC, curl) are x86. See README.md for the
-# supported configure commands.
+# The GoldSrc engine and the bundled server-side third-party dependencies are
+# 32-bit x86.
 
 cmake_minimum_required(VERSION 3.20)
 
@@ -22,8 +21,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-option(SVENCOOP_BUILD_SERVER "Build the server module" ON)
-option(SVENCOOP_BUILD_CLIENT "Build the client module" ON)
 option(SVENCOOP_WARNINGS    "Enable the compiler warning level used by the old projects" ON)
 option(SVENCOOP_ALLOW_64BIT "Allow a 64-bit Linux build (requires 64-bit dependencies)" OFF)
 
@@ -40,7 +37,7 @@ if(UNIX AND NOT APPLE AND CMAKE_SIZEOF_VOID_P EQUAL 8 AND NOT SVENCOOP_ALLOW_64B
     message(FATAL_ERROR
         "GoldSrc and the bundled dependencies are 32-bit. Configure with the supplied "
         "toolchain file: cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-linux-x86.cmake. "
-        "Set SVENCOOP_ALLOW_64BIT=ON only if you have 64-bit replacements for vgui/SDL2/FMODEx.")
+        "Set SVENCOOP_ALLOW_64BIT=ON only if you have 64-bit replacements for the server dependencies.")
 endif()
 
 # ---------------------------------------------------------------------------
@@ -56,7 +53,7 @@ if(MSVC)
         add_compile_options(/W3)
     endif()
 else()
-    # POSIX/GCC definitions shared by the server and client modules.
+    # POSIX/GCC definitions shared by the server.
     add_compile_definitions(
         _GLIBCXX_USE_CXX11_ABI=0
         NO_MALLOC_OVERRIDE
@@ -92,6 +89,29 @@ set_source_files_properties(
     PROPERTIES COMPILE_DEFINITIONS "AS_USE_FLOAT=1"
 )
 
+# Crypto++ 8.9.0 still uses stdext::make_checked_array_iterator, which was
+# removed from newer MSVC standard libraries. Probe for it and supply a small
+# compatibility shim only when necessary.
+if(MSVC)
+    include(CheckCXXSourceCompiles)
+    check_cxx_source_compiles("
+        #include <iterator>
+        int main()
+        {
+            unsigned char buffer[1] = { 0 };
+            auto it = stdext::make_checked_array_iterator(buffer, 1);
+            (void)it;
+            return 0;
+        }
+    " SVENCOOP_HAVE_STDEXT_CHECKED_ARRAY_ITERATOR)
+
+    if(NOT SVENCOOP_HAVE_STDEXT_CHECKED_ARRAY_ITERATOR)
+        set_source_files_properties(external/cryptopp/integer.cpp
+            PROPERTIES COMPILE_OPTIONS
+            "/FI${CMAKE_CURRENT_SOURCE_DIR}/cmake/compat/msvc_checked_iterator.h")
+    endif()
+endif()
+
 # Crypto++ selects its SIMD implementations at compile time on GCC/Clang.
 if(NOT MSVC)
     set_source_files_properties(external/cryptopp/gcm_simd.cpp      PROPERTIES COMPILE_OPTIONS "-mssse3;-mpclmul")
@@ -101,7 +121,7 @@ if(NOT MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
-# Include directories / definitions shared by the game modules
+# Include directories / definitions
 # ---------------------------------------------------------------------------
 set(SVENCOOP_COMMON_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/dlls
@@ -133,10 +153,10 @@ endif()
 # ---------------------------------------------------------------------------
 # libcurl import library (Windows)
 #
-# The server only ships libcurl_sven.def; the old project generated the import
-# library with lib.exe before linking.
+# The server only ships libcurl_sven.def; the original project generated the
+# import library with lib.exe before linking.
 # ---------------------------------------------------------------------------
-if(WIN32 AND MSVC AND SVENCOOP_BUILD_SERVER)
+if(WIN32 AND MSVC)
     get_filename_component(SVENCOOP_MSVC_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
     find_program(SVENCOOP_LIB_EXE
         NAMES lib.exe
@@ -164,6 +184,16 @@ if(WIN32 AND MSVC AND SVENCOOP_BUILD_SERVER)
 endif()
 
 # ---------------------------------------------------------------------------
+# miniz (official CMake project)
+# ---------------------------------------------------------------------------
+set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(BUILD_FUZZERS  OFF CACHE BOOL "" FORCE)
+set(BUILD_TESTS    OFF CACHE BOOL "" FORCE)
+set(INSTALL_PROJECT OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+add_subdirectory(external/miniz EXCLUDE_FROM_ALL)
+
+# ---------------------------------------------------------------------------
 # Output directories
 # ---------------------------------------------------------------------------
 set(SVENCOOP_RUNTIME_OUTPUT_DIR "${CMAKE_BINARY_DIR}/bin")
@@ -173,199 +203,85 @@ set(SVENCOOP_ARCHIVE_OUTPUT_DIR "${CMAKE_BINARY_DIR}/lib")
 # ---------------------------------------------------------------------------
 # Server module
 # ---------------------------------------------------------------------------
-if(SVENCOOP_BUILD_SERVER)
-    add_library(svencoop_server_runtime STATIC
-        ${SVENCOOP_SERVER_RUNTIME_SOURCES}
-    )
-    target_include_directories(svencoop_server_runtime PRIVATE
-        ${SVENCOOP_COMMON_INCLUDES}
-        ${CMAKE_CURRENT_SOURCE_DIR}/external/angelscript/sdk/angelscript/include
-    )
-    target_compile_definitions(svencoop_server_runtime PRIVATE
-        ${SVENCOOP_COMMON_DEFINITIONS}
-        VALVE_DLL
-        CLIENT_WEAPONS
-        AS_PROCESS_METADATA=0
-        AS_USE_STLNAMES=1
-        AS_USE_ACCESSORS=0
-    )
-    if(NOT WIN32)
-        target_compile_definitions(svencoop_server_runtime PRIVATE DISABLE_VEC_ORIGIN)
-        target_compile_options(svencoop_server_runtime PRIVATE -fexceptions)
+add_library(svencoop_server_runtime STATIC
+    ${SVENCOOP_SERVER_RUNTIME_SOURCES}
+)
+target_include_directories(svencoop_server_runtime PRIVATE
+    ${SVENCOOP_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/external/angelscript/sdk/angelscript/include
+)
+target_compile_definitions(svencoop_server_runtime PRIVATE
+    ${SVENCOOP_COMMON_DEFINITIONS}
+    VALVE_DLL
+    CLIENT_WEAPONS
+    AS_PROCESS_METADATA=0
+    AS_USE_STLNAMES=1
+    AS_USE_ACCESSORS=0
+)
+if(NOT WIN32)
+    target_compile_definitions(svencoop_server_runtime PRIVATE DISABLE_VEC_ORIGIN)
+    target_compile_options(svencoop_server_runtime PRIVATE -fexceptions)
+endif()
+
+add_library(svencoop_server MODULE
+    ${SVENCOOP_SERVER_SOURCES}
+)
+
+target_include_directories(svencoop_server PRIVATE
+    ${SVENCOOP_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/external/angelscript/sdk/angelscript/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/external/cryptopp
+)
+
+# Crypto++ needs manual template instantiation in this codebase.
+target_sources(svencoop_server PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/compat/cryptopp_client_templates.cpp
+)
+target_compile_definitions(svencoop_server PRIVATE
+    ${SVENCOOP_COMMON_DEFINITIONS}
+    VALVE_DLL
+    CLIENT_WEAPONS
+    AS_PROCESS_METADATA=0
+    AS_USE_STLNAMES=1
+    AS_USE_ACCESSORS=0
+)
+
+target_link_libraries(svencoop_server PRIVATE svencoop_server_runtime miniz)
+
+if(WIN32)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dlls/hl.def")
+        target_sources(svencoop_server PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/dlls/hl.def")
     endif()
-
-    add_library(svencoop_server MODULE
-        ${SVENCOOP_SERVER_SOURCES}
-    )
-
-    target_include_directories(svencoop_server PRIVATE
-        ${SVENCOOP_COMMON_INCLUDES}
-        ${CMAKE_CURRENT_SOURCE_DIR}/external/angelscript/sdk/angelscript/include
-    )
-    target_compile_definitions(svencoop_server PRIVATE
-        ${SVENCOOP_COMMON_DEFINITIONS}
-        VALVE_DLL
-        CLIENT_WEAPONS
-        AS_PROCESS_METADATA=0
-        AS_USE_STLNAMES=1
-        AS_USE_ACCESSORS=0
-    )
-
-    target_link_libraries(svencoop_server PRIVATE svencoop_server_runtime)
-
-    if(WIN32)
-        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dlls/hl.def")
-            target_sources(svencoop_server PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/dlls/hl.def")
-        endif()
-        target_link_libraries(svencoop_server PRIVATE wsock32)
-        if(SVENCOOP_CURL_LIB AND SVENCOOP_LIB_EXE)
-            target_link_libraries(svencoop_server PRIVATE "${SVENCOOP_CURL_LIB}")
-            add_dependencies(svencoop_server svencoop_curl_import)
-        endif()
-        # The MSVC CRT helper object referenced by the original project.
-        get_filename_component(SVENCOOP_MSVC_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
-        get_filename_component(SVENCOOP_MSVC_TOOLSET_DIR "${SVENCOOP_MSVC_BIN_DIR}/../../.." ABSOLUTE)
-        set(SVENCOOP_FLOAT_ROUNDING_OBJ "${SVENCOOP_MSVC_TOOLSET_DIR}/lib/x86/legacy_stdio_float_rounding.obj")
-        if(EXISTS "${SVENCOOP_FLOAT_ROUNDING_OBJ}")
-            target_link_options(svencoop_server PRIVATE "${SVENCOOP_FLOAT_ROUNDING_OBJ}")
-        endif()
-        set_target_properties(svencoop_server PROPERTIES OUTPUT_NAME "server")
-    else()
-        target_compile_definitions(svencoop_server PRIVATE DISABLE_VEC_ORIGIN)
-        target_compile_options(svencoop_server PRIVATE -fexceptions)
-        # CPlayerDatabase uses the system libcurl on non-Windows platforms.
-        find_package(CURL REQUIRED)
-        target_link_libraries(svencoop_server PRIVATE m dl pthread CURL::libcurl)
-        # Keep the file names produced by the former Linux Makefiles.
-        set_target_properties(svencoop_server PROPERTIES
-            PREFIX ""
-            OUTPUT_NAME "hl_i386")
-        if(APPLE)
-            set_target_properties(svencoop_server PROPERTIES SUFFIX ".dylib")
-        endif()
+    target_link_libraries(svencoop_server PRIVATE wsock32)
+    if(SVENCOOP_CURL_LIB AND SVENCOOP_LIB_EXE)
+        target_link_libraries(svencoop_server PRIVATE "${SVENCOOP_CURL_LIB}")
+        add_dependencies(svencoop_server svencoop_curl_import)
     endif()
-
+    # The MSVC CRT helper object referenced by the original project.
+    get_filename_component(SVENCOOP_MSVC_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    get_filename_component(SVENCOOP_MSVC_TOOLSET_DIR "${SVENCOOP_MSVC_BIN_DIR}/../../.." ABSOLUTE)
+    set(SVENCOOP_FLOAT_ROUNDING_OBJ "${SVENCOOP_MSVC_TOOLSET_DIR}/lib/x86/legacy_stdio_float_rounding.obj")
+    if(EXISTS "${SVENCOOP_FLOAT_ROUNDING_OBJ}")
+        target_link_options(svencoop_server PRIVATE "${SVENCOOP_FLOAT_ROUNDING_OBJ}")
+    endif()
+    set_target_properties(svencoop_server PROPERTIES OUTPUT_NAME "server")
+else()
+    target_compile_definitions(svencoop_server PRIVATE DISABLE_VEC_ORIGIN)
+    target_compile_options(svencoop_server PRIVATE -fexceptions)
+    # CPlayerDatabase uses the system libcurl on non-Windows platforms.
+    find_package(CURL REQUIRED)
+    target_link_libraries(svencoop_server PRIVATE m dl pthread CURL::libcurl)
+    # Keep the file names produced by the former Linux Makefiles.
     set_target_properties(svencoop_server PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${SVENCOOP_RUNTIME_OUTPUT_DIR}"
-        LIBRARY_OUTPUT_DIRECTORY "${SVENCOOP_LIBRARY_OUTPUT_DIR}"
-        ARCHIVE_OUTPUT_DIRECTORY "${SVENCOOP_ARCHIVE_OUTPUT_DIR}"
-    )
-endif()
-
-# ---------------------------------------------------------------------------
-# Client module
-# ---------------------------------------------------------------------------
-if(SVENCOOP_BUILD_CLIENT)
-    add_library(svencoop_client MODULE
-        ${SVENCOOP_CLIENT_SOURCES}
-    )
-
-    target_include_directories(svencoop_client PRIVATE
-        ${SVENCOOP_COMMON_INCLUDES}
-        ${CMAKE_CURRENT_SOURCE_DIR}/cl_dll
-        ${CMAKE_CURRENT_SOURCE_DIR}/utils/vgui/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/external
-        ${CMAKE_CURRENT_SOURCE_DIR}/external/fmodex/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/external/discord-rpc/include
-    )
-    target_compile_definitions(svencoop_client PRIVATE
-        ${SVENCOOP_COMMON_DEFINITIONS}
-        CLIENT_DLL
-        CLIENT_WEAPONS
-        HL_DLL
-    )
-
-    if(WIN32)
-        target_compile_options(svencoop_client PRIVATE /EHsc)
-        target_link_libraries(svencoop_client PRIVATE
-            "${CMAKE_CURRENT_SOURCE_DIR}/utils/vgui/lib/win32_vc6/vgui.lib"
-            "${CMAKE_CURRENT_SOURCE_DIR}/lib/public/SDL2.lib"
-            "${CMAKE_CURRENT_SOURCE_DIR}/lib/public/fmodex_vc.lib"
-            "${CMAKE_CURRENT_SOURCE_DIR}/lib/public/discord-rpc.lib"
-            opengl32
-            wsock32
-            delayimp
-        )
-        target_link_options(svencoop_client PRIVATE "/DELAYLOAD:fmodex.dll")
-        set_target_properties(svencoop_client PROPERTIES OUTPUT_NAME "client")
-    else()
-        target_link_libraries(svencoop_client PRIVATE m dl pthread)
-        target_compile_options(svencoop_client PRIVATE -fexceptions)
-        target_compile_definitions(svencoop_client PRIVATE _snwprintf=swprintf)
-        if(APPLE)
-            target_compile_definitions(svencoop_client PRIVATE DISABLE_VEC_ORIGIN)
-            target_link_libraries(svencoop_client PRIVATE
-                "${CMAKE_CURRENT_SOURCE_DIR}/linux/release/vgui.dylib"
-                "${CMAKE_CURRENT_SOURCE_DIR}/linux/libSDL2-2.0.0.dylib"
-            )
-            find_library(SVENCOOP_DISCORD_RPC_LIBRARY NAMES discord-rpc)
-            find_library(SVENCOOP_FMODEX_LIBRARY NAMES fmodex)
-            if(SVENCOOP_DISCORD_RPC_LIBRARY)
-                target_link_libraries(svencoop_client PRIVATE "${SVENCOOP_DISCORD_RPC_LIBRARY}")
-            endif()
-            if(SVENCOOP_FMODEX_LIBRARY)
-                target_link_libraries(svencoop_client PRIVATE "${SVENCOOP_FMODEX_LIBRARY}")
-            endif()
-            target_link_libraries(svencoop_client PRIVATE "-framework Carbon" "-framework OpenGL")
-        else()
-            target_compile_definitions(svencoop_client PRIVATE DISABLE_VEC_ORIGIN)
-            # Bundled 32-bit libraries: vgui and SDL2 ship in linux/.
-            target_link_directories(svencoop_client PRIVATE
-                "${CMAKE_CURRENT_SOURCE_DIR}/linux")
-
-            set(SVENCOOP_DISCORD_RPC_LIBRARY "" CACHE FILEPATH
-                "Path to the 32-bit Discord RPC library")
-            set(SVENCOOP_FMODEX_LIBRARY "" CACHE FILEPATH
-                "Path to the 32-bit FMOD Ex library")
-            set(SVENCOOP_OPENGL_LIBRARY "" CACHE FILEPATH
-                "Path to the 32-bit OpenGL library")
-
-            if(NOT SVENCOOP_DISCORD_RPC_LIBRARY)
-                find_library(SVENCOOP_DISCORD_RPC_LIBRARY NAMES discord-rpc discord_rpc)
-            endif()
-            if(NOT SVENCOOP_FMODEX_LIBRARY)
-                find_library(SVENCOOP_FMODEX_LIBRARY NAMES fmodex)
-            endif()
-            if(NOT SVENCOOP_OPENGL_LIBRARY)
-                find_library(SVENCOOP_OPENGL_LIBRARY NAMES GL)
-            endif()
-
-            if(NOT SVENCOOP_DISCORD_RPC_LIBRARY)
-                message(FATAL_ERROR
-                    "A 32-bit Discord RPC library was not found. Pass "
-                    "-DSVENCOOP_DISCORD_RPC_LIBRARY=/path/to/libdiscord-rpc.so")
-            endif()
-            if(NOT SVENCOOP_FMODEX_LIBRARY)
-                message(FATAL_ERROR
-                    "A 32-bit FMOD Ex library was not found. Pass "
-                    "-DSVENCOOP_FMODEX_LIBRARY=/path/to/libfmodex.so")
-            endif()
-            if(NOT SVENCOOP_OPENGL_LIBRARY)
-                message(FATAL_ERROR
-                    "A 32-bit OpenGL library was not found. Install the i386 "
-                    "libgl1-mesa-dev package or pass -DSVENCOOP_OPENGL_LIBRARY=/path/to/libGL.so")
-            endif()
-
-            target_link_libraries(svencoop_client PRIVATE
-                # vgui.so has no SONAME; -l: links the exact file name.
-                "-l:vgui.so"
-                "${CMAKE_CURRENT_SOURCE_DIR}/linux/libSDL2-2.0.so.0"
-                "${SVENCOOP_OPENGL_LIBRARY}"
-                "${SVENCOOP_DISCORD_RPC_LIBRARY}"
-                "${SVENCOOP_FMODEX_LIBRARY}"
-            )
-        endif()
-        set_target_properties(svencoop_client PROPERTIES
-            PREFIX ""
-            OUTPUT_NAME "client")
-        if(APPLE)
-            set_target_properties(svencoop_client PROPERTIES SUFFIX ".dylib")
-        endif()
+        PREFIX ""
+        OUTPUT_NAME "hl_i386")
+    if(APPLE)
+        set_target_properties(svencoop_server PROPERTIES SUFFIX ".dylib")
     endif()
-
-    set_target_properties(svencoop_client PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${SVENCOOP_RUNTIME_OUTPUT_DIR}"
-        LIBRARY_OUTPUT_DIRECTORY "${SVENCOOP_LIBRARY_OUTPUT_DIR}"
-        ARCHIVE_OUTPUT_DIRECTORY "${SVENCOOP_ARCHIVE_OUTPUT_DIR}"
-    )
 endif()
+
+set_target_properties(svencoop_server PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${SVENCOOP_RUNTIME_OUTPUT_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY "${SVENCOOP_LIBRARY_OUTPUT_DIR}"
+    ARCHIVE_OUTPUT_DIRECTORY "${SVENCOOP_ARCHIVE_OUTPUT_DIR}"
+)

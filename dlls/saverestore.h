@@ -104,11 +104,7 @@ private:
 	void	BufferReadHeader( HEADER *pheader );
 
 	int		m_global;		// Restoring a global entity?
-#ifdef CLIENT_DLL
-	BOOL	m_precache;
-#else
 	bool	m_precache;
-#endif
 };
 
 #define MAX_ENTITYARRAY 64

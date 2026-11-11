@@ -18,7 +18,7 @@
 // hack into header files that we can ship
 typedef int qboolean;
 typedef unsigned char byte;
-#include "../utils/common/mathlib.h"
+#include "legacy_mathlib.h"
 #include "const.h"
 #include "progdefs.h"
 #include "edict.h"

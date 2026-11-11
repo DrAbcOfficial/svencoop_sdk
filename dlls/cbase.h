@@ -94,9 +94,7 @@ typedef void (CBaseEntity::*USEPTR)( CBaseEntity *pActivator, CBaseEntity *pCall
 // For CLASSIFY
 #include "EntityClassification.h"
 #include "CCustomKeyvalues.h"
-#ifndef CLIENT_DLL
 #include "CStringMap.h"
-#endif
 
 int AllocStringLocal( const char *text );
 
@@ -163,15 +161,10 @@ public:
 	// path corners
 	CBaseEntity			*m_pGoalEnt;// path corner we are heading towards
 
-#ifndef CLIENT_DLL
 	EHANDLE				m_pLink;// used for temporary link-list operations.
-#else
-	CBaseEntity			*m_pLink;// used for temporary link-list operations.
-#endif
 
 	CCustomKeyvalues	*m_pCustomKeyvalues;
 
-#ifndef CLIENT_DLL
 	float				m_flCreationTime;
 	int					m_iExtraSpawnFlags;
 	string_t			m_iszOnDestroy;
@@ -189,7 +182,6 @@ public:
 
 	EHANDLE				m_pSightLink;	// Look's list of everything seen, corpses included
 	EHANDLE				m_hAssignedMedic;	// medic reserving this entity for healing or revival
-#endif
 
 	bool				m_fOverrideClass;
 	int					m_iClassSelection;
@@ -222,7 +214,6 @@ public:
 	virtual void	PostSpawn( void ) { }
 	virtual void	Precache( void );
 	bool SetupModel( void );
-#ifndef CLIENT_DLL
 	const char *SOUNDREPLACEMENT_Find( const char *sample );
 	void AddEntityFlag( int mask );
 	void RemoveEntityFlag( int mask );
@@ -235,7 +226,6 @@ public:
 	void SetOnDestroyFunction( const char *name );
 	int FormatASFunction( char *buffer, unsigned int size, const char *returnType,
 	                      const char *name, const char *parameters, bool warn ) const;
-#endif
 	virtual void	KeyValue( KeyValueData* pkvd);
 	virtual void	*GetKeyValue( const char *szKeyName, entvartype_s &type );
 	virtual void	OnKeyValueUpdate( const char *szKeyName );
@@ -450,11 +440,7 @@ public:
 	virtual Vector EarPosition( ) { return pev->origin + pev->view_ofs * pev->scale; };	// position of ears
 	virtual Vector BodyTarget( const Vector &posSrc ) { return Center( ); };		// position to shoot at
 
-#ifdef CLIENT_DLL
-	int Illumination( ) { return GETENTITYILLUM( ENT( pev ) ); };
-#else
 	virtual int Illumination( ) { return GETENTITYILLUM( ENT( pev ) ); };
-#endif
 
 	virtual	BOOL FVisible ( const Vector &vecOrigin );
 	virtual	bool FVisible ( CBaseEntity *pEntity, bool fIgnoreGlass = true );
@@ -512,11 +498,9 @@ public:
 	enum EGON_FIRESTATE { FIRE_OFF, FIRE_CHARGE };
 	int m_fireState;
 
-#ifndef CLIENT_DLL
 private:
 	void CreateUserData( void );
 	bool MandatoryKeyValue( KeyValueData *pkvd );
-#endif
 };
 
 inline int UTIL_ClampColormapColor( int color )
@@ -602,11 +586,9 @@ inline void CBaseEntity::KeyValue( KeyValueData *pkvd )
 
 		pkvd->fHandled = TRUE;
 	}
-#ifndef CLIENT_DLL
 	else if ( MandatoryKeyValue( pkvd ) )
 	{
 	}
-#endif
 	else
 	{
 		pkvd->fHandled = FALSE;
@@ -884,15 +866,11 @@ public:
 class CBaseDelay : public CBaseEntity
 {
 public:
-#ifndef CLIENT_DLL
 	CBaseDelay();
-#endif
 
 	float	m_flDelay;
 	int		m_iszKillTarget;
-#ifndef CLIENT_DLL
 	EHANDLE	m_hDelayActivator;
-#endif
 
 	virtual void	KeyValue( KeyValueData* pkvd);
 	virtual int		Save( CSave &save );
@@ -901,12 +879,8 @@ public:
 	static	TYPEDESCRIPTION m_SaveData[];
 	// common member functions
 	void SUB_UseTargets( CBaseEntity *pActivator, USE_TYPE useType, float value );
-#ifndef CLIENT_DLL
 	virtual void EXPORT DelayThink( void );
 	void EXPORT CallDelayThink( void ) { DelayThink(); }
-#else
-	void EXPORT DelayThink( void );
-#endif
 };
 
 
@@ -1017,9 +991,7 @@ public:
 							// the button will be allowed to operate. Otherwise, it will be
 							// deactivated.
 
-#ifndef CLIENT_DLL
 	CInventoryRules *m_pInventoryRules;
-#endif
 };
 #define SetMoveDone( a ) m_pfnCallWhenMoveDone = static_cast <void (CBaseToggle::*)(void)> (a)
 
@@ -1157,11 +1129,9 @@ public:
 
 	void Spawn( void );
 	virtual void Precache( void );
-#ifndef CLIENT_DLL
 	virtual void OnSetOriginByMap( void );
 	virtual void RecalculateVectors( void );
 	void UpdateOnRemove( void );
-#endif
 
 	void RotSpawn( void );
 	virtual void KeyValue( KeyValueData* pkvd);
@@ -1231,9 +1201,7 @@ template <class T> T * GetClassPtr( T *a )
 		a = new(pev) T;
 		a->pev = pev;
 
-#ifndef CLIENT_DLL
 		a->OnCreate();
-#endif
 	}
 	return a;
 }
@@ -1282,18 +1250,15 @@ typedef struct _SelAmmo
 class CWorld : public CBaseEntity
 {
 public:
-#ifndef CLIENT_DLL
 	static CWorld *GetInstance( void );
 	void OnCreate( void );
 	void OnDestroy( void );
 	int ShowHUDInfo( void ) { return 0; }
-#endif
 
 	void Spawn( void );
 	void Precache( void );
 	void KeyValue( KeyValueData *pkvd );
 
-#ifndef CLIENT_DLL
 	void SetupEntVars( void );
 	const char *MODELREPLACEMENT_Find( const char *model );
 	void PrecacheGlobalCustomModels( string_t fileName );
@@ -1306,5 +1271,4 @@ public:
 
 private:
 	static CWorld *m_pInstance;
-#endif
 };

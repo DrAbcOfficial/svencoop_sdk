@@ -19,9 +19,7 @@
 #include "monsters.h"
 #include "weapons.h"
 #include "m16.h"
-#ifndef CLIENT_DLL
 #include "playerammo.h"
-#endif
 #include "player.h"
 #include "soundent.h"
 #include "weaponinfo.h"
@@ -32,11 +30,7 @@ LINK_ENTITY_TO_CLASS( weapon_m16, CM16 );
 void CM16::Spawn( void )
 {
 	Precache();
-#ifdef CLIENT_DLL
-	SET_MODEL( ENT( pev ), GetW_Model( "models/w_m16.mdl" ) );
-#else
 	UTIL_SetModel( this, GetW_Model( "models/w_m16.mdl" ) );
-#endif
 	pev->classname = MAKE_STRING( "weapon_m16" );
 
 	m_iDefaultAmmo = M16_DEFAULT_GIVE;
@@ -46,44 +40,14 @@ void CM16::Spawn( void )
 	m_flCustomDmg = pev->dmg;
 	m_iClip2 = 0;
 
-#ifdef CLIENT_DLL
-	FallInit();// get ready to fall down.
-#else
 	if ( g_iARGrenadesHack == 0 )
 		g_iARGrenadesHack = -1;
 
 	CBasePhysicsObject::Spawn();
-#endif
 }
 
 void CM16::Precache( void )
 {
-#ifdef CLIENT_DLL
-	PrecacheCustomModels();
-
-	PRECACHE_MODEL( "models/v_m16a2.mdl" );
-	PRECACHE_MODEL( "models/w_m16.mdl" );
-	PRECACHE_MODEL( "models/p_m16.mdl" );
-	PRECACHE_MODEL( "models/grenade.mdl" );// grenade
-	PRECACHE_MODEL( "models/w_9mmARclip.mdl" );
-
-	m_iShell = PRECACHE_MODEL( "models/saw_shell.mdl" );// brass shell
-
-	PRECACHE_SOUND( "items/9mmclip1.wav" );
-	PRECACHE_SOUND( "items/clipinsert1.wav" );
-	PRECACHE_SOUND( "items/cliprelease1.wav" );
-	PRECACHE_SOUND( "weapons/m16_single.wav" );
-	PRECACHE_SOUND( "weapons/glauncher.wav" );
-	PRECACHE_SOUND( "weapons/glauncher2.wav" );
-	PRECACHE_SOUND( "weapons/357_cock1.wav" );
-	PRECACHE_SOUND( "weapons/gl_reload.wav" );
-	PRECACHE_SOUND( "weapons/m16_charge.wav" );
-	PRECACHE_SOUND( "weapons/m16_magout_metallic.wav" );
-	PRECACHE_SOUND( "weapons/m16_magin_metallic.wav" );
-	PRECACHE_SOUND( "weapons/m16_draw.wav" );
-
-	m_usBurstFire = PRECACHE_EVENT( 1, "events/m16a2.sc" );
-#else
 	PrecacheCustomModels();
 
 	UTIL_PrecacheModel( this, "models/v_m16a2.mdl" );
@@ -108,7 +72,6 @@ void CM16::Precache( void )
 	PrecacheSound_Intercept( this, "weapons/m16_draw.wav" );
 
 	m_usBurstFire = PRECACHE_EVENT( 1, "events/m16a2.sc" );
-#endif
 }
 
 bool CM16::GetItemInfo( ItemInfo *p )
@@ -159,11 +122,7 @@ void CM16::BurstSupplement( void )
 	// player "shoot" animation
 	m_hPlayer->SetAnimation( PLAYER_ATTACK1 );
 
-#ifdef CLIENT_DLL
-	m_hPlayer->m_iWeaponVolume = NORMAL_GUN_VOLUME;
-#else
 	m_hPlayer->m_iWeaponVolume = 1024;
-#endif
 	m_hPlayer->m_iWeaponFlash = NORMAL_GUN_FLASH;
 
 	Vector vecSrc = m_hPlayer->GetGunPosition();
@@ -182,10 +141,8 @@ void CM16::BurstSupplement( void )
 	pev->fuser2 = pev->fuser2 - 1;
 	m_iClip--;
 
-#ifndef CLIENT_DLL
 	if ( !m_iClip && m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 )
 		m_hPlayer->SetSuitUpdate( "!HEV_AMO0", FALSE, 0 );
-#endif
 }
 
 void CM16::Holster( int skiplocal /* = 0 */ )
@@ -228,11 +185,7 @@ void CM16::SecondaryAttack( void )
 		return;
 	}
 
-#ifdef CLIENT_DLL
-	if ( m_iSecondaryAmmoCarried <= 0 && m_iClip2 <= 0 )
-#else
 	if ( m_hPlayer->m_rgAmmo[m_iSecondaryAmmoType] <= 0 && m_iClip2 <= 0 )
-#endif
 	{
 		PlayEmptySound();
 		return;
@@ -244,11 +197,7 @@ void CM16::SecondaryAttack( void )
 		EMIT_SOUND_DYN( ENT( m_hPlayer->pev ), CHAN_WEAPON, "weapons/gl_reload.wav", 1.0, ATTN_NORM, 0, PITCH_NORM );
 
 		m_hPlayer->SetAnimation( PLAYER_ATTACK1, 1 );
-#ifdef CLIENT_DLL
-		SendWeaponAnim( reloadAnim );
-#else
 		SendWeaponAnim( reloadAnim, 0, 0 );
-#endif
 
 		float flTime = UTIL_WeaponTimeBase() + 1.5;
 
@@ -263,11 +212,7 @@ void CM16::SecondaryAttack( void )
 		return;
 	}
 
-#ifdef CLIENT_DLL
-	m_hPlayer->m_iWeaponVolume = NORMAL_GUN_VOLUME;
-#else
 	m_hPlayer->m_iWeaponVolume = 1024;
-#endif
 	m_hPlayer->m_iWeaponFlash = BRIGHT_GUN_FLASH;
 
 	m_hPlayer->m_iExtraSoundTypes = bits_SOUND_DANGER;
@@ -276,11 +221,7 @@ void CM16::SecondaryAttack( void )
 	m_iClip2 = 0;
 	reloadAnim = M16_RELOAD_M203;
 
-#ifdef CLIENT_DLL
-	SendWeaponAnim( M16_LAUNCH );
-#else
 	SendWeaponAnim( M16_LAUNCH, 0, 0 );
-#endif
 
 	// player "shoot" animation
 	m_hPlayer->SetAnimation( PLAYER_ATTACK1, 2 );
@@ -296,7 +237,6 @@ void CM16::SecondaryAttack( void )
 			WEAPONCUSTOM_SND_GLAUNCHER2, 0.8, WEAPONCUSTOM_SOUND, CHAN_WEAPON, 0, 0 );
 	}
 
-#ifndef CLIENT_DLL
 	UTIL_MakeVectors( m_hPlayer->pev->v_angle + m_hPlayer->pev->punchangle );
 
 	Vector source;
@@ -308,16 +248,13 @@ void CM16::SecondaryAttack( void )
 			+ gpGlobals->v_forward * 16 + gpGlobals->v_right * 6;
 
 	CGrenade::ShootContact( m_hPlayer->pev, source, gpGlobals->v_forward * 1000 );
-#endif
 
 	m_flNextPrimaryAttack = UTIL_WeaponTimeBase() + 0.8;
 	m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 0.8;
 	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 5;// idle pretty soon after shooting.
 
-#ifndef CLIENT_DLL
 	if ( m_hPlayer->m_rgAmmo[m_iSecondaryAmmoType] <= 0 )
 		m_hPlayer->SetSuitUpdate( "!HEV_AMO0", FALSE, 0 );
-#endif
 }
 
 int CM16::SecondaryAmmoIndex( void )
@@ -338,12 +275,8 @@ void CM16::Reload( void )
 	if ( pev->fuser2 != 0 )
 		return;
 
-#ifdef CLIENT_DLL
-	DefaultReload( M16_MAX_CLIP, M16_RELOAD_M16, 3.0 );
-#else
 	if ( DefaultReload( M16_MAX_CLIP, M16_RELOAD_M16, 3.0 ) )
 		CBasePlayerWeapon::Reload();
-#endif
 }
 
 void CM16::WeaponIdle( void )
@@ -368,19 +301,11 @@ void CM16::WeaponIdle( void )
 
 	int iAnim = UTIL_SharedRandomLong( m_hPlayer->random_seed, 0, 1 ) ? M16_IDLE : M16_FIDGET;
 
-#ifdef CLIENT_DLL
-	SendWeaponAnim( iAnim );
-#else
 	SendWeaponAnim( iAnim, 0, 0 );
-#endif
 
-#ifdef CLIENT_DLL
-	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_hPlayer->random_seed, 10, 15 );// how long till we do this again.
-#else
 	float idleDelay = UTIL_SharedRandomFloat( m_hPlayer->random_seed, 10, 15 );
 
 	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + idleDelay;
-#endif
 }
 
 void CM16::GetWeaponData( weapon_data_t *data )
@@ -396,9 +321,6 @@ void CM16::SetWeaponData( weapon_data_t *data )
 {
 	m_iPrimaryAmmoType = data->iuser1;
 	m_hPlayer->m_rgAmmo[ m_iPrimaryAmmoType ] = data->iuser2;
-#ifdef CLIENT_DLL
-	m_iSecondaryAmmoCarried = data->iuser3;
-#endif
 	m_iGrenadeReloadAnim = (int)data->fuser1;
 	pev->fuser2 = data->fuser2;
 }

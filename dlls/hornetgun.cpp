@@ -13,7 +13,7 @@
 *
 ****/
 
-#if defined( CLIENT_DLL ) || ( !defined( OEM_BUILD ) && !defined( HLDEMO_BUILD ) )
+#if ( !defined( OEM_BUILD ) && !defined( HLDEMO_BUILD ) )
 
 #include "extdll.h"
 #include "util.h"
@@ -25,7 +25,6 @@
 #include "event_flags.h"
 #include "hornetgun.h"
 
-#ifndef CLIENT_DLL
 #include "CClassicMode.h"
 #include "hornet.h"
 
@@ -37,15 +36,10 @@ extern cvar_t sk_hornet_pdmg;
 #define PRECACHE_SOUND( path ) PrecacheSound_Intercept( this, path )
 #undef SET_MODEL
 #define SET_MODEL( entity, path ) SetModel_Intercept( entity, path )
-#endif
 
 bool HornetgunClassicMode( void )
 {
-#ifdef CLIENT_DLL
-	return CClassicModeWrapper::isEnabled();
-#else
 	return CClassicMode::GetInstance()->IsEnabled();
-#endif
 }
 
 LINK_ENTITY_TO_CLASS( weapon_hornetgun, CHgun );
@@ -65,11 +59,7 @@ void CHgun::Spawn( void )
 	m_iFirePhase = 0;
 	m_flCustomDmg = pev->dmg;
 
-#ifdef CLIENT_DLL
-	FallInit(); // get ready to fall down.
-#else
 	CBasePhysicsObject::Spawn();
-#endif
 }
 
 void CHgun::Precache( void )
@@ -82,9 +72,7 @@ void CHgun::Precache( void )
 	PRECACHE_MODEL( bClassic ? "models/hlclassic/w_hgun.mdl" : "models/w_hgun.mdl");
 	PRECACHE_MODEL( bClassic ? "models/hlclassic/p_hgun.mdl" : "models/p_hgun.mdl" );
 
-#ifndef CLIENT_DLL
 	UTIL_PrecacheOther("hornet");
-#endif
 }
 
 bool CHgun::GetItemInfo(ItemInfo *p)
@@ -110,16 +98,12 @@ bool CHgun::GetItemInfo(ItemInfo *p)
 
 bool CHgun::AddToPlayer( CBasePlayer *pPlayer )
 {
-#ifdef CLIENT_DLL
-	return true;
-#else
 	if ( CBasePlayerWeapon::AddToPlayer( pPlayer ) )
 	{
 		AddToPlayerMessage();
 		return TRUE;
 	}
 	return FALSE;
-#endif
 }
 
 void CHgun::OnCreate( void )
@@ -136,7 +120,6 @@ void CHgun::PrimaryAttack( void )
 	if (m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0)
 		return;
 
-#ifndef CLIENT_DLL
 	UTIL_MakeVectors( m_hPlayer->pev->v_angle );
 
 	CBaseEntity *pHornet = CBaseEntity::Create( "playerhornet", m_hPlayer->GetGunPosition( ) + gpGlobals->v_forward * 16 + gpGlobals->v_right * 8 - gpGlobals->v_up * 12, m_hPlayer->pev->v_angle, false, m_hPlayer->edict() );
@@ -153,7 +136,6 @@ void CHgun::PrimaryAttack( void )
 
 	m_hPlayer->m_iWeaponVolume = QUIET_GUN_VOLUME;
 	m_hPlayer->m_iWeaponFlash = DIM_GUN_FLASH;
-#endif
 
 	PLAYBACK_EVENT_FULL( FEV_NOTHOST, m_hPlayer->edict(), g_evWeaponCustom, 0.0, (float *)&g_vecZero, (float *)&g_vecZero,
 	                     WEAPONCUSTOM_SND_AG_FIRE1 + UTIL_SharedRandomLong( m_hPlayer->random_seed, 0, 2 ), 1.0, WEAPONCUSTOM_SOUND, CHAN_WEAPON, 0, 0 );
@@ -178,7 +160,6 @@ void CHgun::SecondaryAttack( void )
 	if (m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0)
 		return;
 
-#ifndef CLIENT_DLL
 	UTIL_MakeVectors( m_hPlayer->pev->v_angle );
 
 	Vector vecSrc = m_hPlayer->GetGunPosition( ) + gpGlobals->v_forward * 16 + gpGlobals->v_right * 8 - gpGlobals->v_up * 12;
@@ -228,7 +209,6 @@ void CHgun::SecondaryAttack( void )
 
 	if ( m_flCustomDmg > 0 )
 		pev->dmg = m_flCustomDmg;
-#endif
 
 	PLAYBACK_EVENT_FULL( FEV_NOTHOST, m_hPlayer->edict(), g_evWeaponCustom, 0.0, (float *)&g_vecZero, (float *)&g_vecZero,
 	                     WEAPONCUSTOM_SND_AG_FIRE1 + UTIL_SharedRandomLong( m_hPlayer->random_seed, 0, 2 ), 1.0, WEAPONCUSTOM_SOUND, CHAN_WEAPON, 0, 0 );

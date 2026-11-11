@@ -23,7 +23,6 @@
 #include "displacer.h"
 #include "event_flags.h"
 
-#ifndef CLIENT_DLL
 #include "game.h"
 #include "effects.h"
 #include "server_sound.h"
@@ -33,7 +32,6 @@
 #define PRECACHE_MODEL( path ) UTIL_PrecacheModel( this, path )
 #undef PRECACHE_SOUND
 #define PRECACHE_SOUND( path ) PrecacheSound_Intercept( this, path )
-#endif
 
 #define SF_DISPLACER_ROTATE			128
 #define SF_DISPLACER_IGNORE_DELAYS	4096
@@ -43,12 +41,8 @@ LINK_ENTITY_TO_CLASS( weapon_displacer, CDisplacer );
 
 bool CDisplacer::AllowTertiaryFire( void ) const
 {
-#ifdef CLIENT_DLL
-	return m_TertiaryMode == DISPLACER_TERTIARY_ENABLED;
-#else
 	return m_TertiaryMode == DISPLACER_TERTIARY_ENABLED
 		|| ( m_TertiaryMode == 0 && weaponmode_displacer.value != 0.0f );
-#endif
 }
 
 bool CDisplacer::UseDecrement( void )
@@ -128,12 +122,10 @@ void CDisplacer::Spawn( void )
 	m_iDefaultAmmo = DISPLACER_DEFAULT_GIVE;
 	m_iId = WEAPON_DISPLACER;
 
-#ifndef CLIENT_DLL
 	m_flCustomDmg = pev->dmg != 0.0f ? pev->dmg : sk_plr_displacer_other.value;
 
 	if ( m_flPortalRadius == 0.0f )
 		m_flPortalRadius = sk_plr_displacer_radius.value;
-#endif
 
 	if ( m_flPortalSpeed == 0 )
 		m_flPortalSpeed = DISPLACER_PORTAL_SPEED;
@@ -308,13 +300,9 @@ void CDisplacer::WeaponIdle( void )
 
 	int iAnim = UTIL_SharedRandomFloat( m_hPlayer->random_seed, 0, 1 ) > 0.5 ? DISPLACER_IDLE2 : DISPLACER_IDLE1;
 
-#ifdef CLIENT_DLL
-	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_hPlayer->random_seed, 10, 15 );
-#else
 	float flIdleTime = UTIL_SharedRandomFloat( m_hPlayer->random_seed, 10, 15 );
 
 	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + flIdleTime;
-#endif
 
 	SendWeaponAnim( iAnim );
 }
@@ -326,7 +314,6 @@ void CDisplacer::FireProjectile( const Vector &vecDir, float flDamage, int iAmmo
 	if ( m_hPlayer->m_rgAmmo[ m_iPrimaryAmmoType ] <= 0 )
 		m_hPlayer->m_rgAmmo[ m_iPrimaryAmmoType ] = 0;
 
-#ifndef CLIENT_DLL
 	m_hPlayer->m_iWeaponVolume = DISPLACER_VOLUME;
 
 	Vector vecOrigin = m_hPlayer->GetGunPosition();
@@ -337,7 +324,6 @@ void CDisplacer::FireProjectile( const Vector &vecDir, float flDamage, int iAmmo
 
 	CDisplacerPortal::Create( vecOrigin, vecDir * m_flPortalSpeed * flRadius,
 		m_hPlayer->edict(), flDamage, m_flPortalRadius );
-#endif
 }
 
 void CDisplacer::FirePrimary( void )
@@ -353,7 +339,6 @@ void CDisplacer::FireSecondary( void )
 {
 	m_iFireMode = DISPLACER_ATTACK_NONE;
 
-#ifndef CLIENT_DLL
 	string_t iszDestination = m_iszTeleportDestination ? m_iszTeleportDestination : MAKE_STRING( "displacer_global_target" );
 	CBaseEntity *pDestination = NULL;
 
@@ -406,7 +391,6 @@ void CDisplacer::FireSecondary( void )
 	EMIT_SOUND_DYN( ENT( m_hPlayer->pev ), CHAN_WEAPON, "weapons/displacer_self.wav", 1.0, ATTN_NORM, 0, PITCH_NORM );
 	CServer_SoundEngine::GetSoundEngine()->PlaySound( m_hPlayer->edict(), CHAN_STATIC,
 		"weapons/displacer_teleport_player.wav", 1.0, ATTN_NORM, 0, PITCH_NORM, 0, true, vecOldOrigin, 0 );
-#endif
 }
 
 void CDisplacer::StartSpinTertiary( void )
@@ -448,7 +432,6 @@ void CDisplacer::SetWeaponData( weapon_data_t *data )
 	m_iFireMode = (int)data->fuser1;
 }
 
-#ifndef CLIENT_DLL
 LINK_ENTITY_TO_CLASS( displacer_portal, CDisplacerPortal );
 
 void CDisplacerPortal::Precache( void )
@@ -678,4 +661,3 @@ void CDisplacerPortal::BeamThink( void )
 
 	pev->nextthink = gpGlobals->time + 0.1;
 }
-#endif

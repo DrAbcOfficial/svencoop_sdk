@@ -447,8 +447,12 @@ typedef void* HINSTANCE;
 #if defined( _WIN32 )
 
 // Used for dll exporting and importing
+#ifndef DLL_EXPORT
 #define DLL_EXPORT				C_EXTERN __declspec( dllexport )
+#endif
+#ifndef DLL_IMPORT
 #define DLL_IMPORT				C_EXTERN __declspec( dllimport )
+#endif
 
 // Can't use extern "C" when DLL exporting a class
 #define DLL_CLASS_EXPORT		__declspec( dllexport )

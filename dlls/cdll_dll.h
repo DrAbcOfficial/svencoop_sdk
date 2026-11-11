@@ -23,11 +23,7 @@
 #define MAX_WEAPONS		256
 
 #define MAX_WEAPON_SLOTS		10	// hud item selection slots
-#ifdef CLIENT_DLL
-#define MAX_ITEM_TYPES			6	// hud item selection slots
-#else
 #define MAX_ITEM_TYPES			10
-#endif
 
 #define MAX_ITEMS				5	// hard coded item types
 

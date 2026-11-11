@@ -24,7 +24,6 @@
 #include "event_flags.h"
 #include "sporelauncher.h"
 
-#ifndef CLIENT_DLL
 #include "playerammo.h"
 #include "sporegrenade.h"
 
@@ -35,7 +34,6 @@
 #define PRECACHE_MODEL( path ) UTIL_PrecacheModel( this, path )
 #undef PRECACHE_SOUND
 #define PRECACHE_SOUND( path ) PrecacheSound_Intercept( this, path )
-#endif
 
 LINK_ENTITY_TO_CLASS( weapon_sporelauncher, CSporeLauncher );
 
@@ -50,11 +48,7 @@ void CSporeLauncher::Spawn( void )
 	m_iSpecialState = 0;
 	m_flCustomDmg = pev->dmg;
 
-#ifdef CLIENT_DLL
-	FallInit();// get ready to fall down.
-#else
 	CBasePhysicsObject::Spawn();
-#endif
 }
 
 void CSporeLauncher::Precache( void )
@@ -156,7 +150,6 @@ void CSporeLauncher::PrimaryAttack( void )
 	PLAYBACK_EVENT_FULL( FEV_NOTHOST, m_hPlayer->edict(), g_evWeaponCustom, 0.0, (float *)&g_vecZero, (float *)&g_vecZero,
 		WEAPONCUSTOM_SND_SPLAUNCHER_FIRE, 1.0, WEAPONCUSTOM_SOUND, CHAN_WEAPON, 0, 0 );
 
-#ifndef CLIENT_DLL
 	UTIL_MakeVectors( m_hPlayer->pev->v_angle + m_hPlayer->pev->punchangle );
 
 	Vector source = m_hPlayer->pev->origin;
@@ -166,7 +159,6 @@ void CSporeLauncher::PrimaryAttack( void )
 
 	source = source + gpGlobals->v_right * 8 + gpGlobals->v_up * 4;
 	CSporeGrenade::ShootLob( m_hPlayer->pev, source, gpGlobals->v_forward * 700, false, m_flCustomDmg );
-#endif
 
 	if ( !m_iClip && m_hPlayer->m_rgAmmo[ m_iPrimaryAmmoType ] <= 0 )
 	{
@@ -205,7 +197,6 @@ void CSporeLauncher::SecondaryAttack( void )
 	PLAYBACK_EVENT_FULL( FEV_NOTHOST, m_hPlayer->edict(), g_evWeaponCustom, 0.0, (float *)&g_vecZero, (float *)&g_vecZero,
 		WEAPONCUSTOM_SND_SPLAUNCHER_ALTFIRE, 1.0, WEAPONCUSTOM_SOUND, CHAN_WEAPON, 0, 0 );
 
-#ifndef CLIENT_DLL
 	UTIL_MakeVectors( m_hPlayer->pev->v_angle + m_hPlayer->pev->punchangle );
 
 	Vector source = m_hPlayer->pev->origin;
@@ -215,7 +206,6 @@ void CSporeLauncher::SecondaryAttack( void )
 
 	source = source + gpGlobals->v_right * 8 + gpGlobals->v_up * 4;
 	CSporeGrenade::ShootLob( m_hPlayer->pev, source, gpGlobals->v_forward * 1200, false, m_flCustomDmg );
-#endif
 
 	if ( !m_iClip && m_hPlayer->m_rgAmmo[ m_iPrimaryAmmoType ] <= 0 )
 	{
@@ -316,9 +306,7 @@ void CSporeLauncher::Reload( void )
 		m_ReloadState = SPORE_RELOAD_LOADED;
 		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 0.8;
 
-#ifndef CLIENT_DLL
 		CBasePlayerWeapon::Reload();
-#endif
 
 		return;
 	}
@@ -332,9 +320,7 @@ void CSporeLauncher::Reload( void )
 		return;
 	}
 
-#ifndef CLIENT_DLL
 	CBasePlayerWeapon::Reload();
-#endif
 }
 
 void CSporeLauncher::WeaponIdle( void )
@@ -428,7 +414,6 @@ public:
 
 LINK_ENTITY_TO_CLASS( ammo_sporeclip, CSporeLauncherAmmoClip );
 
-#ifndef CLIENT_DLL
 LINK_ENTITY_TO_CLASS( ammo_spore, CSporeLauncherAmmo );
 
 TYPEDESCRIPTION CSporeLauncherAmmo::m_SaveData[] =
@@ -617,4 +602,3 @@ void CSporeLauncherAmmo::Use( CBaseEntity *activator, CBaseEntity *caller, USE_T
 		break;
 	}
 }
-#endif

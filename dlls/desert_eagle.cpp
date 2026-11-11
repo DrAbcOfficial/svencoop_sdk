@@ -25,7 +25,6 @@
 
 LINK_ENTITY_TO_CLASS( weapon_eagle, CDesertEagle );
 
-#ifndef CLIENT_DLL
 LINK_ENTITY_TO_CLASS( desert_eagle_spot, CDESpot );
 
 CDesertEagle::CDesertEagle()
@@ -72,16 +71,11 @@ CDESpot *CDESpot::CreateDESpot( void )
 	spot->pev->classname = MAKE_STRING( "desert_eagle_spot" );
 	return spot;
 }
-#endif
 
 void CDesertEagle::Spawn( void )
 {
 	Precache();
-#ifdef CLIENT_DLL
-	SET_MODEL( ENT( pev ), GetW_Model( "models/w_desert_eagle.mdl" ) );
-#else
 	UTIL_SetModel( this, GetW_Model( "models/w_desert_eagle.mdl" ) );
-#endif
 	pev->classname = MAKE_STRING( "weapon_eagle" );
 
 	m_iDefaultAmmo = EAGLE_DEFAULT_GIVE;
@@ -90,31 +84,11 @@ void CDesertEagle::Spawn( void )
 	m_fInZoom = false;
 	m_fLaserOn = TRUE;
 
-#ifdef CLIENT_DLL
-	FallInit();// get ready to fall down.
-#else
 	CBasePhysicsObject::Spawn();
-#endif
 }
 
 void CDesertEagle::Precache( void )
 {
-#ifdef CLIENT_DLL
-	PrecacheCustomModels();
-
-	PRECACHE_MODEL( "models/v_desert_eagle.mdl" );
-	PRECACHE_MODEL( "models/w_desert_eagle.mdl" );
-	PRECACHE_MODEL( "models/p_desert_eagle.mdl" );
-
-	PRECACHE_SOUND( "items/9mmclip1.wav" );
-	PRECACHE_SOUND( "weapons/de_shot1.wav" );
-	PRECACHE_SOUND( "weapons/desert_eagle_sight.wav" );
-	PRECACHE_SOUND( "weapons/desert_eagle_sight2.wav" );
-	PRECACHE_SOUND( "weapons/desert_eagle_reload.wav" );
-	PRECACHE_SOUND( "weapons/desert_eagle_slidepush.wav" );
-
-	m_usFireEagle = PRECACHE_EVENT( 1, "events/deagle.sc" );
-#else
 	PrecacheCustomModels();
 
 	UTIL_PrecacheModel( this, "models/v_desert_eagle.mdl" );
@@ -129,7 +103,6 @@ void CDesertEagle::Precache( void )
 	PrecacheSound_Intercept( this, "weapons/desert_eagle_slidepush.wav" );
 
 	m_usFireEagle = PRECACHE_EVENT( 1, "events/deagle.sc" );
-#endif
 }
 
 bool CDesertEagle::GetItemInfo( ItemInfo *p )
@@ -173,18 +146,12 @@ void CDesertEagle::PrimaryAttack( void )
 		return;
 	}
 
-#ifndef CLIENT_DLL
 	if ( m_fLaserOn && m_hSpot )
 		m_hSpot->pev->nextthink = gpGlobals->time;
-#endif
 
 	m_iClip--;
 
-#ifdef CLIENT_DLL
-	m_hPlayer->m_iWeaponVolume = LOUD_GUN_VOLUME;
-#else
 	m_hPlayer->m_iWeaponVolume = 1536;
-#endif
 	m_hPlayer->m_iWeaponFlash = BRIGHT_GUN_FLASH;
 
 	m_hPlayer->pev->effects |= EF_MUZZLEFLASH;
@@ -213,13 +180,9 @@ void CDesertEagle::PrimaryAttack( void )
 		m_flNextPrimaryAttack = UTIL_WeaponTimeBase() + 0.6;
 	}
 
-#ifdef CLIENT_DLL
-	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_hPlayer->random_seed, 10, 15 );
-#else
 	float idleDelay = UTIL_SharedRandomFloat( m_hPlayer->random_seed, 10, 15 );
 
 	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + idleDelay;
-#endif
 
 	if ( !m_iClip && m_hPlayer->m_rgAmmo[ m_iPrimaryAmmoType ] <= 0 )
 	{
@@ -238,13 +201,11 @@ void CDesertEagle::SecondaryAttack( void )
 
 		if ( !m_fLaserOn )
 		{
-#ifndef CLIENT_DLL
 			if ( m_hSpot )
 			{
 				m_hSpot->Killed( NULL, GIB_NORMAL );
 				m_hSpot = NULL;
 			}
-#endif
 
 			m_fInZoom = true;
 			PLAYBACK_EVENT_FULL( FEV_NOTHOST, m_hPlayer->edict(), g_evWeaponCustom, 0.0, (float *)&g_vecZero, (float *)&g_vecZero,
@@ -261,31 +222,24 @@ void CDesertEagle::SecondaryAttack( void )
 	}
 	else
 	{
-#ifndef CLIENT_DLL
 		if ( m_hSpot )
 		{
 			m_hSpot->Killed( NULL, GIB_NORMAL );
 			m_hSpot = NULL;
 		}
-#endif
 
 		m_fLaserOn = FALSE;
 		m_fInZoom = true;
 		m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 1.0;
 	}
 
-#ifdef CLIENT_DLL
-	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_hPlayer->random_seed, 6, 12 );
-#else
 	float idleDelay = UTIL_SharedRandomFloat( m_hPlayer->random_seed, 6, 12 );
 
 	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + idleDelay;
-#endif
 }
 
 bool CDesertEagle::Deploy( void )
 {
-#ifndef CLIENT_DLL
 	if ( CVAR_GET_FLOAT( "weaponmode_eagle" ) == 1.0f )
 	{
 		m_fSpotActive = false;
@@ -298,7 +252,6 @@ bool CDesertEagle::Deploy( void )
 		m_fSpotActive = true;
 		pev->body = 0;
 	}
-#endif
 
 	return DefaultDeploy( GetV_Model( "models/v_desert_eagle.mdl" ), GetP_Model( "models/p_desert_eagle.mdl" ), EAGLE_DRAW, "onehanded" );
 }
@@ -309,13 +262,11 @@ void CDesertEagle::Holster( int skiplocal /* = 0 */ )
 
 	m_hPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 1.0;
 
-#ifndef CLIENT_DLL
 	if ( m_hSpot )
 	{
 		m_hSpot->Killed( NULL, GIB_NEVER );
 		m_hSpot = NULL;
 	}
-#endif
 
 	m_hPlayer->pev->viewmodel = 0;
 }
@@ -331,26 +282,18 @@ void CDesertEagle::Reload( void )
 	{
 		if ( m_fLaserOn )
 		{
-#ifndef CLIENT_DLL
 			if ( m_hSpot )
 				m_hSpot->Suspend( 1.6f );
-#endif
 
 			m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 1.6;
 		}
 
-#ifdef CLIENT_DLL
-		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_hPlayer->random_seed, 8, 14 );
-#else
 		float idleDelay = UTIL_SharedRandomFloat( m_hPlayer->random_seed, 8, 14 );
 
 		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + idleDelay;
-#endif
 	}
 
-#ifndef CLIENT_DLL
 	CBasePlayerWeapon::Reload();
-#endif
 }
 
 void CDesertEagle::WeaponIdle( void )
@@ -374,10 +317,8 @@ void CDesertEagle::WeaponIdle( void )
 		flTime = UTIL_WeaponTimeBase() + 152.0 / 60.0;
 		m_flTimeWeaponIdle = flTime + flRand * 60;
 
-#ifndef CLIENT_DLL
 		if ( m_hSpot && m_fLaserOn )
 			m_hSpot->Suspend( 136.0f / 60.0f );
-#endif
 	}
 	else if ( flRand <= 0.3 )
 	{
@@ -385,10 +326,8 @@ void CDesertEagle::WeaponIdle( void )
 		flTime = UTIL_WeaponTimeBase() + 155.0 / 60.0;
 		m_flTimeWeaponIdle = flTime + ( flRand - 0.2 ) * 70;
 
-#ifndef CLIENT_DLL
 		if ( m_hSpot && m_fLaserOn )
 			m_hSpot->Suspend( 145.0f / 60.0f );
-#endif
 	}
 	else if ( flRand <= 0.6 )
 	{
@@ -409,11 +348,7 @@ void CDesertEagle::WeaponIdle( void )
 		m_flTimeWeaponIdle = flTime + ( flRand - 0.8 ) * 60;
 	}
 
-#ifdef CLIENT_DLL
-	SendWeaponAnim( iAnim );
-#else
 	SendWeaponAnim( iAnim, 0, 0 );
-#endif
 }
 
 void CDesertEagle::UpdateSpot( void )
@@ -421,7 +356,6 @@ void CDesertEagle::UpdateSpot( void )
 	if ( !m_fSpotActive )
 		m_fLaserOn = FALSE;
 
-#ifndef CLIENT_DLL
 	if ( m_fLaserOn )
 	{
 		if ( !m_hSpot )
@@ -439,7 +373,6 @@ void CDesertEagle::UpdateSpot( void )
 			dont_ignore_monsters, m_hPlayer->edict(), &trace );
 		UTIL_SetOrigin( m_hSpot->pev, trace.vecEndPos );
 	}
-#endif
 }
 
 void CDesertEagle::GetWeaponData( weapon_data_t *data )

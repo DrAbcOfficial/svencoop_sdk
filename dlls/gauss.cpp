@@ -23,11 +23,6 @@
 #include "event_flags.h"
 #include "gauss.h"
 
-#ifdef CLIENT_DLL
-#include "cl_entity.h"
-#include "../cl_dll/hud_iface.h"
-#include "../cl_dll/client_sound.h"
-#else
 #include "CClassicMode.h"
 #include "playerammo.h"
 #include "soundent.h"
@@ -42,15 +37,10 @@ extern cvar_t sk_plr_secondarygauss;
 #define PRECACHE_SOUND( path ) PrecacheSound_Intercept( this, path )
 #undef SET_MODEL
 #define SET_MODEL( entity, path ) SetModel_Intercept( entity, path )
-#endif
 
 bool GaussClassicMode( void )
 {
-#ifdef CLIENT_DLL
-	return CClassicModeWrapper::isEnabled();
-#else
 	return CClassicMode::GetInstance()->IsEnabled();
-#endif
 }
 
 LINK_ENTITY_TO_CLASS( weapon_gauss, CGauss );
@@ -68,11 +58,7 @@ void CGauss::Spawn( void )
 	m_iId = WEAPON_GAUSS;
 	m_flCustomDmg = pev->dmg;
 
-#ifdef CLIENT_DLL
-	FallInit(); // get ready to fall down.
-#else
 	CBasePhysicsObject::Spawn();
-#endif
 }
 
 void CGauss::Precache( void )
@@ -284,7 +270,6 @@ void CGauss::SecondaryAttack( void )
 		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 1.0;
 		m_hPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 1.0;
 
-#ifndef CLIENT_DLL
 		float damage;
 
 		if ( m_flCustomDmg > 0.0f )
@@ -294,7 +279,6 @@ void CGauss::SecondaryAttack( void )
 
 		m_hPlayer->TakeDamage( VARS( eoNullEntity ), VARS( eoNullEntity ), damage, DMG_SHOCK );
 		UTIL_ScreenFade( m_hPlayer, Vector( 255, 128, 0 ), 2, 0.5, 128, FFADE_IN );
-#endif
 
 		SendWeaponAnim( GAUSS_IDLE );
 		return;
@@ -328,12 +312,6 @@ void CGauss::StartFire( void )
 	UTIL_MakeVectors( m_hPlayer->pev->v_angle + m_hPlayer->pev->punchangle );
 	Vector vecAiming = gpGlobals->v_forward;
 	Vector vecSrc = m_hPlayer->GetGunPosition( );
-#ifdef CLIENT_DLL
-	float flDamage = GAUSS_DAMAGE;
-
-	UTIL_WeaponTimeBase();
-	GetFullChargeTime();
-#else
 	float flDamage;
 
 	if ( m_flCustomDmg > 0.0f )
@@ -348,20 +326,15 @@ void CGauss::StartFire( void )
 
 	if ( m_fPrimaryFire )
 		flDamage = m_flCustomDmg > 0.0f ? m_flCustomDmg : sk_plr_gauss.value;
-#endif
 
 	if (m_fInAttack != 3)
 	{
-#ifndef CLIENT_DLL
 		float flZVel = m_hPlayer->pev->velocity.z;
-#endif
 		if ( !m_fPrimaryFire )
 			m_hPlayer->pev->velocity = m_hPlayer->pev->velocity - gpGlobals->v_forward * flDamage * 5;
 
-#ifndef CLIENT_DLL
 		if ( CVAR_GET_FLOAT( "mp_disablegaussjump" ) == 1.0f )
 			m_hPlayer->pev->velocity.z = flZVel;
-#endif
 
 		m_hPlayer->SetAnimation( PLAYER_ATTACK1 );
 	}
@@ -371,10 +344,8 @@ void CGauss::StartFire( void )
 
 	Fire( vecSrc, vecAiming, flDamage );
 
-#ifndef CLIENT_DLL
 	if ( m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 )
 		m_hPlayer->SetSuitUpdate( "!HEV_AMO0", FALSE, 0 );
-#endif
 }
 
 void CGauss::Fire( Vector vecOrigSrc, Vector vecDir, float damage_radius )
@@ -383,7 +354,6 @@ void CGauss::Fire( Vector vecOrigSrc, Vector vecDir, float damage_radius )
 	PLAYBACK_EVENT_FULL( FEV_NOTHOST | FEV_RELIABLE, m_hPlayer->edict(), m_usGaussFire, 0.0,
 	                     (float *) &g_vecZero, (float *) &g_vecZero, damage_radius, 0.0, 0, 0, m_fPrimaryFire ? 1 : 0, 0 );
 
-#ifndef CLIENT_DLL
 	Vector vecSrc = vecOrigSrc;
 	Vector vecDest = vecSrc + vecDir * 8192;
 	edict_t		*pentIgnore = m_hPlayer->edict();
@@ -484,7 +454,6 @@ void CGauss::Fire( Vector vecOrigSrc, Vector vecDir, float damage_radius )
 			pentIgnore = pEntity->edict();
 		}
 	}
-#endif
 }
 
 void CGauss::WeaponIdle( void )
@@ -549,20 +518,6 @@ void CGauss::WeaponIdle( void )
 // Plays the discharge of an overcharged gauss on the local player
 void CGauss::ItemPostFrame( void )
 {
-#ifdef CLIENT_DLL
-	if ( m_fOvercharged && FRunfuncs() )
-	{
-		m_fOvercharged = false;
-
-		int iPlayer = gEngfuncs.GetLocalPlayer()->index;
-
-		CClient_SoundEngine::GetSoundEngine()->PlayFMODSound( 0, iPlayer, g_vecZero, CHAN_WEAPON, "weapons/electro4.wav",
-		                                                      1.0, ATTN_NORM, 0, 80 + UTIL_SharedRandomLong( m_hPlayer->random_seed, 0, 0x3f ), -1, 0 );
-		CClient_SoundEngine::GetSoundEngine()->PlayFMODSound( 0, iPlayer, g_vecZero, CHAN_ITEM, "weapons/electro6.wav",
-		                                                      1.0, ATTN_NORM, 0, 75 + UTIL_SharedRandomLong( m_hPlayer->random_seed, 0, 0x3f ), -1, 0 );
-	}
-
-#endif
 
 	CBasePlayerWeapon::ItemPostFrame();
 }
@@ -620,7 +575,6 @@ void CGauss::SetWeaponData( weapon_data_t *data )
 	}
 }
 
-#ifndef CLIENT_DLL
 class CGaussAmmo : public CPlayerAmmo
 {
 public:
@@ -631,4 +585,3 @@ public:
 };
 
 LINK_ENTITY_TO_CLASS( ammo_gaussclip, CGaussAmmo );
-#endif

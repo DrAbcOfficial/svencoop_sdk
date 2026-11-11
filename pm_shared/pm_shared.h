@@ -26,13 +26,6 @@ char PM_FindTextureType( char* name );
 int PM_GetInfo( int ent );
 struct playermove_s* PM_GetPlayerMove( void );
 
-#ifdef CLIENT_DLL
-extern int iHasNewViewAngles;
-extern int iHasNewViewOrigin;
-extern int iIsSpectator;
-extern float vecNewViewAngles[3];
-extern float vecNewViewOrigin[3];
-#endif
 
 // iIsSpectator flags
 #define SPEC_IS_SPECTATOR		(1<<0)

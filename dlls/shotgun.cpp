@@ -23,7 +23,6 @@
 #include "event_flags.h"
 #include "shotgun.h"
 
-#ifndef CLIENT_DLL
 #include "CClassicMode.h"
 #include "playerammo.h"
 
@@ -33,15 +32,10 @@
 #define PRECACHE_SOUND( path ) PrecacheSound_Intercept( this, path )
 #undef SET_MODEL
 #define SET_MODEL( entity, path ) SetModel_Intercept( entity, path )
-#endif
 
 bool ShotgunClassicMode( void )
 {
-#ifdef CLIENT_DLL
-	return CClassicModeWrapper::isEnabled();
-#else
 	return CClassicMode::GetInstance()->IsEnabled();
-#endif
 }
 
 LINK_ENTITY_TO_CLASS( weapon_shotgun, CShotgun );
@@ -67,11 +61,7 @@ void CShotgun::Spawn( void )
 	m_iId = WEAPON_SHOTGUN;
 	m_flCustomDmg = pev->dmg;
 
-#ifdef CLIENT_DLL
-	FallInit(); // get ready to fall
-#else
 	CBasePhysicsObject::Spawn();
-#endif
 }
 
 void CShotgun::Precache( void )
@@ -305,9 +295,7 @@ void CShotgun::Holster( int skiplocal /* = 0 */ )
 
 bool CShotgun::Deploy( void )
 {
-#ifndef CLIENT_DLL
 	m_fInZoom = CVAR_GET_FLOAT( "weaponmode_shotgun" ) == 1.0f || ShotgunClassicMode();
-#endif
 
 	if ( ShotgunClassicMode() )
 		return DefaultDeploy( GetV_Model( "models/hlclassic/v_shotgun.mdl" ), GetP_Model( "models/hlclassic/p_shotgun.mdl" ), SHOTGUN_DRAW, "shotgun" );
@@ -341,9 +329,7 @@ void CShotgun::Reload( void )
 
 	if (m_fInSpecialReload != 1)
 	{
-#ifndef CLIENT_DLL
 		CBasePlayerWeapon::Reload();
-#endif
 		return;
 	}
 
@@ -383,27 +369,17 @@ void CShotgun::Reload( void )
 	switch (RANDOM_LONG(0,1))
 	{
 		case 0:
-#ifdef CLIENT_DLL
-			EMIT_SOUND_DYN(ENT(m_hPlayer->pev), CHAN_ITEM, bClassic ? "hlclassic/weapons/reload1.wav" : "weapons/reload1.wav", 1, ATTN_NORM, 0, 85 + RANDOM_LONG(0,0x1f));
-#else
 			EMIT_SOUND_DYN(ENT(m_hPlayer->pev), CHAN_ITEM, bClassic ? "hlclassic/weapons/reload1.wav" : "weapons/reload1.wav",
 			                1, ATTN_NORM, 0, 85 + RANDOM_LONG( 0, 0x1f ), 0, false, g_vecZero );
-#endif
 			break;
 
 		case 1:
-#ifdef CLIENT_DLL
-			EMIT_SOUND_DYN( ENT( m_hPlayer->pev ), CHAN_ITEM, bClassic ? "hlclassic/weapons/reload3.wav" : "weapons/reload3.wav", 1, ATTN_NORM, 0, 85 + RANDOM_LONG(0,0x1f));
-#else
 			EMIT_SOUND_DYN( ENT( m_hPlayer->pev ), CHAN_ITEM, bClassic ? "hlclassic/weapons/reload3.wav" : "weapons/reload3.wav",
 			                1, ATTN_NORM, 0, 85 + RANDOM_LONG( 0, 0x1f ), 0, false, g_vecZero );
-#endif
 			break;
 	}
 
-#ifndef CLIENT_DLL
 	CBasePlayerWeapon::Reload();
-#endif
 }
 
 void CShotgun::WeaponIdle( void )

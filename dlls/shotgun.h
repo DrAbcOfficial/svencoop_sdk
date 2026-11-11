@@ -1,7 +1,6 @@
 #ifndef SHOTGUN_H
 #define SHOTGUN_H
 
-#ifndef CLIENT_DLL
 #define SHOTGUN_AMMO1_DROP SHOTGUN_MAX_CLIP
 #define SHOTGUN_SINGLE_PELLETS 8
 #define SHOTGUN_DOUBLE_PELLETS 14
@@ -22,16 +21,13 @@ enum shotgun_e
 	SHOTGUN_IDLE4,
 	SHOTGUN_IDLE_DEEP
 };
-#endif
 
 class CShotgun : public CBasePlayerWeapon
 {
 public:
-#ifndef CLIENT_DLL
 	int Save( CSave &save );
 	int Restore( CRestore &restore );
 	static TYPEDESCRIPTION m_SaveData[];
-#endif
 
 	void Spawn( void );
 	void Precache( void );

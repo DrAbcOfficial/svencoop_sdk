@@ -15,7 +15,6 @@
 #define WEAPONCUSTOM_SND_DESERT_EAGLE_SIGHT2 22
 #endif
 
-#ifndef CLIENT_DLL
 enum eagle_e
 {
 	EAGLE_IDLE1 = 0,
@@ -41,14 +40,11 @@ public:
 	void EXPORT Revive( void );
 	static CDESpot *CreateDESpot( void );
 };
-#endif
 
 class CDesertEagle : public CBasePlayerWeapon
 {
 public:
-#ifndef CLIENT_DLL
 	CDesertEagle();
-#endif
 	void Spawn( void );
 	void Precache( void );
 	int iItemSlot( void ) { return 2; }
@@ -69,9 +65,7 @@ public:
 	bool UseDecrement( void ) { return true; }
 
 	bool					m_fSpotActive;
-#ifndef CLIENT_DLL
 	CEntityHandle<CDESpot>	m_hSpot;
-#endif
 	int						m_fLaserOn;
 	unsigned short			m_usFireEagle;
 };

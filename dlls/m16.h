@@ -21,7 +21,6 @@
 #define M16_BURST_ROUNDS 3
 #endif
 
-#ifndef CLIENT_DLL
 enum m16_e
 {
 	M16_DRAW = 0,
@@ -34,7 +33,6 @@ enum m16_e
 	M16_LAUNCH,
 	M16_RELOAD_M203
 };
-#endif
 
 class CM16 : public CBasePlayerWeapon
 {
@@ -60,13 +58,7 @@ public:
 	void SetWeaponData( weapon_data_s *data );
 	bool UseDecrement( void ) { return true; }
 
-#ifdef CLIENT_DLL
-	int m_iGrenadeReloadAnim;
-#endif
 	int m_iShell;
-#ifdef CLIENT_DLL
-	int m_iSecondaryAmmoCarried;
-#endif
 };
 
 #endif

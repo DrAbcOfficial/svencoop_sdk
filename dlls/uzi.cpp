@@ -22,7 +22,6 @@
 #include "weaponinfo.h"
 #include "event_flags.h"
 
-#ifndef CLIENT_DLL
 #include "playerammo.h"
 #include "game.h"
 
@@ -30,7 +29,6 @@
 #undef PRECACHE_SOUND
 #define PRECACHE_MODEL( model ) UTIL_PrecacheModel( this, model )
 #define PRECACHE_SOUND( sound ) PrecacheSound_Intercept( this, sound )
-#endif
 
 LINK_ENTITY_TO_CLASS( weapon_uzi, CUzi );
 LINK_ENTITY_TO_CLASS( weapon_uziakimbo, CUzi );
@@ -39,33 +37,18 @@ void CUzi::Spawn( void )
 {
 	Precache();
 
-#ifndef CLIENT_DLL
 	bool akimbo = !strcmp( STRING( pev->classname ), "weapon_uziakimbo" );
 
 	SetAkimbo( akimbo, true );
 
 	if ( akimbo )
 		m_iClip2 = UZI_MAX_CLIP;
-#else
-	pev->classname = MAKE_STRING( "weapon_uzi" );
-
-	const char *pszModel = GetW_Model( "models/w_uzi.mdl" );
-
-	SET_MODEL( ENT( pev ), pszModel );
-	m_iszWorldModel = MAKE_STRING( pszModel );
-
-	m_fIsAkimbo = false;
-#endif
 
 	m_iDefaultAmmo = UZI_DEFAULT_GIVE;
 	m_iId = WEAPON_UZI;
 	m_flCustomDmg = pev->dmg;
 
-#ifndef CLIENT_DLL
 	CBasePhysicsObject::Spawn();
-#else
-	FallInit();// get ready to fall down.
-#endif
 }
 
 void CUzi::Precache( void )
@@ -132,9 +115,7 @@ bool CUzi::AddToPlayer( CBasePlayer *pPlayer )
 	{
 		AddToPlayerMessage();
 
-#ifndef CLIENT_DLL
 		LoadSprites( pPlayer, GetHUDSpriteName() );
-#endif
 
 		return true;
 	}
@@ -175,30 +156,22 @@ bool CUzi::AddDuplicate( CBasePlayerItem *pOriginal )
 
 	pUzi->SetLeftClip( iClip );
 
-#ifndef CLIENT_DLL
 	CBasePlayerWeapon::AddAmmoFromItem( pOriginal );
-#else
-	pUzi->CBasePlayerWeapon::AddAmmoFromItem( this );
-#endif
 
 	pUzi->SetAkimbo( true, false );
 
-#ifndef CLIENT_DLL
 	if ( pUzi->m_hPlayer )
 		pUzi->LoadSprites( pUzi->m_hPlayer, pUzi->GetHUDSpriteName() );
-#endif
 
 	if ( pUzi == pUzi->m_hPlayer->m_pActiveItem )
 		pUzi->Deploy( UZI_AKIMBO_PULL, 1.8 );
 
-#ifndef CLIENT_DLL
 	if ( pUzi->m_hPlayer )
 	{
 		float respawnTime = GetRespawnTime();
 
 		pUzi->m_hPlayer->m_flNextWeaponPickup[WEAPON_UZI] = (float) ( (double) respawnTime + (double) gpGlobals->time );
 	}
-#endif
 
 	return true;
 }
@@ -236,13 +209,8 @@ void CUzi::SecondaryAttack( void )
 
 	bool bAkimbo = !m_fIsAkimbo;
 
-#ifndef CLIENT_DLL
 	SetAkimbo( bAkimbo, true );
 	AkimboDeploy( m_fIsAkimbo );
-#else
-	SetAkimbo( bAkimbo, false );
-	AkimboDeploy( bAkimbo );
-#endif
 
 	m_fSwitchingAkimbo = false;
 
@@ -299,14 +267,10 @@ void CUzi::Fire( int iMode, float &flNextAttack )
 	else
 		vecSpread = BulletAccuracy( VECTOR_CONE_6DEGREES, VECTOR_CONE_4DEGREES, VECTOR_CONE_3DEGREES );
 
-#ifndef CLIENT_DLL
 	int iDamage = (int) sk_plr_uzi.value;
 
 	if ( CanHaveXtra( XTRA_GOLDEN_UZI, m_hPlayer ) )
 		iDamage += UZI_GOLDEN_DAMAGE - UZI_DAMAGE;
-#else
-	int iDamage = CanHaveXtra( XTRA_GOLDEN_UZI, m_hPlayer ) ? UZI_GOLDEN_DAMAGE : UZI_DAMAGE;
-#endif
 
 	if ( m_flCustomDmg > 0 )
 		iDamage = iDamage + m_flCustomDmg;
@@ -333,10 +297,8 @@ void CUzi::Fire( int iMode, float &flNextAttack )
 	flNextAttack = UTIL_WeaponTimeBase() + 0.07;
 	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_hPlayer->random_seed, 10, 15 );
 
-#ifndef CLIENT_DLL
 	if ( ( !m_fIsAkimbo || m_iClip2 == 0 ) && m_iClip == 0 && m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 )
 		m_hPlayer->SetSuitUpdate( "!HEV_AMO0", FALSE, 0 );
-#endif
 }
 
 bool CUzi::CanDeploy( void )
@@ -351,13 +313,10 @@ bool CUzi::Deploy( void )
 
 bool CUzi::Deploy( int iAnim, float flDelay )
 {
-#ifndef CLIENT_DLL
 	m_hPlayer->m_fGrappleActive = false;
-#endif
 
 	m_iNextReloadAnim = -1;
 
-#ifndef CLIENT_DLL
 	if ( !CanDeploy() )
 		return false;
 
@@ -365,7 +324,6 @@ bool CUzi::Deploy( int iAnim, float flDelay )
 		EMIT_SOUND_DYN( m_hPlayer->edict(), CHAN_WEAPON, "weapons/uzi/deploy.wav", 0.7f, ATTN_NORM, 0, PITCH_NORM );
 
 	m_hPlayer->SetAnimation( PLAYER_DEPLOY );
-#endif
 
 	if ( flDelay == 0 )
 		flDelay = m_fIsAkimbo ? 1.0 : 1.3;
@@ -389,12 +347,8 @@ void CUzi::Reload( void )
 {
 	if ( !m_fIsAkimbo )
 	{
-#ifndef CLIENT_DLL
 		if ( DefaultReload( UZI_MAX_CLIP, UZI_RELOAD, 2.5 ) )
 			CBasePlayerWeapon::Reload();
-#else
-		DefaultReload( UZI_MAX_CLIP, UZI_RELOAD, 2.5 );
-#endif
 
 		return;
 	}
@@ -408,9 +362,7 @@ void CUzi::Reload( void )
 
 	ReloadAkimbo( UZI_MAX_CLIP, m_iAkimboReloadAnim, 1.8, 0 );
 
-#ifndef CLIENT_DLL
 	CBasePlayerWeapon::Reload();
-#endif
 }
 
 // The right uzi uses m_iClip, the left one m_iClip2. A double reload plays one side, then the other
@@ -551,11 +503,7 @@ void CUzi::Holster( int skiplocal /* = 0 */ )
 
 void CUzi::CheckGilded( int fAllowGilded )
 {
-#ifdef CLIENT_DLL
-	if ( fAllowGilded && g_fCanHaveGildedUzis )
-#else
 	if ( fAllowGilded && CanHaveXtra( XTRA_GOLDEN_UZI, m_hPlayer ) )
-#endif
 		ChangeWeaponSkin( UZI_SKIN_GILDED );
 	else
 		ChangeWeaponSkin( UZI_SKIN_DEFAULT );
@@ -570,10 +518,8 @@ void CUzi::SetAkimbo( bool bAkimbo, bool bForce )
 {
 	pev->classname = MAKE_STRING( "weapon_uzi" );
 
-#ifndef CLIENT_DLL
 	if ( bAkimbo && CVAR_GET_FLOAT( "mp_no_akimbo_uzis" ) != 0 )
 		bAkimbo = false;
-#endif
 
 	if ( !bForce && bAkimbo == m_fIsAkimbo )
 		return;
@@ -622,11 +568,7 @@ CBasePlayerItem *CUzi::DropItem( void )
 
 	CheckAkimboMagazines();
 
-#ifndef CLIENT_DLL
 	CUzi *pUzi = (CUzi *) CBaseEntity::Create( "weapon_uzi", pev->origin, pev->angles, false, NULL );
-#else
-	CUzi *pUzi = (CUzi *) CBaseEntity::Create( "weapon_uzi", pev->origin, pev->angles, NULL );
-#endif
 
 	pUzi->m_iDefaultAmmo = 0;
 	pUzi->m_iClip = m_iClip2;
@@ -636,9 +578,7 @@ CBasePlayerItem *CUzi::DropItem( void )
 
 	SetAkimbo( false, false );
 
-#ifndef CLIENT_DLL
 	LoadSprites( m_hPlayer, GetHUDSpriteName() );
-#endif
 
 	if ( this == m_hPlayer->m_pActiveItem )
 	{

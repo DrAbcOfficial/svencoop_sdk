@@ -22,7 +22,6 @@
 #include "weaponinfo.h"
 #include "event_flags.h"
 
-#ifndef CLIENT_DLL
 #include "CClassicMode.h"
 #include "game.h"
 #include "playerammo.h"
@@ -56,15 +55,10 @@ enum glock_e
 	GLOCK_ADD_SILENCER,
 	GLOCK_REMOVE_SILENCER
 };
-#endif
 
 bool GlockClassicMode( void )
 {
-#ifdef CLIENT_DLL
-	return CClassicModeWrapper::isEnabled();
-#else
 	return CClassicMode::GetInstance()->IsEnabled();
-#endif
 }
 
 LINK_ENTITY_TO_CLASS( weapon_glock, CGlock );
@@ -87,11 +81,7 @@ void CGlock::Spawn( void )
 
 	pev->body = GLOCK_BODY_PLAIN;
 
-#ifdef CLIENT_DLL
-	FallInit();// get ready to fall down.
-#else
 	CBasePhysicsObject::Spawn();
-#endif
 }
 
 void CGlock::Precache( void )
@@ -258,9 +248,7 @@ void CGlock::GlockFire( float flSpread, float flCycleTime, bool fUseAutoAim )
 bool CGlock::Deploy( void )
 {
 	m_iSilencerState = GLOCK_SILENCER_NONE;
-#ifndef CLIENT_DLL
 	m_fInZoom = CVAR_GET_FLOAT( "weaponmode_9mmhandgun" ) == 1.0f;
-#endif
 
 	if ( !m_fInZoom )
 		pev->body = GLOCK_BODY_PLAIN;
@@ -279,9 +267,7 @@ void CGlock::Reload( void )
 	if ( DefaultReload( GLOCK_MAX_CLIP, m_iClip ? GLOCK_RELOAD_NOT_EMPTY : GLOCK_RELOAD, 1.5, pev->body ) )
 		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_hPlayer->random_seed, 10, 15 );
 
-#ifndef CLIENT_DLL
 	CBasePlayerWeapon::Reload();
-#endif
 }
 
 void CGlock::WeaponIdle( void )

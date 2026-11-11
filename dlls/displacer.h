@@ -3,9 +3,7 @@
 
 #include "weapons.h"
 
-#ifndef CLIENT_DLL
 #include "TypedEntityHandle.h"
-#endif
 
 // v_displacer.mdl
 enum displacer_e
@@ -82,7 +80,6 @@ public:
 	float			m_flTertiaryAmmoNeeded;
 };
 
-#ifndef CLIENT_DLL
 class CBeam;
 
 class CDisplacerPortal : public CBaseEntity
@@ -105,6 +102,5 @@ public:
 	float						m_flLastDamageTime;
 	float						m_flLastBeamTime;
 };
-#endif
 
 #endif

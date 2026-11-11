@@ -1,9 +1,7 @@
 #ifndef SPORELAUNCHER_H
 #define SPORELAUNCHER_H
 
-#ifndef CLIENT_DLL
 #include "actanimating.h"
-#endif
 
 enum sporelauncher_e
 {
@@ -44,15 +42,11 @@ public:
 	void GetWeaponData( weapon_data_s *data );
 	void SetWeaponData( weapon_data_s *data );
 
-#ifdef CLIENT_DLL
-	int            m_iSpecialState;
-#endif
 	int            m_ReloadState;
 	float          m_flNextReload;
 	unsigned short m_usFireSpore;
 };
 
-#ifndef CLIENT_DLL
 class CSporeLauncherAmmo : public CActAnimating
 {
 public:
@@ -73,6 +67,5 @@ public:
 private:
 	float m_flTimeRegeneration;
 };
-#endif
 
 #endif

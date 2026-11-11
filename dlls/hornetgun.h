@@ -1,7 +1,6 @@
 #ifndef HORNETGUN_H
 #define HORNETGUN_H
 
-#ifndef CLIENT_DLL
 #define HORNETGUN_MAX_CLIP WEAPON_NOCLIP
 #define WEAPONCUSTOM_SND_AG_FIRE1 11
 
@@ -14,7 +13,6 @@ enum hgun_e
 	HGUN_UP,
 	HGUN_SHOOT
 };
-#endif
 
 class CHgun : public CBasePlayerWeapon
 {

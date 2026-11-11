@@ -55,7 +55,6 @@ enum tripmine_e {
 };
 
 
-#ifndef CLIENT_DLL
 
 class CTripmineGrenade : public CGrenade
 {
@@ -416,7 +415,6 @@ void CTripmineGrenade::DelayDeathThink( void )
 
 	Explode( &tr, DMG_BLAST );
 }
-#endif
 
 LINK_ENTITY_TO_CLASS( weapon_tripmine, CTripmine );
 

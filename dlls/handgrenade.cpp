@@ -22,7 +22,6 @@
 #include "weaponinfo.h"
 #include "event_flags.h"
 
-#ifndef CLIENT_DLL
 #include "CClassicMode.h"
 #include "game.h"
 #include "server_sound.h"
@@ -46,18 +45,13 @@ enum handgrenade_e {
 	HANDGRENADE_HOLSTER,
 	HANDGRENADE_DRAW
 };
-#endif
 
 #undef PRECACHE_MODEL
 #define PRECACHE_MODEL( path ) UTIL_PrecacheModel( this, path )
 
 bool HandGrenadeClassicMode( void )
 {
-#ifdef CLIENT_DLL
-	return CClassicModeWrapper::isEnabled();
-#else
 	return CClassicMode::GetInstance()->IsEnabled();
-#endif
 }
 
 LINK_ENTITY_TO_CLASS( weapon_handgrenade, CHandGrenade );
@@ -74,12 +68,8 @@ void CHandGrenade::Spawn( void )
 		SET_MODEL( ENT( pev ), GetW_Model( "models/w_grenade.mdl" ) );
 
 	m_flCustomDmg = pev->dmg;
-#ifdef CLIENT_DLL
-	pev->dmg = HANDGRENADE_DAMAGE;
-#else
 	if ( !( pev->dmg > 0.0f ) )
 		pev->dmg = sk_plr_hand_grenade.value;
-#endif
 
 	m_iDefaultAmmo = HANDGRENADE_DEFAULT_GIVE;
 
@@ -196,9 +186,7 @@ void CHandGrenade::PrimaryAttack( void )
 void CHandGrenade::SecondaryAttack( void )
 {
 	if ( !FRunfuncs()
-#ifndef CLIENT_DLL
 	     || CVAR_GET_FLOAT( "mp_banana" ) == 0.0f
-#endif
 	     || m_flStartThrow )
 		return;
 
@@ -234,7 +222,6 @@ void CHandGrenade::WeaponIdle( void )
 
 	if ( m_flStartThrow )
 	{
-#ifndef CLIENT_DLL
 		Vector angThrow = m_hPlayer->pev->v_angle + m_hPlayer->pev->punchangle;
 
 		if ( angThrow.x < 0 )
@@ -252,13 +239,9 @@ void CHandGrenade::WeaponIdle( void )
 
 		// alway explode 3 seconds after the pin was pulled
 		float time = fmaxf( 0.0f, m_flStartThrow - UTIL_WeaponTimeBase() + 4.0f );
-#else
-		UTIL_WeaponTimeBase();
-#endif
 
 		bool bThrowAll = m_fThrowAll && m_hPlayer->m_rgAmmo[m_iPrimaryAmmoType] >= HANDGRENADE_MAX_CARRY;
 
-#ifndef CLIENT_DLL
 		if ( bThrowAll )
 		{
 			hudtextparms_t params = {};
@@ -282,7 +265,6 @@ void CHandGrenade::WeaponIdle( void )
 			CGrenade::ShootTimed( m_hPlayer->pev, vecSrc,
 			                      m_hPlayer->IsAlive() ? vecThrow : m_hPlayer->pev->velocity, time );
 		}
-#endif
 
 		if ( bThrowAll )
 		{
@@ -291,11 +273,9 @@ void CHandGrenade::WeaponIdle( void )
 		}
 		else
 		{
-#ifndef CLIENT_DLL
 			if ( flVel >= 500 )
 				SendWeaponAnim( flVel >= 1000 ? HANDGRENADE_THROW3 : HANDGRENADE_THROW2, 0, 0 );
 			else
-#endif
 			SendWeaponAnim( HANDGRENADE_THROW1, 0, 0 );
 		}
 

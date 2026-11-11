@@ -1,7 +1,7 @@
 # 32-bit x86 Linux toolchain for the Sven Co-op SDK.
 #
-# GoldSrc and the bundled dependencies (vgui, SDL2, FMOD Ex, Discord RPC) are
-# 32-bit, so the modules have to be built with -m32.
+# GoldSrc and its server dependencies are 32-bit, so the module has to be
+# built with -m32.
 #
 # Usage:
 #   cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-linux-x86.cmake

@@ -1,17 +1,8 @@
 #include "extdll.h"
-#ifdef CLIENT_DLL
-#include "hud_iface.h"
-#include "client_filesystem.h"
-#include "client_support.h"
-#define MATERIAL_ALERT AlertMessage
-
-void AlertMessage(ALERT_TYPE type, char *format, ...);
-#else
 #include "util.h"
 #include "server_filesystem.h"
 #include "server_support.h"
 #define MATERIAL_ALERT ALERT
-#endif
 #include "materials.h"
 #include "pm_materials.h"
 #include <ctype.h>

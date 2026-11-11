@@ -1,7 +1,6 @@
 #ifndef GAUSS_H
 #define GAUSS_H
 
-#ifndef CLIENT_DLL
 #define GAUSS_PRIMARY_AMMO 1
 #define GAUSS_DAMAGE 20
 #define GAUSS_FULL_CHARGE_TIME 3
@@ -29,16 +28,13 @@ enum gauss_e
 	GAUSS_HOLSTER,
 	GAUSS_DRAW
 };
-#endif
 
 class CGauss : public CBasePlayerWeapon
 {
 public:
-#ifndef CLIENT_DLL
 	int Save( CSave &save );
 	int Restore( CRestore &restore );
 	static TYPEDESCRIPTION m_SaveData[];
-#endif
 
 	void Spawn( void );
 	void Precache( void );

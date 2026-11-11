@@ -18,7 +18,6 @@
 
 #include "pm_materials.h"
 
-#ifndef CLIENT_DLL
 #include <unordered_map>
 #include <unordered_set>
 #include "TypedEntityHandle.h"
@@ -31,10 +30,6 @@ class CPortal;
 class CEnvRenderIndividual;
 class CTriggerCamera;
 struct PlayerSlot;
-#else
-#include "VoteDefs.h"
-#include "CToPlayerCollisions.h"
-#endif
 
 #define PLAYER_FATAL_FALL_SPEED		1024// approx 60 feet
 #define PLAYER_MAX_SAFE_FALL_SPEED	580// approx 20 feet
@@ -102,12 +97,10 @@ typedef enum
 	PLAYER_ATTACK1,
 	PLAYER_RELOAD,
 	PLAYER_DEPLOY,
-#ifndef CLIENT_DLL
 	PLAYER_BARNACLE_HIT,
 	PLAYER_BARNACLE_PULL,
 	PLAYER_BARNACLE_CHOMP,
 	PLAYER_BARNACLE_CHEW,
-#endif
 } PLAYER_ANIM;
 
 #define MAX_ID_RANGE 2048
@@ -125,7 +118,6 @@ enum sbar_data
 
 class CBasePlayer : public CBaseMonster
 {
-#ifndef CLIENT_DLL
 private:
 	struct HideHUDHandleHash
 	{
@@ -153,13 +145,11 @@ private:
 	unsigned int	m_uiPortalVisibilityGeneration;
 
 	int GetHideHUD( void );
-#endif
 
 public:
 	void SetOverriddenPlayerModel( const char *model );
 	void ResetOverriddenPlayerModel( bool restorePreviousModel, bool forceRestore );
 
-#ifndef CLIENT_DLL
 	CBasePlayer();
 	void OnCreate( void );
 	void OnDestroy( void );
@@ -276,22 +266,10 @@ public:
 	float	m_flNextClientCommandTime;
 	bool	m_fWeaponsBlocked;
 
-#else
-	bool IsMoving( void );
-	virtual float GetLogFrequency( void );
-	virtual float GetPointsForDamage( float flDamage );
-	virtual bool CanStartNextVote( VOTETYPE type );
-	virtual void Vote( VOTEINPUT input, const char *text );
-	virtual VOTEINPUT LastVoteInput();
-	virtual float TimeToStartNextVote();
-
-	CToPlayerCollisions	m_PlayerCollisions;
-#endif
 
 	// Grapple firing, rappel preference, and release state
 	bool	m_fGrappleFired;
 
-#ifndef CLIENT_DLL
 	bool	m_fGrappleRappelMode;
 	bool	m_fGrappleActive;
 
@@ -304,7 +282,6 @@ public:
 	int	m_iHideXtra;
 	int	m_iAdminLevel;
 	int	m_iHideAdmin;
-#endif
 
 	
 	// Spectator camera
@@ -368,11 +345,6 @@ public:
 	float				m_flgeigerDelay;		// delay per update of range msg to client
 	int					m_igeigerRangePrev;
 
-#ifdef CLIENT_DLL
-	int					m_iStepLeft;			// alternate left/right foot stepping sound
-	char				m_szTextureName[CBTEXTURENAMEMAX];	// current texture name we're standing on
-	char				m_chTextureType;		// current texture type
-#endif
 
 	int					m_idrowndmg;			// track drowning damage taken
 	int					m_idrownrestored;		// track drowning damage restored
@@ -386,19 +358,13 @@ public:
 	BOOL				m_fWeapon;				// Set this to FALSE to force a reset of the current weapon HUD info
 
 	EHANDLE				m_pTank;				// the tank which the player is currently controlling,  NULL if no tank
-#ifndef CLIENT_DLL
 	EHANDLE				m_hVehicle;
 	EHANDLE m_hChumtoad;
 	PlayerSlot			*m_pVehicleSlot;
-#endif
 	float				m_fDeadTime;			// the time at which the player died  (used in PlayerDeathThink())
 
 	BOOL			m_fNoPlayerSound;	// a debugging feature. Player makes no sound if this is true. 
-#ifdef CLIENT_DLL
-	BOOL			m_fLongJump; // does this player have the longjump module?
-#else
 	bool			m_fLongJump;
-#endif
 
 	float       m_tSneaking;
 	int			m_iUpdateTime;		// stores the number of frame ticks before sending HUD update messages
@@ -411,19 +377,12 @@ public:
 	int			m_iFOV;			// field of view
 	int			m_iClientFOV;	// client's known FOV
 	// usable player items 
-#ifdef CLIENT_DLL
-	CBasePlayerItem	*m_rgpPlayerItems[MAX_ITEM_TYPES];
-	CBasePlayerItem *m_pActiveItem;
-	CBasePlayerItem *m_pClientActiveItem;  // client version of the active item
-	CBasePlayerItem *m_pLastItem;
-#else
 	CEntityHandle<CBasePlayerItem> m_rgpPlayerItems[MAX_ITEM_TYPES];
 	CEntityHandle<CBasePlayerItem> m_pActiveItem;
 	CEntityHandle<CBasePlayerItem> m_pClientActiveItem;
 	CEntityHandle<CBasePlayerItem> m_pLastItem;
 
 	float m_flNextWeaponPickup[MAX_WEAPONS];	// Per-weapon pickup deadline
-#endif
 
 	bool			m_fConnected;		// set when the client is put in the server
 	// shared ammo slots
@@ -453,9 +412,7 @@ public:
 	virtual void PostThink( void );
 	virtual Vector GetGunPosition( void );
 	virtual bool TakeHealth( float flHealth, int bitsDamageType, int health_cap = 0 );
-#ifndef CLIENT_DLL
 	virtual bool TakeArmor( float flArmor, int bitsDamageType, int armor_cap = 0 );
-#endif
 	virtual void TraceAttack( entvars_t *pevAttacker, float flDamage, Vector vecDir, TraceResult *ptr, int bitsDamageType);
 	virtual int TakeDamage( entvars_t* pevInflictor, entvars_t* pevAttacker, float flDamage, int bitsDamageType);
 	virtual void	Killed( entvars_t *pevAttacker, int iGib );
@@ -485,11 +442,7 @@ public:
 	virtual int		Restore( CRestore &restore );
 	void RenewItems(void);
 	void PackDeadPlayerItems( void );
-#ifdef CLIENT_DLL
-	void RemoveAllItems( bool removeSuit );
-#else
 	void RemoveAllItems( bool removeSuit = false, bool removeLongJump = false );
-#endif
 	BOOL SwitchWeapon( CBasePlayerItem *pWeapon );
 
 	// JOHN:  sends custom messages if player HUD data has changed  (eg health, ammo)
@@ -518,18 +471,13 @@ public:
 	void CheatImpulseCommands( int iImpulse );
 
 	void StartDeathCam( void );
-#ifndef CLIENT_DLL
 	void StartPlayerDeathView( const Vector &position, const Vector &viewAngle );
-#endif
 	void StartObserver( Vector vecPosition, Vector vecViewAngle );
 
 	void AddPoints( int score, bool bAllowNegativeScore );
 	void AddPointsToTeam( int score, bool bAllowNegativeScore );
 	BOOL AddPlayerItem( CBasePlayerItem *pItem );
 	bool RemovePlayerItem( CBasePlayerItem *pItem );
-#ifdef CLIENT_DLL
-	void DropPlayerItem( char *pszItemName );
-#else
 	CBaseEntity *DropPlayerItem( char *pszItemName );
 	CBasePlayerItem *DropPlayerAmmo( const char *itemName, bool giveToPlayer, bool secondary );
 	CBasePlayerItem *FindItem( const char *pszItemName );
@@ -537,7 +485,6 @@ public:
 	CBaseEntity *DropItem( CBaseEntity *item, int primaryAmmo, int secondaryAmmo,
 		bool throwForward, DROP_TYPE dropType );
 	CBasePlayer *MyPlayerPointer( void ) { return this; }
-#endif
 	BOOL HasPlayerItem( CBasePlayerItem *pCheckItem );
 	BOOL HasNamedPlayerItem( const char *pszItemName );
 	BOOL HasWeapons( void );// do I have ANY weapons?
@@ -587,10 +534,8 @@ public:
 
 	void ForceClientDllUpdate( void );  // Forces all client .dll specific data to be resent to client.
 
-#ifndef CLIENT_DLL
 	int GetPlayerExtras( bool force = false );
 	bool HasExtra( int type );
-#endif
 
 	void DeathMessage( entvars_t *pevKiller );
 
@@ -613,7 +558,6 @@ public:
 	
 	float m_flNextChatTime;
 
-#ifndef CLIENT_DLL
 	bool	m_fOverridePlayerModel;
 	bool	m_fOverridePlayerModelAcknowledged;
 	char	m_szOverriddenPlayerModel[64];
@@ -657,7 +601,6 @@ public:
 	void SetItemPickupTimes( float time );
 
 	int m_iWeaponAutoSwitch;
-#endif
 };
 
 #define AUTOAIM_2DEGREES  0.0348994967025
