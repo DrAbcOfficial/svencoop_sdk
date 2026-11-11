@@ -33,6 +33,7 @@ class CAirtank : public CGrenade
 {
 	void Spawn( void );
 	void Precache( void );
+	int ObjectCaps( void );
 	void EXPORT TankThink( void );
 	void EXPORT TankTouch( CBaseEntity *pOther );
 	void Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
@@ -78,6 +79,14 @@ TYPEDESCRIPTION	CAirtank::m_SaveData[] =
 
 IMPLEMENT_SAVERESTORE( CAirtank, CGrenade );
 
+
+int CAirtank::ObjectCaps( void )
+{
+	if ( pev->spawnflags & SF_ITEM_TOUCH_ONLY )
+		return FCAP_ACROSS_TRANSITION;
+
+	return FCAP_ACROSS_TRANSITION | FCAP_IMPULSE_USE;
+}
 
 void CAirtank::KeyValue( KeyValueData *pkvd )
 {
