@@ -32,3 +32,4 @@ Select `Win32` and `Debug` or `Release`, then build the solution.
 
 ## Special thanks
 - [Sw1ft](https://github.com/sw1ft747) - for help in some questions and reversing as well
+- anewnick (cdqke) - for RE logo in this README
