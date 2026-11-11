@@ -13,8 +13,8 @@
 *
 ****/
 
-#ifndef PLATFORM_H
-#define PLATFORM_H
+#ifndef SVENCOOP_PLATFORM_H
+#define SVENCOOP_PLATFORM_H
 
 /**
 *	@file
@@ -82,6 +82,18 @@ typedef int BOOL;
 #define _alloca alloca
 
 #define DLLEXPORT __attribute__ ( ( visibility( "default" ) ) )
+
+// The GoldSrc sources rely on the min/max macros supplied by <Windows.h>.
+// Provide type-generic equivalents on the other platforms.
+#ifndef min
+template <class T, class U>
+inline auto min( T a, U b ) { return a < b ? a : b; }
+#endif
+
+#ifndef max
+template <class T, class U>
+inline auto max( T a, U b ) { return a > b ? a : b; }
+#endif
 #endif //_WIN32
 
 #ifndef V_min
@@ -89,4 +101,4 @@ typedef int BOOL;
 #define V_max(a,b)  (((a) > (b)) ? (a) : (b))
 #endif
 
-#endif //PLATFORM_H
+#endif //SVENCOOP_PLATFORM_H

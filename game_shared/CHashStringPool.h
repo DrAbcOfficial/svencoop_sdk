@@ -2,6 +2,7 @@
 #define CHASHSTRINGPOOL_H
 
 #include "CAutoString.h"
+#include <cstddef>
 #include <unordered_set>
 
 class CHashStringPool

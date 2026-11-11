@@ -95,7 +95,7 @@ public:
 		int channelIndex, const char *sample, float volume, float attenuation,
 		int flags, int pitch, int sentenceIndex, float offset);
 	void Play2DSound(int index, float volume);
-	void Play2DSound(char *sample, float volume);
+	void Play2DSound(const char *sample, float volume);
 	void AddWatchedChannel(int entityIndex, int channelIndex, FMOD::Channel *channel,
 		FMOD::Sound *sound, bool trackEntity, int sentenceIndex, int pitch,
 		float volume, float minDistance, float maxDistance, FMOD_VECTOR origin);

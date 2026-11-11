@@ -1,3 +1,11 @@
-
+# Visual Studio / CMake generated files
 /.vs
-/projects/vs2010/.vs
+/build/
+/build-*/
+/cmake-build-*/
+CMakeUserPresets.json
+*.user
+
+# Local test artifacts
+/.test-*/
+/*.log

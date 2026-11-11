@@ -33,6 +33,7 @@
 #endif
 
 
+#ifdef _WIN32
 // Avoid the ISO conformant warning
 #define stricmp _stricmp
 #define strnicmp _strnicmp
@@ -45,6 +46,14 @@
 #endif
 
 #define DLLEXPORT __declspec( dllexport )
+#else
+#ifdef VALVE_DLL
+#define DLL_EXPORT extern "C" __attribute__( ( visibility( "default" ) ) )
+#define DLL_IMPORT extern "C"
+#endif
+
+#define DLLEXPORT __attribute__( ( visibility( "default" ) ) )
+#endif
 
 #define DECLARE_CLASS_SERVER( className, baseClassName ) \
 	typedef baseClassName BaseClass; \
