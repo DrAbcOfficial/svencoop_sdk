@@ -253,7 +253,7 @@ bool CBaseEntity::SetupModel( void )
 	if ( !m_fCustomModel )
 		return false;
 
-	UTIL_SetModel( this, STRING( pev->model ) );
+	SET_MODEL( ENT( pev ), STRING( pev->model ) );
 
 	if ( !stricmp( STRING( pev->model ), "models/w_svencoop_pickup.mdl" ) )
 		return false;
