@@ -17,8 +17,8 @@ Anyway, there is ready extracted list and Python script to read donid data heade
 
 Run from repo root with Python (depends on your situation):
 ```
-python3 devtools/donid_data.py generate devtools/players.csv --output dlls/donid_data.h
-python3 devtools/donid_data.py read dlls/donid_data.h --output devtools/players.csv
+python3 devtools/donid/donid_data.py generate devtools/donid/players.csv --output dlls/donid_data.h
+python3 devtools/donid/donid_data.py read dlls/donid_data.h --output devtools/donid/players.csv
 ```
 
 If you're curious what extras level means:
