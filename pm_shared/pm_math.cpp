@@ -32,7 +32,6 @@
 vec3_t vec3_origin = { 0, 0, 0 };
 #endif
 
-int nanmask = 255 << 23;
 
 float anglemod(float a)
 {

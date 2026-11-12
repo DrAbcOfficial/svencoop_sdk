@@ -42,9 +42,16 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <iterator>
 #endif
 
+#ifdef __cplusplus
+// std::size only accepts real arrays, catching pointer arguments the old
+// sizeof-based macro silently mis-measured.
+#define ARRAYSIZE(p)		std::size( p )
+#else
 #define ARRAYSIZE(p)		(sizeof(p)/sizeof(p[0]))
+#endif
 
 // Prevent tons of unused windows definitions
 #ifdef _WIN32

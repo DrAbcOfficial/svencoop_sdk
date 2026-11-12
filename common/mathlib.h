@@ -34,17 +34,21 @@ typedef	int	fixed16_t;
 #define YAW		1
 
 #ifdef __cplusplus
+#include <cmath>
+#endif
+
+#ifdef __cplusplus
 extern "C" {
 #endif
 
 extern vec3_t vec3_origin;
-extern	int nanmask;
 
 #ifdef __cplusplus
 }
 #endif
 
-#define	IS_NAN(x) (((*(int *)&x)&nanmask)==nanmask)
+// std::isnan replaces the old *(int*)&x aliasing-violation nanmask trick.
+#define	IS_NAN(x) std::isnan( x )
 
 #ifndef VECTOR_H
 	#define DotProduct(x,y) ((x)[0]*(y)[0]+(x)[1]*(y)[1]+(x)[2]*(y)[2])
@@ -52,8 +56,6 @@ extern	int nanmask;
 
 // Use this definition globally
 #define	EQUAL_EPSILON	0.001
-
-#define clamp( val, min, max ) ( ((val) > (max)) ? (max) : ( ((val) < (min)) ? (min) : (val) ) )
 
 #define VectorSubtract(a,b,c) {(c)[0]=(a)[0]-(b)[0];(c)[1]=(a)[1]-(b)[1];(c)[2]=(a)[2]-(b)[2];}
 #define VectorAdd(a,b,c) {(c)[0]=(a)[0]+(b)[0];(c)[1]=(a)[1]+(b)[1];(c)[2]=(a)[2]+(b)[2];}
