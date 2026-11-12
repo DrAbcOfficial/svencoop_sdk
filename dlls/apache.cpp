@@ -135,10 +135,9 @@ IMPLEMENT_SAVERESTORE( CApache, CBaseMonster );
 
 float CApache::GetPointsForDamage( float flDamage )
 {
-	return ( pev->max_health / sk_apache_health.value ) * 30.0f
-	       * ( flDamage / pev->max_health );
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
+	return ( pev->max_health / sk_apache_health.value ) * 30.0f * ( flDamage / pev->max_health );
 }
-
 
 #define APACHE_LOOK_MAX_ENTITIES	100
 #define APACHE_LOOK_MIN_DISTANCE	128

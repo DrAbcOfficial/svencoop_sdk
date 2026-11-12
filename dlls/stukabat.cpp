@@ -182,11 +182,10 @@ int CStukabat::Classify( void )
 
 float CStukabat::GetPointsForDamage( float damage )
 {
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
 	float points = pev->max_health / sk_stukabat.value;
 
-	points *= 0.5f;
-
-	return points * ( damage / pev->max_health );
+	return (float) ( points * 0.5 * ( damage / pev->max_health ) );
 }
 
 void CStukabat::SetYawSpeed( void )

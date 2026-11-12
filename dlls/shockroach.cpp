@@ -183,6 +183,7 @@ Vector CShockRoach::BodyTarget( const Vector &source )
 
 float CShockRoach::GetPointsForDamage( float damage )
 {
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
 	float healthScale = pev->max_health / sk_headcrab_health.value;
 
 	return ( damage / pev->max_health ) * healthScale;

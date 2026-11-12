@@ -280,7 +280,6 @@ public:
 #else
 	bool IsMoving( void );
 	virtual float GetLogFrequency( void );
-	virtual float GetPointsForDamage( float flDamage );
 	virtual bool CanStartNextVote( VOTETYPE type );
 	virtual void Vote( VOTEINPUT input, const char *text );
 	virtual VOTEINPUT LastVoteInput();
@@ -288,6 +287,8 @@ public:
 
 	CToPlayerCollisions	m_PlayerCollisions;
 #endif
+
+	virtual float GetPointsForDamage( float flDamage );
 
 	// Grapple firing, rappel preference, and release state
 	bool	m_fGrappleFired;

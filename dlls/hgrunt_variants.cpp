@@ -2638,7 +2638,12 @@ public:
 	int ObjectCaps( void ) { return IsPlayerAlly() ? FCAP_IMPULSE_USE : FCAP_ACROSS_TRANSITION; }
 	int ISoundMask( void ) { return bits_SOUND_WORLD | bits_SOUND_COMBAT | bits_SOUND_PLAYER | bits_SOUND_DANGER | bits_SOUND_BULLETHIT; }
 	int IRelationship( CBaseEntity *target, bool ignoreNoTarget = false );
-	float GetPointsForDamage( float damage ) { return pev->max_health / sk_hgrunt_health.value * 4 * ( damage / pev->max_health ); }
+	float GetPointsForDamage( float damage )
+	{
+		//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
+		return pev->max_health / sk_hgrunt_health.value * 4 * ( damage / pev->max_health );
+	}
+
 	void PrescheduleThink( void );
 	void IdleSound( void );
 	void AlertSound( void );
@@ -3801,7 +3806,12 @@ public:
 	int ObjectCaps( void ) { return IsPlayerAlly() ? FCAP_IMPULSE_USE : FCAP_ACROSS_TRANSITION; }
 	int ISoundMask( void ) { return bits_SOUND_WORLD | bits_SOUND_COMBAT | bits_SOUND_PLAYER | bits_SOUND_DANGER | bits_SOUND_BULLETHIT; }
 	int IRelationship( CBaseEntity *target, bool ignoreNoTarget = false );
-	float GetPointsForDamage( float damage ) { return pev->max_health / sk_hgrunt_health.value * 4 * ( damage / pev->max_health ); }
+	float GetPointsForDamage( float damage )
+	{
+		//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
+		return pev->max_health / sk_hgrunt_health.value * 4 * ( damage / pev->max_health );
+	}
+
 	void PrescheduleThink( void );
 	void IdleSound( void );
 	void AlertSound( void );
@@ -5055,7 +5065,12 @@ public:
 	int ObjectCaps( void ) { return IsPlayerAlly() ? FCAP_IMPULSE_USE : FCAP_ACROSS_TRANSITION; }
 	int ISoundMask( void ) { return bits_SOUND_WORLD | bits_SOUND_COMBAT | bits_SOUND_PLAYER | bits_SOUND_DANGER | bits_SOUND_BULLETHIT; }
 	int IRelationship( CBaseEntity *target, bool ignoreNoTarget = false );
-	float GetPointsForDamage( float damage ) { return pev->max_health / sk_hgrunt_health.value * 5 * ( damage / pev->max_health ); }
+	float GetPointsForDamage( float damage )
+	{
+		//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
+		return pev->max_health / sk_hgrunt_health.value * 5 * ( damage / pev->max_health );
+	}
+
 	void RunAI( void );
 	void PrescheduleThink( void );
 	void UseSound( void );

@@ -633,6 +633,7 @@ int CHeadCrab::ObjectCaps( void )
 
 float CHeadCrab::GetPointsForDamage( float flDamage )
 {
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
 	float points = pev->max_health / sk_headcrab_health.value;
 
 	return points * ( flDamage / pev->max_health );
@@ -645,6 +646,7 @@ int CBabyCrab::Classify( void )
 
 float CBabyCrab::GetPointsForDamage( float flDamage )
 {
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
 	double health = (double) sk_headcrab_health.value * 0.25;
 	double points = (double) pev->max_health / health;
 	float damageScale = flDamage / pev->max_health;

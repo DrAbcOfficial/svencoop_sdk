@@ -1434,6 +1434,7 @@ int CHoundeye::ObjectCaps( void )
 
 float CHoundeye::GetPointsForDamage( float flDamage )
 {
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
 	float points = pev->max_health / sk_houndeye_health.value;
 
 	points *= 2.0f;

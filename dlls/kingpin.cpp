@@ -330,6 +330,7 @@ void CKingpin::Precache( void )
 
 float CKingpin::GetPointsForDamage( float damage )
 {
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
 	return ( pev->max_health / sk_kingpin_health.value ) * 3.0f * ( damage / pev->max_health );
 }
 

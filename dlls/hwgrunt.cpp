@@ -272,6 +272,7 @@ int CHWGrunt::ISoundMask( void )
 
 float CHWGrunt::GetPointsForDamage( float damage )
 {
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
 	float points = pev->max_health / sk_hwgrunt_health.value;
 	float fraction = damage / pev->max_health;
 

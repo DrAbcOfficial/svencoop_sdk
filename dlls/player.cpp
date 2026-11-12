@@ -1912,6 +1912,12 @@ void CBasePlayer::SendScoreInfo( edict_t *recipient )
 	}
 }
 
+float CBasePlayer::GetPointsForDamage( float flDamage )
+{
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
+	return 0 * flDamage;
+}
+
 void CBasePlayer::AddPoints( int score, bool bAllowNegativeScore )
 {
 	// Positive score always adds

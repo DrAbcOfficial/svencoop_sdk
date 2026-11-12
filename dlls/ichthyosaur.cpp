@@ -1427,6 +1427,7 @@ int CIchthyosaur::ObjectCaps( void )
 
 float CIchthyosaur::GetPointsForDamage( float flDamage )
 {
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
 	float points = pev->max_health / sk_ichthyosaur_health.value;
 
 	points *= 12.0f;

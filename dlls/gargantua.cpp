@@ -322,8 +322,8 @@ extern cvar_t sk_gargantua_health;
 
 float CGargantua::GetPointsForDamage( float flDamage )
 {
-	return ( pev->max_health / sk_gargantua_health.value ) * 25.0f
-	       * ( flDamage / pev->max_health );
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
+	return ( pev->max_health / sk_gargantua_health.value ) * 25.0f * ( flDamage / pev->max_health );
 }
 
 const char *CGargantua::pAttackHitSounds[] = 

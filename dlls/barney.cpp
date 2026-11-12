@@ -842,6 +842,7 @@ int CBarney::ObjectCaps( void )
 
 float CBarney::GetPointsForDamage( float damage )
 {
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
 	return (float) ( (double) ( pev->max_health / sk_barney_health.value ) * 2.5 * (double) ( damage / pev->max_health ) );
 }
 

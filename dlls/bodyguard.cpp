@@ -296,6 +296,7 @@ void CBodyGuard::SetPlayerAlly( bool state )
 
 float CBodyGuard::GetPointsForDamage( float damage )
 {
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
 	float healthFactor = pev->max_health / sk_barney_health.value;
 	float fraction = damage / pev->max_health;
 

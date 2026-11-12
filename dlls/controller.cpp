@@ -1578,6 +1578,7 @@ int CController::ObjectCaps( void )
 
 float CController::GetPointsForDamage( float flDamage )
 {
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
 	float points = pev->max_health / sk_controller_health.value;
 
 	points *= 3.0f;

@@ -428,6 +428,7 @@ void CScientist::SetPlayerAlly( bool fState )
 
 float CScientist::GetPointsForDamage( float flDamage )
 {
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
 	return ( flDamage / pev->max_health ) * ( pev->max_health / sk_scientist_health.value );
 }
 

@@ -215,7 +215,8 @@ int CShocktrooper::ObjectCaps( void )
 
 float CShocktrooper::GetPointsForDamage( float damage )
 {
-	return ( pev->max_health / sk_shocktrooper_health.value ) * 6.0 * ( damage / pev->max_health );
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
+	return ( pev->max_health / sk_shocktrooper_health.value ) * 6.0f * ( damage / pev->max_health );
 }
 
 void CShocktrooper::Revive( void )

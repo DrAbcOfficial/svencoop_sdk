@@ -737,6 +737,7 @@ void CLeech::Killed(entvars_t *pevAttacker, int iGib)
 
 float CLeech::GetPointsForDamage( float flDamage )
 {
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
 	float healthScale = pev->max_health / sk_leech_health.value;
 	float damageScale = flDamage / pev->max_health;
 

@@ -279,6 +279,7 @@ int CTor::IRelationship( CBaseEntity *target, bool ignoreNoTarget )
 
 float CTor::GetPointsForDamage( float damage )
 {
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
 	float points = pev->max_health / sk_tor_health.value;
 
 	points *= 4.0f;

@@ -705,6 +705,7 @@ int CGonome::TakeDamage( entvars_t *inflictor, entvars_t *attacker, float damage
 
 float CGonome::GetPointsForDamage( float damage )
 {
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
 	return pev->max_health / sk_gonome_health.value * 10 * ( damage / pev->max_health );
 }
 

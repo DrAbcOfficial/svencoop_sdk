@@ -142,10 +142,10 @@ public:
 	int  Classify ( void );
 	int ObjectCaps( void );
 
-	virtual float GetPointsForDamage(float flDamage)
+	virtual float GetPointsForDamage( float flDamage )
 	{
 		//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
-		return min(4,(flDamage/pev->max_health) * (4 * (pev->max_health/sk_hgrunt_health.value)));
+		return min( 4, ( flDamage / pev->max_health ) * ( 4 * ( pev->max_health / sk_hgrunt_health.value ) ) );
 	}
 
 	int ISoundMask ( void );
@@ -2871,7 +2871,12 @@ void CHGrunt::UpdateSpot( bool instant )
 class CHGruntRepel : public CBaseMonster
 {
 public:
-	float GetPointsForDamage( float flDamage ) { return 0; }
+	float GetPointsForDamage( float flDamage )
+	{
+		//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
+		return 0;
+	}
+
 	void Spawn( void );
 	void Precache( void );
 	void EXPORT RepelUse ( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );

@@ -462,7 +462,12 @@ public:
 	virtual bool IsFacing( entvars_t *target, float fieldOfView );
 
 	bool			BlockedByEntity( CBaseEntity *pOther, float flDamage );
-	virtual float	GetPointsForDamage( float flDamage ) { return 0 * flDamage; }
+	virtual float GetPointsForDamage( float flDamage )
+	{
+		//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
+		return 0 * flDamage;
+	}
+
 	virtual void GetDamagePoints( entvars_t *inflictor, entvars_t *attacker, float damage );
 
 	bool			IsPlayerAlly( void ) { return m_fPlayerAlly; }

@@ -136,6 +136,7 @@ IMPLEMENT_SAVERESTORE( CHAssassin, CBaseMonster );
 
 float CHAssassin::GetPointsForDamage( float flDamage )
 {
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
 	float points = pev->max_health / sk_hassassin_health.value;
 
 	points *= 6.0f;

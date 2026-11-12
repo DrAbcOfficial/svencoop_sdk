@@ -536,6 +536,7 @@ void COtis::Killed( entvars_t *attacker, int gib )
 
 float COtis::GetPointsForDamage( float damage )
 {
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
 	return ( pev->max_health / sk_otis_health.value * 4.0f ) * ( damage / pev->max_health );
 }
 

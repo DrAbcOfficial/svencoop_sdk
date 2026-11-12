@@ -984,6 +984,7 @@ int CISlave::ObjectCaps( void )
 
 float CISlave::GetPointsForDamage( float flDamage )
 {
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
 	float points = pev->max_health / sk_islave_health.value;
 
 	points *= 3.0f;

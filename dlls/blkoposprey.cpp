@@ -69,6 +69,7 @@ extern cvar_t sk_blkopsosprey;
 
 float COspreyBlackOps::GetPointsForDamage( float flDamage )
 {
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
 	return ( pev->max_health / sk_blkopsosprey.value ) * 40.0f * ( flDamage / pev->max_health );
 }
 

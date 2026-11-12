@@ -178,8 +178,8 @@ extern cvar_t sk_nihilanth_health;
 
 float CNihilanth::GetPointsForDamage( float flDamage )
 {
-	return ( pev->max_health / sk_nihilanth_health.value ) * 50.0f
-	       * ( flDamage / pev->max_health );
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
+	return ( pev->max_health / sk_nihilanth_health.value ) * 50.0f * ( flDamage / pev->max_health );
 }
 
 class CNihilanthHVR : public CBaseMonster

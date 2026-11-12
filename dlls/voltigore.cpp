@@ -965,6 +965,7 @@ int CVoltigore::Classify( void )
 
 float CVoltigore::GetPointsForDamage( float flDamage )
 {
+	//ScoreIncrement = (Damage / MonsterCustomHealth) * (MonstersDefaultScore * (MonstersCustomHealth / MonstersDefaultHealth) )
 	return ( pev->max_health / sk_voltigore_health.value ) * 15.0f * ( flDamage / pev->max_health );
 }
 
