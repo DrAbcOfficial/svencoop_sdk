@@ -399,7 +399,7 @@ void CHalfLifeMultiplay::ClientUserInfoChanged( CBasePlayer *player, char *infob
 	int clientIndex = player->entindex();
 	const char *hideXtra = g_engfuncs.pfnInfoKeyValue( infobuffer, "cl_hidextra" );
 
-	if ( hideXtra && isdigit( *hideXtra ) )
+	if ( hideXtra && isdigit((unsigned char) *hideXtra) )
 		player->m_iHideXtra = atoi( hideXtra );
 	else
 	{
@@ -411,7 +411,7 @@ void CHalfLifeMultiplay::ClientUserInfoChanged( CBasePlayer *player, char *infob
 
 	const char *hideAdmin = g_engfuncs.pfnInfoKeyValue( infobuffer, "cl_hideadmin" );
 
-	if ( hideAdmin && isdigit( *hideAdmin ) )
+	if ( hideAdmin && isdigit((unsigned char) *hideAdmin) )
 		player->m_iHideAdmin = atoi( hideAdmin );
 	else
 	{
@@ -423,7 +423,7 @@ void CHalfLifeMultiplay::ClientUserInfoChanged( CBasePlayer *player, char *infob
 
 	const char *autoSwitch = g_engfuncs.pfnInfoKeyValue( infobuffer, "hud_weaponautoswitch" );
 
-	if ( autoSwitch && isdigit( *autoSwitch ) )
+	if ( autoSwitch && isdigit((unsigned char) *autoSwitch) )
 		player->m_iWeaponAutoSwitch = atoi( autoSwitch );
 	else
 	{
@@ -1880,7 +1880,7 @@ int COM_TokenWaiting( char *buffer )
 	p = buffer;
 	while ( *p && *p!='\n')
 	{
-		if ( !isspace( *p ) || isalnum( *p ) )
+		if ( !isspace((unsigned char) *p) || isalnum((unsigned char) *p) )
 			return 1;
 
 		p++;

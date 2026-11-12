@@ -14,7 +14,7 @@
 //    for legacy code). In this case, you need to make a new version name for your new interface, and make a wrapper interface and 
 //    expose it for the old interface.
 
-#if _MSC_VER >= 1300  // VC7
+#if defined(_MSC_VER) && _MSC_VER >= 1300  // VC7
 // Just in case if normal interface.h is included -Enko
 #include "tier1/interface.h"
 #else
@@ -96,7 +96,7 @@ public:
 	EXPOSE_SINGLE_INTERFACE_GLOBALVAR(className, interfaceName, versionName, __g_##className##_singleton)
 
 
-#ifdef WIN32
+#ifdef _WIN32
 	#define EXPORT_FUNCTION __declspec(dllexport)
 #else
 	#define EXPORT_FUNCTION __attribute__ ((visibility("default")))

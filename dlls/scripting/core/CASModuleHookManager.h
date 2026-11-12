@@ -18,7 +18,7 @@ public:
 
 	bool IsValidHookCode(unsigned int code) const;
 	bool HookExists(unsigned int code) const;
-	HookReturnCode_t CallHook(const CASHook &hook, int argumentCount, va_list arguments);
+	HookReturnCode_t CallHook(const CASHook &hook, int argumentCount, va_list &arguments);
 	HookReturnCode_t CallHook(const CASHook &hook, int argumentCount, ...);
 	bool RegisterHook(unsigned int code, asIScriptGeneric *generic);
 	void RemoveHook(unsigned int code);

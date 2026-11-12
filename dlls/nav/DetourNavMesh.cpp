@@ -99,7 +99,7 @@ void dtNavMesh::connectIntLinks(dtMeshTile* tile)
 			{
 				for (int j = poly->neighbCnt - 1; j >= 0; --j)
 				{
-					if (poly->refs[j] != DT_NULL_LINK)
+					if (poly->refs[j] != DT_NULL_REF)
 					{
 						if (tile->firstLink != DT_NULL_LINK)
 						{

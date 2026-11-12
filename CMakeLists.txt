@@ -1,31 +1,104 @@
 # Sven Co-op SDK - dedicated server CMake build
 #
-# Builds only the server module:
-#   * server.dll  (Windows, 32-bit)
-#   * hl_i386.so  (Linux, 32-bit)
-#   * server.so   (Linux, native 64-bit; SVENCOOP_NATIVE_64BIT=ON)
+# Supported targets:
+#   * server.dll  (Windows, Win32; MSVC or clang-cl)
+#   * hl_i386.so  (Linux x86, 32-bit; GCC or Clang)
+#   * server.so   (Linux x86_64/aarch64; -DSVENCOOP_NATIVE_64BIT=ON)
+#   * server.dll  (Windows x64/ARM64; -DSVENCOOP_NATIVE_64BIT=ON)
 #
 # The GoldSrc engine and the bundled server-side third-party dependencies are
-# 32-bit x86. A native 64-bit Linux build is only meant as a syntax check by
-# the compiler; the resulting module cannot be loaded by the 32-bit engine.
+# 32-bit.  A native 64-bit build is only meant as a compiler/linker syntax
+# check; the resulting module cannot be loaded by the 32-bit engine.
 
 cmake_minimum_required(VERSION 3.20)
 
 project(SvenCoopSDK VERSION 5.26 LANGUAGES C CXX)
+
+# The project is pinned to C++20: no C++23, no GNU dialect.  GCC/Clang get
+# -std=c++20 (CMAKE_CXX_EXTENSIONS OFF); MSVC gets /std:c++20 plus
+# /permissive- below.
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+# ---------------------------------------------------------------------------
+# Toolchain requirements (strict C++20)
+#
+# The server uses C++20 library facilities directly (std::jthread,
+# std::stop_token) and is built without GNU dialect extensions, so the
+# toolchain must implement them.  Fail at configure time with an actionable
+# message instead of emitting hundreds of compile errors.
+# ---------------------------------------------------------------------------
+include(CheckCXXSourceCompiles)
+
+# The feature test below links a real std::jthread, so POSIX toolchains need
+# the thread library on the link line as well (older glibc keeps pthread
+# outside libc).
+if(NOT MSVC)
+    set(CMAKE_REQUIRED_FLAGS "-pthread")
+endif()
+
+check_cxx_source_compiles("
+    #include <thread>
+    #include <stop_token>
+    int main()
+    {
+        std::stop_source source;
+        std::jthread thread( []( std::stop_token token ) { (void) token; } );
+        (void) source.get_token();
+        return 0;
+    }
+" SVENCOOP_HAVE_CXX20_JTHREAD)
+
+unset(CMAKE_REQUIRED_FLAGS)
+
+if(NOT SVENCOOP_HAVE_CXX20_JTHREAD)
+    message(FATAL_ERROR
+        "This project requires full C++20 thread support (std::jthread, "
+        "std::stop_token).\n"
+        "Upgrade the toolchain: GCC 10+, Clang with a C++20 standard library "
+        "(libstdc++ 10+ or libc++ with <stop_token>), or MSVC 19.28+ "
+        "(Visual Studio 2019 16.8 or newer).")
+endif()
+
+# MSVC and clang-cl both report MSVC=TRUE (CMake treats clang-cl as a
+# compiler simulating the MSVC command line), so the MSVC branch below
+# covers both.  Everything else uses the GNU-style command line.
+# NOTE: the probe variable must not be pre-set: check_cxx_source_compiles()
+# skips the test when its result variable is already defined, which would
+# silently drop the definition on every non-GCC compiler.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set(SVENCOOP_USES_LIBSTDCXX TRUE)
+elseif(MSVC OR APPLE)
+    set(SVENCOOP_USES_LIBSTDCXX FALSE)
+else()
+    check_cxx_source_compiles("
+        #include <string>
+        #ifndef _GLIBCXX_USE_CXX11_ABI
+        #error libstdc++ only
+        #endif
+        int main() { return 0; }
+    " SVENCOOP_HAVE_LIBSTDCXX_ABI_MACRO)
+
+    if(SVENCOOP_HAVE_LIBSTDCXX_ABI_MACRO)
+        set(SVENCOOP_USES_LIBSTDCXX TRUE)
+    else()
+        set(SVENCOOP_USES_LIBSTDCXX FALSE)
+    endif()
+endif()
+
+message(STATUS "Standard library: libstdc++ (old ABI): ${SVENCOOP_USES_LIBSTDCXX}")
 
 if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
     set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release RelWithDebInfo MinSizeRel)
 endif()
 
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS ON)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
 option(SVENCOOP_WARNINGS     "Enable the compiler warning level used by the old projects" ON)
+option(SVENCOOP_PEDANTIC     "Enable -Wpedantic (accurate but noisy on this legacy code base)" ON)
 option(SVENCOOP_ALLOW_64BIT  "Allow a 64-bit Linux build (requires 64-bit dependencies)" OFF)
-option(SVENCOOP_NATIVE_64BIT "Build a native 64-bit Linux module (x86_64/aarch64) for syntax validation only; it is not loadable by the 32-bit engine" OFF)
+option(SVENCOOP_NATIVE_64BIT "Build a native 64-bit module (Linux x86_64/aarch64, Windows x64/ARM64) for syntax validation only; it is not loadable by the 32-bit engine" OFF)
 
 # ---------------------------------------------------------------------------
 # Architecture checks
@@ -37,11 +110,51 @@ endif()
 
 # Target CPU family; used for the x86-only SIMD compile options and for
 # picking the AngelScript native calling convention sources.
+#
+# CMAKE_SYSTEM_PROCESSOR may report the host CPU (Visual Studio -A Win32,
+# cross toolchains), so the pointer size decides between the 32- and 64-bit
+# name of the same family.
+string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" SVENCOOP_SYSTEM_PROCESSOR_LOWER)
+
+# The Visual Studio generator reports the *host* processor in
+# CMAKE_SYSTEM_PROCESSOR (an x64 host stays "AMD64" for -A Win32), so the
+# generator platform is the authoritative target name there.
+if(WIN32 AND CMAKE_GENERATOR_PLATFORM)
+    string(TOLOWER "${CMAKE_GENERATOR_PLATFORM}" SVENCOOP_GENERATOR_PLATFORM_LOWER)
+    if(SVENCOOP_GENERATOR_PLATFORM_LOWER STREQUAL "win32"
+            OR SVENCOOP_GENERATOR_PLATFORM_LOWER STREQUAL "x86")
+        set(SVENCOOP_SYSTEM_PROCESSOR_LOWER "x86")
+    elseif(SVENCOOP_GENERATOR_PLATFORM_LOWER STREQUAL "x64"
+            OR SVENCOOP_GENERATOR_PLATFORM_LOWER STREQUAL "amd64")
+        set(SVENCOOP_SYSTEM_PROCESSOR_LOWER "x86_64")
+    elseif(SVENCOOP_GENERATOR_PLATFORM_LOWER MATCHES "^arm64")
+        set(SVENCOOP_SYSTEM_PROCESSOR_LOWER "arm64")
+    endif()
+endif()
+
 set(SVENCOOP_TARGET_ARCH "unknown")
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86|X86|AMD64|amd64|i[3-6]86|x86_64|X86_64)")
-    set(SVENCOOP_TARGET_ARCH "x86")
-elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|ARM64|aarch64|AARCH64)")
-    set(SVENCOOP_TARGET_ARCH "arm64")
+if(SVENCOOP_TARGET_64BIT)
+    if(SVENCOOP_SYSTEM_PROCESSOR_LOWER MATCHES "^(x86_64|amd64|x64)")
+        set(SVENCOOP_TARGET_ARCH "x86_64")
+    elseif(SVENCOOP_SYSTEM_PROCESSOR_LOWER MATCHES "^(aarch64|arm64)")
+        set(SVENCOOP_TARGET_ARCH "arm64")
+    elseif(SVENCOOP_SYSTEM_PROCESSOR_LOWER MATCHES "^(ppc64|ppc64le)")
+        set(SVENCOOP_TARGET_ARCH "ppc64")
+    elseif(SVENCOOP_SYSTEM_PROCESSOR_LOWER MATCHES "^(mips64)")
+        set(SVENCOOP_TARGET_ARCH "mips64")
+    elseif(SVENCOOP_SYSTEM_PROCESSOR_LOWER MATCHES "^(riscv64)")
+        set(SVENCOOP_TARGET_ARCH "riscv64")
+    endif()
+else()
+    if(SVENCOOP_SYSTEM_PROCESSOR_LOWER MATCHES "^(i[3-6]86|x86|ia32|win32)")
+        set(SVENCOOP_TARGET_ARCH "x86")
+    elseif(SVENCOOP_SYSTEM_PROCESSOR_LOWER MATCHES "^(arm|armv[0-9].*)")
+        set(SVENCOOP_TARGET_ARCH "arm")
+    elseif(SVENCOOP_SYSTEM_PROCESSOR_LOWER MATCHES "^(mips)")
+        set(SVENCOOP_TARGET_ARCH "mips")
+    elseif(SVENCOOP_SYSTEM_PROCESSOR_LOWER MATCHES "^(ppc)")
+        set(SVENCOOP_TARGET_ARCH "ppc")
+    endif()
 endif()
 
 if(WIN32 AND SVENCOOP_TARGET_64BIT AND NOT SVENCOOP_NATIVE_64BIT)
@@ -67,6 +180,24 @@ else()
     message(STATUS "Target: 32-bit (${SVENCOOP_TARGET_ARCH})")
 endif()
 
+# Assembler languages must be enabled at directory scope; enabling them from
+# inside a function leaves CMAKE_ASM_COMPILE_OBJECT unset at generate time.
+if(SVENCOOP_TARGET_ARCH STREQUAL "arm64" OR SVENCOOP_TARGET_ARCH STREQUAL "arm")
+    if(MSVC)
+        # armasm/armasm64, not the x86 ml/ml64 dialect.
+        if(CMAKE_VERSION VERSION_LESS 3.26)
+            message(FATAL_ERROR
+                "MSVC ARM/ARM64 builds require CMake 3.26 or newer for the "
+                "ASM_MARMASM language.")
+        endif()
+        enable_language(ASM_MARMASM)
+    else()
+        enable_language(ASM)
+    endif()
+elseif(SVENCOOP_TARGET_ARCH STREQUAL "x86_64" AND WIN32 AND MSVC)
+    enable_language(ASM_MASM)
+endif()
+
 # ---------------------------------------------------------------------------
 # Global compiler configuration
 # ---------------------------------------------------------------------------
@@ -74,27 +205,53 @@ if(MSVC)
     # The original projects used the static CRT (/MT, /MTd).
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS _ITERATOR_DEBUG_LEVEL=0)
-    add_compile_options(/MP)
+
+    # Strict C++20: no Microsoft language extensions, standards-conforming
+    # name lookup, and a correct __cplusplus value.  /utf-8 is required
+    # because several legacy headers used to contain Latin-1 bytes and the
+    # default source encoding is the system code page (GBK on Chinese
+    # Windows).
+    # Keep C/C++-only switches away from MASM/armasm, which reject them.
+    add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:/utf-8>)
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/permissive->)
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/Zc:__cplusplus>)
+    # /permissive- implies /Zc:strictStrings.  That diagnostic rejects
+    # hundreds of legacy `char *` initializers and engine callback
+    # parameters (cvar_t tables, ALERT formats) which cannot be changed
+    # without breaking the engine ABI, so string-literal strictness stays
+    # off while the rest of /permissive- is kept.
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/Zc:strictStrings->)
+    add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:/MP>)
     add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/Zc:threadSafeInit->)
     if(SVENCOOP_WARNINGS)
-        add_compile_options(/W3)
+        add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:/W3>)
     endif()
 else()
     # POSIX/GCC definitions shared by the server.
     add_compile_definitions(
-        _GLIBCXX_USE_CXX11_ABI=0
         NO_MALLOC_OVERRIDE
         _alloca=alloca
     )
+    # The old libstdc++ ABI is used for binary compatibility with the
+    # engine-side toolchain.  It is a libstdc++ knob: never pass it when
+    # another standard library (libc++) is in use.
+    if(SVENCOOP_USES_LIBSTDCXX)
+        add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
+    endif()
     add_compile_options(-fno-strict-aliasing)
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fpermissive>)
+        # -fno-gnu-unique keeps dlclose()/reload behaviour sane on Linux.
         if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
             add_compile_options(-fno-gnu-unique)
         endif()
     endif()
+    # -fpermissive was inherited from the old Makefiles.  Under strict C++20
+    # it is not used: the tree compiles cleanly without it.
     if(SVENCOOP_WARNINGS)
         add_compile_options(-Werror=return-type)
+        if(SVENCOOP_PEDANTIC)
+            add_compile_options(-Wpedantic)
+        endif()
     endif()
 endif()
 
@@ -140,11 +297,12 @@ if(MSVC)
 endif()
 
 # Crypto++ selects its SIMD implementations at compile time on GCC/Clang.
-# The explicit instruction-set flags below are per-architecture: x86 needs its
-# extension flags, AArch64 needs the crypto extension for the ARMv8 paths
-# (Crypto++ enables them optimistically for GCC >= 4.8).
+# The explicit instruction-set flags below are per-architecture: x86 (both
+# 32- and 64-bit) needs its extension flags, AArch64 needs the crypto
+# extension for the ARMv8 paths (Crypto++ enables them optimistically for
+# GCC >= 4.8).
 if(NOT MSVC)
-    if(SVENCOOP_TARGET_ARCH STREQUAL "x86")
+    if(SVENCOOP_TARGET_ARCH STREQUAL "x86" OR SVENCOOP_TARGET_ARCH STREQUAL "x86_64")
         set_source_files_properties(external/cryptopp/gcm_simd.cpp      PROPERTIES COMPILE_OPTIONS "-mssse3;-mpclmul")
         set_source_files_properties(external/cryptopp/rijndael_simd.cpp PROPERTIES COMPILE_OPTIONS "-msse4.1;-maes")
         set_source_files_properties(external/cryptopp/sha_simd.cpp      PROPERTIES COMPILE_OPTIONS "-msse4.2;-msha")
@@ -190,9 +348,16 @@ endif()
 # ---------------------------------------------------------------------------
 # libcurl import library (Windows)
 #
-# The server only ships libcurl_sven.def; the original project generated the
-# import library with lib.exe before linking.
+# Windows is supported with MSVC/clang-cl only (MinGW is out of scope), so the
+# import library is generated with lib.exe.  The machine type follows the
+# target architecture, not the host.
 # ---------------------------------------------------------------------------
+if(WIN32 AND NOT MSVC)
+    message(FATAL_ERROR
+        "Windows builds require MSVC or clang-cl. MinGW and other "
+        "GNU-compatible Windows toolchains are not supported.")
+endif()
+
 if(WIN32 AND MSVC)
     get_filename_component(SVENCOOP_MSVC_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
     find_program(SVENCOOP_LIB_EXE
@@ -206,10 +371,20 @@ if(WIN32 AND MSVC)
     set(SVENCOOP_CURL_DEF "${CMAKE_CURRENT_SOURCE_DIR}/external/curl-win32/libcurl_sven.def")
     set(SVENCOOP_CURL_LIB "${CMAKE_CURRENT_BINARY_DIR}/libcurl_sven.lib")
 
+    if(SVENCOOP_TARGET_ARCH STREQUAL "x86")
+        set(SVENCOOP_LIB_MACHINE "x86")
+    elseif(SVENCOOP_TARGET_ARCH STREQUAL "x86_64")
+        set(SVENCOOP_LIB_MACHINE "x64")
+    elseif(SVENCOOP_TARGET_ARCH STREQUAL "arm64")
+        set(SVENCOOP_LIB_MACHINE "arm64")
+    else()
+        set(SVENCOOP_LIB_MACHINE "x86")
+    endif()
+
     if(SVENCOOP_LIB_EXE)
         add_custom_command(
             OUTPUT "${SVENCOOP_CURL_LIB}"
-            COMMAND "${SVENCOOP_LIB_EXE}" /nologo /machine:x86
+            COMMAND "${SVENCOOP_LIB_EXE}" /nologo /machine:${SVENCOOP_LIB_MACHINE}
                     /def:${SVENCOOP_CURL_DEF} /out:${SVENCOOP_CURL_LIB}
             DEPENDS "${SVENCOOP_CURL_DEF}"
             COMMENT "Generating libcurl_sven.lib"
@@ -243,6 +418,15 @@ set(SVENCOOP_ARCHIVE_OUTPUT_DIR "${CMAKE_BINARY_DIR}/lib")
 add_library(svencoop_server_runtime STATIC
     ${SVENCOOP_SERVER_RUNTIME_SOURCES}
 )
+
+# Crypto++ implements the x64 CPUID/XGETBV helpers and several SIMD kernels
+# (integer add/sub, AES-NI, CLMUL, SHA) in MASM for MSVC.  They are not part
+# of the portable C++ source list, so an x64 MSVC build must add the module
+# explicitly or the server fails to link.
+if(MSVC AND SVENCOOP_TARGET_ARCH STREQUAL "x86_64")
+    target_sources(svencoop_server_runtime PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/external/cryptopp/x64dll.asm)
+endif()
 target_include_directories(svencoop_server_runtime PRIVATE
     ${SVENCOOP_COMMON_INCLUDES}
     ${CMAKE_CURRENT_SOURCE_DIR}/external/angelscript/sdk/angelscript/include
@@ -256,7 +440,10 @@ target_compile_definitions(svencoop_server_runtime PRIVATE
     AS_USE_ACCESSORS=0
 )
 if(NOT WIN32)
+    # pm_shared/pm_math.cpp uses the engine's vec3_t layout on non-Windows.
     target_compile_definitions(svencoop_server_runtime PRIVATE DISABLE_VEC_ORIGIN)
+endif()
+if(NOT MSVC)
     target_compile_options(svencoop_server_runtime PRIVATE -fexceptions)
 endif()
 
@@ -275,23 +462,67 @@ target_sources(svencoop_server PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/compat/cryptopp_client_templates.cpp
 )
 
-# On a 64-bit target AngelScript auto-selects a different native calling
-# convention (AS_X64_GCC / AS_ARM64), which needs its matching callfunc
-# sources. Unknown architectures fall back to AS_MAX_PORTABILITY and use the
-# portable implementation already present in as_callfunc.cpp.
-if(UNIX AND NOT APPLE AND SVENCOOP_TARGET_64BIT)
-    if(SVENCOOP_TARGET_ARCH STREQUAL "arm64")
-        enable_language(ASM)
-        target_sources(svencoop_server PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/external/angelscript/sdk/angelscript/source/as_callfunc_arm64.cpp
-            ${CMAKE_CURRENT_SOURCE_DIR}/external/angelscript/sdk/angelscript/source/as_callfunc_arm64_gcc.S
-        )
-    elseif(SVENCOOP_TARGET_ARCH STREQUAL "x86")
-        target_sources(svencoop_server PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/external/angelscript/sdk/angelscript/source/as_callfunc_x64_gcc.cpp
-        )
+# ---------------------------------------------------------------------------
+# AngelScript native calling convention
+#
+# AngelScript picks AS_X86 / AS_X64_GCC / AS_X64_MSVC / AS_ARM / AS_ARM64 in
+# as_config.h and needs the matching out-of-line trampoline sources.  A source
+# compiled for a convention the library did not select is harmless (it
+# compiles to nothing), but a missing one breaks the link.  Unknown CPUs fall
+# back to AS_MAX_PORTABILITY and need nothing extra.
+#
+# Supported targets: Windows (MSVC / clang-cl) x86 and x64, Linux/macOS
+# x86_64, Linux/Windows/macOS ARM64.
+# ---------------------------------------------------------------------------
+function(svencoop_add_angelscript_callfunc target)
+    set(_as "${CMAKE_CURRENT_SOURCE_DIR}/external/angelscript/sdk/angelscript/source")
+
+    if(SVENCOOP_TARGET_ARCH STREQUAL "x86")
+        target_sources(${target} PRIVATE "${_as}/as_callfunc_x86.cpp")
+    elseif(SVENCOOP_TARGET_ARCH STREQUAL "x86_64")
+        if(WIN32)
+            if(MSVC)
+                target_sources(${target} PRIVATE
+                    "${_as}/as_callfunc_x64_msvc.cpp"
+                    "${_as}/as_callfunc_x64_msvc_asm.asm")
+            else()
+                message(FATAL_ERROR "Windows x64 builds require MSVC or clang-cl.")
+            endif()
+        else()
+            target_sources(${target} PRIVATE "${_as}/as_callfunc_x64_gcc.cpp")
+        endif()
+    elseif(SVENCOOP_TARGET_ARCH STREQUAL "arm64")
+        target_sources(${target} PRIVATE "${_as}/as_callfunc_arm64.cpp")
+        if(MSVC)
+            target_sources(${target} PRIVATE "${_as}/as_callfunc_arm64_msvc.asm")
+        elseif(APPLE)
+            target_sources(${target} PRIVATE "${_as}/as_callfunc_arm64_xcode.S")
+        else()
+            target_sources(${target} PRIVATE "${_as}/as_callfunc_arm64_gcc.S")
+        endif()
+    elseif(SVENCOOP_TARGET_ARCH STREQUAL "arm")
+        target_sources(${target} PRIVATE "${_as}/as_callfunc_arm.cpp")
+        if(MSVC)
+            target_sources(${target} PRIVATE "${_as}/as_callfunc_arm_msvc.asm")
+        elseif(APPLE)
+            target_sources(${target} PRIVATE "${_as}/as_callfunc_arm_xcode.S")
+        else()
+            target_sources(${target} PRIVATE "${_as}/as_callfunc_arm_gcc.S")
+        endif()
+    elseif(SVENCOOP_TARGET_ARCH STREQUAL "ppc64")
+        target_sources(${target} PRIVATE "${_as}/as_callfunc_ppc_64.cpp")
+    elseif(SVENCOOP_TARGET_ARCH STREQUAL "ppc")
+        target_sources(${target} PRIVATE "${_as}/as_callfunc_ppc.cpp")
+    elseif(SVENCOOP_TARGET_ARCH STREQUAL "mips")
+        target_sources(${target} PRIVATE "${_as}/as_callfunc_mips.cpp")
+    else()
+        message(STATUS
+            "AngelScript: no native calling convention for '${SVENCOOP_TARGET_ARCH}'; "
+            "using the portable AS_MAX_PORTABILITY implementation")
     endif()
-endif()
+endfunction()
+
+svencoop_add_angelscript_callfunc(svencoop_server)
 target_compile_definitions(svencoop_server PRIVATE
     ${SVENCOOP_COMMON_DEFINITIONS}
     VALVE_DLL
@@ -307,26 +538,52 @@ if(WIN32)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dlls/hl.def")
         target_sources(svencoop_server PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/dlls/hl.def")
     endif()
-    target_link_libraries(svencoop_server PRIVATE wsock32)
-    if(SVENCOOP_CURL_LIB AND SVENCOOP_LIB_EXE)
+    # Winsock 2 supersedes the legacy wsock32 import library and is available
+    # for every supported Windows architecture.
+    target_link_libraries(svencoop_server PRIVATE ws2_32)
+    if(SVENCOOP_CURL_LIB)
         target_link_libraries(svencoop_server PRIVATE "${SVENCOOP_CURL_LIB}")
-        add_dependencies(svencoop_server svencoop_curl_import)
+        if(TARGET svencoop_curl_import)
+            add_dependencies(svencoop_server svencoop_curl_import)
+        endif()
     endif()
-    # The MSVC CRT helper object referenced by the original project.
-    get_filename_component(SVENCOOP_MSVC_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
-    get_filename_component(SVENCOOP_MSVC_TOOLSET_DIR "${SVENCOOP_MSVC_BIN_DIR}/../../.." ABSOLUTE)
-    set(SVENCOOP_FLOAT_ROUNDING_OBJ "${SVENCOOP_MSVC_TOOLSET_DIR}/lib/x86/legacy_stdio_float_rounding.obj")
-    if(EXISTS "${SVENCOOP_FLOAT_ROUNDING_OBJ}")
-        target_link_options(svencoop_server PRIVATE "${SVENCOOP_FLOAT_ROUNDING_OBJ}")
+    # The MSVC CRT helper object referenced by the original project.  It is an
+    # x86-only implementation detail of the MSVC toolset.
+    if(SVENCOOP_TARGET_ARCH STREQUAL "x86")
+        get_filename_component(SVENCOOP_MSVC_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+        get_filename_component(SVENCOOP_MSVC_TOOLSET_DIR "${SVENCOOP_MSVC_BIN_DIR}/../../.." ABSOLUTE)
+        set(SVENCOOP_FLOAT_ROUNDING_OBJ "${SVENCOOP_MSVC_TOOLSET_DIR}/lib/x86/legacy_stdio_float_rounding.obj")
+        if(EXISTS "${SVENCOOP_FLOAT_ROUNDING_OBJ}")
+            target_link_options(svencoop_server PRIVATE "${SVENCOOP_FLOAT_ROUNDING_OBJ}")
+        endif()
     endif()
     set_target_properties(svencoop_server PROPERTIES OUTPUT_NAME "server")
 else()
     target_compile_definitions(svencoop_server PRIVATE DISABLE_VEC_ORIGIN)
-    target_compile_options(svencoop_server PRIVATE -fexceptions)
+    if(NOT MSVC)
+        target_compile_options(svencoop_server PRIVATE -fexceptions)
+    endif()
+
     # CPlayerDatabase uses the system libcurl on non-Windows platforms.
     find_package(CURL REQUIRED)
-    target_link_libraries(svencoop_server PRIVATE m dl pthread CURL::libcurl)
-    if(SVENCOOP_TARGET_64BIT)
+    find_package(Threads REQUIRED)
+
+    target_link_libraries(svencoop_server PRIVATE CURL::libcurl Threads::Threads)
+    # CMAKE_DL_LIBS is "dl" on Linux and empty where the loader is part of
+    # libc (macOS, BSD).  libm is likewise folded into libSystem on macOS.
+    if(CMAKE_DL_LIBS)
+        target_link_libraries(svencoop_server PRIVATE ${CMAKE_DL_LIBS})
+    endif()
+    if(NOT APPLE)
+        target_link_libraries(svencoop_server PRIVATE m)
+    endif()
+
+    if(APPLE)
+        set_target_properties(svencoop_server PROPERTIES
+            PREFIX ""
+            OUTPUT_NAME "server"
+            SUFFIX ".dylib")
+    elseif(SVENCOOP_TARGET_64BIT)
         # Native 64-bit build: name it like the Windows module.
         set_target_properties(svencoop_server PROPERTIES
             PREFIX ""
@@ -336,9 +593,6 @@ else()
         set_target_properties(svencoop_server PROPERTIES
             PREFIX ""
             OUTPUT_NAME "hl_i386")
-    endif()
-    if(APPLE)
-        set_target_properties(svencoop_server PROPERTIES SUFFIX ".dylib")
     endif()
 endif()
 

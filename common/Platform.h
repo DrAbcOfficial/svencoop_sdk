@@ -27,12 +27,14 @@
 #define DEBUG 1
 #endif
 
-// Silence certain warnings
+// Silence certain warnings (MSVC only; other compilers do not know them).
+#ifdef _MSC_VER
 #pragma warning(disable : 4244)		// int or float down-conversion
 #pragma warning(disable : 4305)		// int or float data truncation
 #pragma warning(disable : 4201)		// nameless struct/union
 #pragma warning(disable : 4514)		// unreferenced inline function removed
 #pragma warning(disable : 4100)		// unreferenced formal parameter
+#endif
 
 #include "archtypes.h"     // DAL
 
@@ -74,12 +76,14 @@
 #else // _WIN32
 #define FALSE 0
 #define TRUE (!FALSE)
-typedef unsigned long ULONG;
+typedef unsigned int ULONG;
 typedef unsigned char BYTE;
 typedef int BOOL;
 #define MAX_PATH 260
+#include <alloca.h>
 #include <limits.h>
 #include <stdarg.h>
+#include <strings.h>
 #define _vsnprintf(a,b,c,d) vsnprintf(a,b,c,d)
 
 #define stricmp strcasecmp

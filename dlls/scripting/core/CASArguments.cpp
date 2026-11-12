@@ -20,7 +20,7 @@ CASArguments::CASArguments(asIScriptGeneric *generic, unsigned int firstArgument
 	SetArguments(generic, firstArgument);
 }
 
-CASArguments::CASArguments(asIScriptFunction *function, va_list arguments)
+CASArguments::CASArguments(asIScriptFunction *function, va_list &arguments)
 	: m_pArguments(NULL), m_uiCount(0)
 {
 	SetArguments(function, arguments);
@@ -145,7 +145,7 @@ bool CASArguments::SetArguments(asIScriptGeneric *generic, unsigned int firstArg
 	return success;
 }
 
-bool CASArguments::SetArguments(asIScriptFunction *function, va_list arguments)
+bool CASArguments::SetArguments(asIScriptFunction *function, va_list &arguments)
 {
 	// va_list is a pointer type on the x86 ABIs, but a struct on AArch64,
 	// where it cannot be null-checked.

@@ -1071,7 +1071,7 @@ Schedule_t *CBodyGuard::GetSchedule( void )
 			return CTalkMonster::GetSchedule();
 		}
 
-		return GetScheduleOfType( HasConditions( bits_COND_CLIENT_PUSH ) ? SCHED_MOVE_AWAY_FOLLOW : SCHED_TARGET_FACE );
+		return GetScheduleOfType( HasConditions( bits_COND_CLIENT_PUSH ) ? (SCHEDULE_TYPE) SCHED_MOVE_AWAY_FOLLOW : SCHED_TARGET_FACE );
 
 	case MONSTERSTATE_COMBAT:
 		if ( HasConditions( bits_COND_ENEMY_DEAD ) )

@@ -98,7 +98,12 @@ namespace
 	void AssignFloatingPoint(CString &text, double value)
 	{
 		char buffer[NUMERIC_BUFFER_LENGTH];
-		unsigned int length = _snprintf(buffer, sizeof(buffer), "%f", value);
+		int length = snprintf(buffer, sizeof(buffer), "%f", value);
+
+		if (length < 0)
+			length = 0;
+		else if ((size_t) length >= sizeof(buffer))
+			length = (int) sizeof(buffer) - 1;
 
 		String::TrimTrailingCharacters(buffer, '0', length);
 		String::TrimTrailingCharacters(buffer, '.', length);
@@ -128,7 +133,12 @@ CString::CString(int value)
 
 	Construct();
 
-	unsigned int length = _snprintf(buffer, sizeof(buffer), "%d", value);
+	int length = snprintf(buffer, sizeof(buffer), "%d", value);
+
+	if (length < 0)
+		length = 0;
+	else if ((size_t) length >= sizeof(buffer))
+		length = (int) sizeof(buffer) - 1;
 
 	Assign(buffer, length);
 }
@@ -139,7 +149,12 @@ CString::CString(unsigned int value)
 
 	Construct();
 
-	unsigned int length = _snprintf(buffer, sizeof(buffer), "%u", value);
+	int length = snprintf(buffer, sizeof(buffer), "%u", value);
+
+	if (length < 0)
+		length = 0;
+	else if ((size_t) length >= sizeof(buffer))
+		length = (int) sizeof(buffer) - 1;
 
 	Assign(buffer, length);
 }
@@ -150,7 +165,12 @@ CString::CString(long long value)
 
 	Construct();
 
-	unsigned int length = _snprintf(buffer, sizeof(buffer), "%lld", value);
+	int length = snprintf(buffer, sizeof(buffer), "%lld", value);
+
+	if (length < 0)
+		length = 0;
+	else if ((size_t) length >= sizeof(buffer))
+		length = (int) sizeof(buffer) - 1;
 
 	Assign(buffer, length);
 }
@@ -161,7 +181,12 @@ CString::CString(unsigned long long value)
 
 	Construct();
 
-	unsigned int length = _snprintf(buffer, sizeof(buffer), "%llu", value);
+	int length = snprintf(buffer, sizeof(buffer), "%llu", value);
+
+	if (length < 0)
+		length = 0;
+	else if ((size_t) length >= sizeof(buffer))
+		length = (int) sizeof(buffer) - 1;
 
 	Assign(buffer, length);
 }
@@ -216,7 +241,12 @@ CString &CString::operator=(bool value)
 CString &CString::operator=(int value)
 {
 	char buffer[NUMERIC_BUFFER_LENGTH];
-	unsigned int length = _snprintf(buffer, sizeof(buffer), "%d", value);
+	int length = snprintf(buffer, sizeof(buffer), "%d", value);
+
+	if (length < 0)
+		length = 0;
+	else if ((size_t) length >= sizeof(buffer))
+		length = (int) sizeof(buffer) - 1;
 
 	Assign(buffer, length);
 	return *this;
@@ -225,7 +255,12 @@ CString &CString::operator=(int value)
 CString &CString::operator=(unsigned int value)
 {
 	char buffer[NUMERIC_BUFFER_LENGTH];
-	unsigned int length = _snprintf(buffer, sizeof(buffer), "%u", value);
+	int length = snprintf(buffer, sizeof(buffer), "%u", value);
+
+	if (length < 0)
+		length = 0;
+	else if ((size_t) length >= sizeof(buffer))
+		length = (int) sizeof(buffer) - 1;
 
 	Assign(buffer, length);
 	return *this;
@@ -234,7 +269,12 @@ CString &CString::operator=(unsigned int value)
 CString &CString::operator=(long long value)
 {
 	char buffer[NUMERIC_BUFFER_LENGTH];
-	unsigned int length = _snprintf(buffer, sizeof(buffer), "%lld", value);
+	int length = snprintf(buffer, sizeof(buffer), "%lld", value);
+
+	if (length < 0)
+		length = 0;
+	else if ((size_t) length >= sizeof(buffer))
+		length = (int) sizeof(buffer) - 1;
 
 	Assign(buffer, length);
 	return *this;
@@ -243,7 +283,12 @@ CString &CString::operator=(long long value)
 CString &CString::operator=(unsigned long long value)
 {
 	char buffer[NUMERIC_BUFFER_LENGTH];
-	unsigned int length = _snprintf(buffer, sizeof(buffer), "%llu", value);
+	int length = snprintf(buffer, sizeof(buffer), "%llu", value);
+
+	if (length < 0)
+		length = 0;
+	else if ((size_t) length >= sizeof(buffer))
+		length = (int) sizeof(buffer) - 1;
 
 	Assign(buffer, length);
 	return *this;
@@ -399,7 +444,7 @@ CString &CString::operator+=(int value)
 {
 	char buffer[NUMERIC_BUFFER_LENGTH];
 
-	_snprintf(buffer, sizeof(buffer), "%i", value);
+	snprintf(buffer, sizeof(buffer), "%i", value);
 	Append(buffer, strlen(buffer));
 	return *this;
 }
@@ -408,7 +453,7 @@ CString &CString::operator+=(unsigned int value)
 {
 	char buffer[NUMERIC_BUFFER_LENGTH];
 
-	_snprintf(buffer, sizeof(buffer), "%u", value);
+	snprintf(buffer, sizeof(buffer), "%u", value);
 	Append(buffer, strlen(buffer));
 	return *this;
 }
@@ -417,7 +462,7 @@ CString &CString::operator+=(long long value)
 {
 	char buffer[NUMERIC_BUFFER_LENGTH];
 
-	_snprintf(buffer, sizeof(buffer), "%lli", value);
+	snprintf(buffer, sizeof(buffer), "%lli", value);
 	Append(buffer, strlen(buffer));
 	return *this;
 }
@@ -426,7 +471,7 @@ CString &CString::operator+=(unsigned long long value)
 {
 	char buffer[NUMERIC_BUFFER_LENGTH];
 
-	_snprintf(buffer, sizeof(buffer), "%llu", value);
+	snprintf(buffer, sizeof(buffer), "%llu", value);
 	Append(buffer, strlen(buffer));
 	return *this;
 }
@@ -439,7 +484,12 @@ CString &CString::operator+=(float value)
 CString &CString::operator+=(double value)
 {
 	char buffer[NUMERIC_BUFFER_LENGTH];
-	unsigned int length = _snprintf(buffer, sizeof(buffer), "%f", value);
+	int length = snprintf(buffer, sizeof(buffer), "%f", value);
+
+	if (length < 0)
+		length = 0;
+	else if ((size_t) length >= sizeof(buffer))
+		length = (int) sizeof(buffer) - 1;
 
 	String::TrimTrailingCharacters(buffer, '0', length);
 	String::TrimTrailingCharacters(buffer, '.', length);
@@ -778,7 +828,12 @@ void CString::Truncate(unsigned int length)
 void CString::VFormat(const char *format, va_list arguments)
 {
 	char buffer[FORMAT_BUFFER_LENGTH];
-	unsigned int length = vsnprintf(buffer, sizeof(buffer), format, arguments);
+	int length = vsnprintf(buffer, sizeof(buffer), format, arguments);
+
+	if (length < 0)
+		length = 0;
+	else if ((size_t) length >= sizeof(buffer))
+		length = (int) sizeof(buffer) - 1;
 
 	buffer[sizeof(buffer) - 1] = 0;
 

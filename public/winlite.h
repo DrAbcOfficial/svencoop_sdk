@@ -20,13 +20,19 @@
 #define NOSERVICE
 #define NOMCX
 #define NOIME
+#ifdef _MSC_VER
 #pragma warning(push, 1)
 #pragma warning(disable: 4005)
+#endif
 #include <windows.h>
+#ifdef _MSC_VER
 #pragma warning(pop)
+#endif
 #undef PostMessage
 
+#ifdef _MSC_VER
 #pragma warning( disable: 4800 )	// forcing value to bool 'true' or 'false' (performance warning)
+#endif
 
 #endif // WIN32
 #endif // WINLITE_H

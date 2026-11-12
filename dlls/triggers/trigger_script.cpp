@@ -80,7 +80,7 @@ void CTriggerScript::KeyValue( KeyValueData *data )
 			// This diagnostic passes the raw targetname value
 			CASLog::GetInstance()->Warning( AS_LOG_DEFAULT,
 			                                "%s (targetname: %s) has invalid think delta '%f', using default (%f)\n",
-			                                pev ? STRING( pev->classname ) : "", (const char *) pev->targetname,
+			                                pev ? STRING( pev->classname ) : "", pev ? STRING( pev->targetname ) : "",
 			                                m_flThinkDelta, (double) DEFAULT_THINK_TIME );
 			m_flThinkDelta = DEFAULT_THINK_TIME;
 		}

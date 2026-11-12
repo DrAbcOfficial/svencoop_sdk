@@ -933,7 +933,7 @@ bool CASReflection::SetArguments(asIScriptFunction *function, asIScriptContext *
 	return true;
 }
 
-bool CASReflection::SetArguments(asIScriptFunction *function, asIScriptContext *context, va_list arguments)
+bool CASReflection::SetArguments(asIScriptFunction *function, asIScriptContext *context, va_list &arguments)
 {
 	// va_list is a pointer type on the x86 ABIs, but a struct on AArch64,
 	// where it cannot be null-checked.

@@ -3,6 +3,7 @@
 #include "enginecallback.h"
 #include "scripting/core/CASMath.h"
 #include "utils/VectorRotation.h"
+#include <cstdint>
 #include <float.h>
 #include <limits.h>
 
@@ -14,9 +15,9 @@ static const double MATH_RADIANS_PER_DEGREE = M_PI / 180.0;
 static const double MATH_DEGREES_PER_RADIAN = 180.0 / M_PI;
 
 CASMath::CASMath()
-	: m_i8Min(SCHAR_MIN), m_i16Min(SHRT_MIN), m_i32Min(LONG_MIN), m_i64Min(LLONG_MIN),
-	  m_i8Max(SCHAR_MAX), m_i16Max(SHRT_MAX), m_i32Max(LONG_MAX), m_i64Max(LLONG_MAX),
-	  m_ui8Max(UCHAR_MAX), m_ui16Max(USHRT_MAX), m_ui32Max(ULONG_MAX), m_ui64Max(ULLONG_MAX),
+	: m_i8Min(SCHAR_MIN), m_i16Min(SHRT_MIN), m_i32Min(INT32_MIN), m_i64Min(INT64_MIN),
+	  m_i8Max(SCHAR_MAX), m_i16Max(SHRT_MAX), m_i32Max(INT32_MAX), m_i64Max(INT64_MAX),
+	  m_ui8Max(UCHAR_MAX), m_ui16Max(USHRT_MAX), m_ui32Max(UINT32_MAX), m_ui64Max(UINT64_MAX),
 	  m_uiSizeMax((size_t) -1), m_flMin(FLT_MIN), m_dMin(DBL_MIN), m_flMax(FLT_MAX),
 	  m_dMax(DBL_MAX), m_dPi(M_PI)
 {

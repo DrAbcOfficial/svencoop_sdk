@@ -212,7 +212,7 @@ CASHook::CASHook(unsigned char dllTypes, unsigned char moduleTypes, const char *
 	}
 }
 
-bool CASHook::VCall(CBasePlayer *player, int argumentCount, va_list arguments)
+bool CASHook::VCall(CBasePlayer *player, int argumentCount, va_list &arguments)
 {
 	if (!CASServerManager::GetInstance()->m_bScriptLifecycleEntered)
 		return false;

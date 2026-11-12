@@ -96,7 +96,7 @@ bool LoadReplacementMap(const char *name, bool reportErrors,
 
 		if (sscanf(line, "%s %s\n", source, replacement) > 0)
 		{
-#ifdef _WIN32
+#ifdef _MSC_VER
 			char *first = strtok_s(source, "\"", &sourceContext);
 			char *second = strtok_s(replacement, "\"", &replacementContext);
 #else

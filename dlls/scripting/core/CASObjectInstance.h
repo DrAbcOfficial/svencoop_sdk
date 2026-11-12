@@ -16,13 +16,13 @@ public:
 	void Release(void) const;
 	void FreeInstance(void);
 
-	bool CallMethod(void *returnValue, bool optional, const char *declaration, int argumentCount, va_list arguments);
+	bool CallMethod(void *returnValue, bool optional, const char *declaration, int argumentCount, va_list &arguments);
 	bool CallMethod(void *returnValue, bool optional, const char *declaration, int argumentCount, ...);
-	bool CallMethod(bool optional, const char *declaration, int argumentCount, va_list arguments);
+	bool CallMethod(bool optional, const char *declaration, int argumentCount, va_list &arguments);
 	bool CallMethod(bool optional, const char *declaration, int argumentCount, ...);
-	bool CallMethod(void *returnValue, const char *declaration, int argumentCount, va_list arguments);
+	bool CallMethod(void *returnValue, const char *declaration, int argumentCount, va_list &arguments);
 	bool CallMethod(void *returnValue, const char *declaration, int argumentCount, ...);
-	bool CallMethod(const char *declaration, int argumentCount, va_list arguments);
+	bool CallMethod(const char *declaration, int argumentCount, va_list &arguments);
 	bool CallMethod(const char *declaration, int argumentCount, ...);
 
 private:

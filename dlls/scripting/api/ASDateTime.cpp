@@ -1,6 +1,7 @@
 #include "scripting/api/ASDateTime.h"
 #include "scripting/core/CASDateTime.h"
 #include "scripting/core/CASDocumentation.h"
+#include "PortableTime.h"
 #include <new>
 
 void DefaultConstructTimeDifference(void *memory)
@@ -61,11 +62,7 @@ void DestructDateTime(void *memory)
 
 ASUnixTime_t UnixTimestamp(void)
 {
-#ifdef _WIN32
-	return (ASUnixTime_t)_time64(NULL);
-#else
-	return (ASUnixTime_t)time(NULL);
-#endif
+	return (ASUnixTime_t) PortableTimeNow();
 }
 
 void RegisterSCScriptTimeDifference(CASDocumentation *documentation)

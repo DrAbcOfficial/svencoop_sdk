@@ -1,48 +1,36 @@
 #include "scripting/core/CASDateTime.h"
 #include "CString.h"
+#include "PortableTime.h"
 #include <math.h>
 #include <string.h>
 
 long long CurrentTimestamp(void)
 {
-#ifdef _WIN32
-	return _time64(NULL);
-#else
-	return time(NULL);
-#endif
+	return PortableTimeNow();
 }
 
 tm CalendarFromTimestamp(long long timestamp)
 {
-#ifdef _WIN32
-	__time64_t time = timestamp;
+	tm calendar = {};
 
-	return *_localtime64(&time);
-#else
-	time_t time = (time_t)timestamp;
+	if (!PortableLocaltime(timestamp, &calendar))
+		calendar = tm{};
 
-	return *localtime(&time);
-#endif
+	return calendar;
 }
 
 long long TimestampFromCalendar(const tm &time)
 {
 	tm calendar = time;
 
-#ifdef _WIN32
-	return _mktime64(&calendar);
-#else
-	return mktime(&calendar);
-#endif
+	// mktime() takes time_t; on Windows time_t is 64-bit even in 32-bit
+	// builds, on 32-bit Linux it is 32-bit (documented 2038 limitation).
+	return (long long) mktime(&calendar);
 }
 
 double DifferenceBetweenTimestamps(long long end, long long begin)
 {
-#ifdef _WIN32
-	return _difftime64(end, begin);
-#else
-	return difftime((time_t)end, (time_t)begin);
-#endif
+	return difftime((time_t) end, (time_t) begin);
 }
 
 int ClampCalendarValue(int value, int minimum, int maximum)
@@ -129,23 +117,23 @@ int CASTimeDifference::GetSeconds(void) const
 
 int CASTimeDifference::GetMinutes(void) const
 {
-	return (int)(fabs(m_flTimeDifference) / DateTimeConstants::SECONDS_PER_MINUTE);
+	return (int)(fabs(m_flTimeDifference) / (double) DateTimeConstants::SECONDS_PER_MINUTE);
 }
 
 int CASTimeDifference::GetHours(void) const
 {
-	return (int)(fabs(m_flTimeDifference) / DateTimeConstants::SECONDS_PER_HOUR);
+	return (int)(fabs(m_flTimeDifference) / (double) DateTimeConstants::SECONDS_PER_HOUR);
 }
 
 int CASTimeDifference::GetDays(void) const
 {
-	return (int)(fabs(m_flTimeDifference) / DateTimeConstants::SECONDS_PER_DAY);
+	return (int)(fabs(m_flTimeDifference) / (double) DateTimeConstants::SECONDS_PER_DAY);
 }
 
 int CASTimeDifference::GetYears(void) const
 {
 	// This divides seconds directly by days per year
-	return (int)(fabs(m_flTimeDifference) / DateTimeConstants::DAYS_PER_YEAR);
+	return (int)(fabs(m_flTimeDifference) / (double) DateTimeConstants::DAYS_PER_YEAR);
 }
 
 void CASTimeDifference::MakeAbsolute(void)

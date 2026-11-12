@@ -37,7 +37,7 @@ namespace CASReflection
 	bool SetContextArgument(asIScriptEngine *engine, asIScriptFunction *function, asIScriptContext *context,
 	                        unsigned int index, va_list &arguments);
 	bool SetArguments(asIScriptFunction *function, asIScriptContext *context, CASArguments &arguments);
-	bool SetArguments(asIScriptFunction *function, asIScriptContext *context, va_list arguments);
+	bool SetArguments(asIScriptFunction *function, asIScriptContext *context, va_list &arguments);
 }
 
 #endif

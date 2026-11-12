@@ -209,7 +209,7 @@ void CASPluginManager::ReloadAllPlugins(void)
 }
 
 void CASPluginManager::CallFunctionOnAllModules(CBasePlayer *player, const CASHook &hook,
-	int argumentCount, va_list arguments, HookReturnCode_t &result)
+	int argumentCount, va_list &arguments, HookReturnCode_t &result)
 {
 	for (unsigned int index = 0; index < m_pPlugins->Count(); index++)
 	{

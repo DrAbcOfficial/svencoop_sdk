@@ -4,33 +4,25 @@
 #include "interface.h"
 
 #if !defined ( _WIN32 )
-// Linux doesn't have this function so this emulates its functionality
-//
-//
+// POSIX equivalent of GetModuleHandle().  The handle must stay valid for the
+// caller (dlsym on it), so this function never closes it.  RTLD_NOLOAD is
+// used when the platform provides it to avoid bumping the reference count of
+// an already loaded module.
 void *GetModuleHandle(const char *name)
 {
-        void *handle;
+	if( name == NULL )
+	{
+		// Handle of the main program (same meaning as GetModuleHandle(NULL)).
+		return dlopen(NULL, RTLD_NOW);
+	}
 
+#if defined(RTLD_NOLOAD)
+	void *handle = dlopen(name, RTLD_NOW | RTLD_NOLOAD);
+	if( handle )
+		return handle;
+#endif
 
-        if( name == NULL )
-        {
-                // hmm, how can this be handled under linux....
-                // is it even needed?
-                return NULL;
-        }
-
-        if( (handle=dlopen(name, RTLD_NOW))==NULL)
-        {   
-		//printf("Error:%s\n",dlerror());
-                // couldn't open this file
-                return NULL;
-        }
-
-        // read "man dlopen" for details
-        // in short dlopen() inc a ref count
-        // so dec the ref count by performing the close
-        dlclose(handle);
-       return handle;
+	return dlopen(name, RTLD_NOW);
 }
 #endif
 
@@ -145,28 +137,30 @@ CSysModule	*Sys_LoadModule( const char *pModuleName )
 	HMODULE hDLL  = NULL;
 	char szAbsoluteModuleName[1024];
 	szAbsoluteModuleName[0] = 0;
+
 	if ( pModuleName[0] != '/' )
 	{
 		char szCwd[1024];
-		char szAbsoluteModuleName[1024];
 
-		//Prevent loading from garbage paths if the path is too large for the buffer
-		if (!getcwd(szCwd, sizeof(szCwd)))
+		if ( getcwd( szCwd, sizeof(szCwd) ) )
 		{
-			exit(-1);
+			if ( szCwd[0] && szCwd[ strlen( szCwd ) - 1 ] == '/' )
+				szCwd[ strlen( szCwd ) - 1 ] = 0;
+
+			_snprintf( szAbsoluteModuleName, sizeof(szAbsoluteModuleName), "%s/%s", szCwd, pModuleName );
 		}
-
-		if ( szCwd[ strlen( szCwd ) - 1 ] == '/' )
-			szCwd[ strlen( szCwd ) - 1 ] = 0;
-
-		_snprintf( szAbsoluteModuleName, sizeof(szAbsoluteModuleName), "%s/%s", szCwd, pModuleName );
+		else
+		{
+			// Fall back to the name as given instead of terminating the server.
+			_snprintf( szAbsoluteModuleName, sizeof(szAbsoluteModuleName), "%s", pModuleName );
+		}
 
 		hDLL = dlopen( szAbsoluteModuleName, RTLD_NOW );
 	}
 	else
 	{
 		_snprintf( szAbsoluteModuleName, sizeof(szAbsoluteModuleName), "%s", pModuleName );
-		 hDLL = dlopen( pModuleName, RTLD_NOW );
+		hDLL = dlopen( szAbsoluteModuleName, RTLD_NOW );
 	}
 #endif
 
@@ -176,13 +170,14 @@ CSysModule	*Sys_LoadModule( const char *pModuleName )
 #if defined ( _WIN32 )
 		_snprintf( str, sizeof(str), "%s.dll", pModuleName );
 		hDLL = LoadLibrary( str );
-#elif defined(OSX)
-		printf("Error:%s\n",dlerror());
-		_snprintf( str, sizeof(str), "%s.dylib", szAbsoluteModuleName );
-		hDLL = dlopen(str, RTLD_NOW);		
 #else
+#if defined(__APPLE__)
+		const char *suffix = ".dylib";
+#else
+		const char *suffix = ".so";
+#endif
 		printf("Error:%s\n",dlerror());
-		_snprintf( str, sizeof(str), "%s.so", szAbsoluteModuleName );
+		_snprintf( str, sizeof(str), "%s%s", szAbsoluteModuleName, suffix );
 		hDLL = dlopen(str, RTLD_NOW);
 #endif
 	}
@@ -233,14 +228,14 @@ CreateInterfaceFn Sys_GetFactory( CSysModule *pModule )
 #if defined ( _WIN32 )
 	return reinterpret_cast<CreateInterfaceFn>(GetProcAddress( hDLL, CREATEINTERFACE_PROCNAME ));
 #else
-// Linux gives this error:
-//../public/interface.cpp: In function `IBaseInterface *(*Sys_GetFactory 
-//(CSysModule *)) (const char *, int *)':
-//../public/interface.cpp:154: ISO C++ forbids casting between 
-//pointer-to-function and pointer-to-object
-//
-// so lets get around it :)
-	return (CreateInterfaceFn)(GetProcAddress( hDLL, CREATEINTERFACE_PROCNAME ));
+	// ISO C++ does not allow a direct cast between void* and a function
+	// pointer; copy the representation instead.
+	void *symbol = GetProcAddress( hDLL, CREATEINTERFACE_PROCNAME );
+	CreateInterfaceFn factory = NULL;
+
+	static_assert( sizeof( factory ) == sizeof( symbol ), "function pointer size mismatch" );
+	memcpy( &factory, &symbol, sizeof( factory ) );
+	return factory;
 #endif
 }
 

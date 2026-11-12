@@ -49,8 +49,8 @@ public:
 	void *GetReturnAddress(void);
 	void *GetReturnObject(void);
 
-	bool Call(void *returnValue, int argumentCount, va_list arguments);
-	bool Call(int argumentCount, va_list arguments);
+	bool Call(void *returnValue, int argumentCount, va_list &arguments);
+	bool Call(int argumentCount, va_list &arguments);
 	bool Call(void *returnValue, int argumentCount, ...);
 	bool Call(int argumentCount, ...);
 	bool Call(CASArguments &arguments, CASReturnValue *returnValue);
@@ -62,7 +62,7 @@ protected:
 
 	asIScriptContext *AcquireContext(void);
 	void ReleaseContext(asIScriptContext *previousContext);
-	bool CallInternal(bool unprepare, int argumentCount, va_list arguments);
+	bool CallInternal(bool unprepare, int argumentCount, va_list &arguments);
 	bool CallInternal(bool unprepare, CASArguments &arguments);
 
 	asIScriptFunction	*m_pFunction;

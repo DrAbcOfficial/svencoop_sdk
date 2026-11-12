@@ -30,7 +30,7 @@ void CASObjectInstance::FreeInstance(void)
 	m_pObject = NULL;
 }
 
-bool CASObjectInstance::CallMethod(void *returnValue, bool optional, const char *declaration, int argumentCount, va_list arguments)
+bool CASObjectInstance::CallMethod(void *returnValue, bool optional, const char *declaration, int argumentCount, va_list &arguments)
 {
 	CASMethod *method = GetMethod(declaration);
 
@@ -58,7 +58,7 @@ bool CASObjectInstance::CallMethod(void *returnValue, bool optional, const char 
 	return success;
 }
 
-bool CASObjectInstance::CallMethod(void *returnValue, const char *declaration, int argumentCount, va_list arguments)
+bool CASObjectInstance::CallMethod(void *returnValue, const char *declaration, int argumentCount, va_list &arguments)
 {
 	return CallMethod(returnValue, false, declaration, argumentCount, arguments);
 }
@@ -74,7 +74,7 @@ bool CASObjectInstance::CallMethod(void *returnValue, const char *declaration, i
 	return success;
 }
 
-bool CASObjectInstance::CallMethod(bool optional, const char *declaration, int argumentCount, va_list arguments)
+bool CASObjectInstance::CallMethod(bool optional, const char *declaration, int argumentCount, va_list &arguments)
 {
 	CASMethod *method = GetMethod(declaration);
 
@@ -102,7 +102,7 @@ bool CASObjectInstance::CallMethod(bool optional, const char *declaration, int a
 	return success;
 }
 
-bool CASObjectInstance::CallMethod(const char *declaration, int argumentCount, va_list arguments)
+bool CASObjectInstance::CallMethod(const char *declaration, int argumentCount, va_list &arguments)
 {
 	return CallMethod(false, declaration, argumentCount, arguments);
 }

@@ -11,7 +11,7 @@ public:
 	CASArguments();
 	CASArguments(const CASArguments &other);
 	CASArguments(asIScriptGeneric *generic, unsigned int firstArgument);
-	CASArguments(asIScriptFunction *function, va_list arguments);
+	CASArguments(asIScriptFunction *function, va_list &arguments);
 	~CASArguments();
 
 	void Release(void) const;
@@ -21,7 +21,7 @@ public:
 	CASArguments &operator=(const CASArguments &other);
 	void Clear(void);
 	bool SetArguments(asIScriptGeneric *generic, unsigned int firstArgument);
-	bool SetArguments(asIScriptFunction *function, va_list arguments);
+	bool SetArguments(asIScriptFunction *function, va_list &arguments);
 
 	CASArgument  *m_pArguments;
 	unsigned int  m_uiCount;

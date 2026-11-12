@@ -331,7 +331,7 @@ void *CASBaseCallable::GetReturnObject(void)
 	return m_pContext->GetReturnObject();
 }
 
-bool CASBaseCallable::CallInternal(bool unprepare, int argumentCount, va_list arguments)
+bool CASBaseCallable::CallInternal(bool unprepare, int argumentCount, va_list &arguments)
 {
 	Prepare();
 
@@ -371,7 +371,7 @@ bool CASBaseCallable::CallInternal(bool unprepare, CASArguments &arguments)
 	return false;
 }
 
-bool CASBaseCallable::Call(void *returnValue, int argumentCount, va_list arguments)
+bool CASBaseCallable::Call(void *returnValue, int argumentCount, va_list &arguments)
 {
 	asIScriptContext *previousContext = AcquireContext();
 	bool success = CallInternal(false, argumentCount, arguments);
@@ -390,7 +390,7 @@ bool CASBaseCallable::Call(void *returnValue, int argumentCount, va_list argumen
 	return success;
 }
 
-bool CASBaseCallable::Call(int argumentCount, va_list arguments)
+bool CASBaseCallable::Call(int argumentCount, va_list &arguments)
 {
 	asIScriptContext *previousContext = AcquireContext();
 	bool success = CallInternal(true, argumentCount, arguments);

@@ -508,7 +508,7 @@ bool CCustomKeyvalues::SetKeyvalue(const char *name, const void *value, entvarty
 
 	DynKeyvalue *keyvalue = new DynKeyvalue();
 
-#ifdef _WIN32
+#ifdef _MSC_VER
 	keyvalue->m_pszName = _strdup(name);
 #else
 	keyvalue->m_pszName = strdup(name);

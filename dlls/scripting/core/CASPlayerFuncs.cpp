@@ -10,6 +10,7 @@
 #include "server/CServer.h"
 #include "server/CSpawnPoints.h"
 #include "server/server_support.h"
+#include "PortableTime.h"
 #include "scripting/core/CASServerManager.h"
 #include "scripting/core/CASModule.h"
 #include "scripting/core/CASModuleInfo.h"
@@ -220,8 +221,12 @@ bool CASPlayerFuncs::ReportBug( CBasePlayer *player, const CString &description,
 	if ( !description.Length() || description.FindFirstNotOf( " \t" ) == CString::INVALID_INDEX )
 		return false;
 
-	time_t timestamp = time( NULL );
-	tm *local = localtime( &timestamp );
+	tm localTime;
+
+	if ( !PortableLocaltimeNow( &localTime ) )
+		return false;
+
+	tm *local = &localTime;
 	char timeText[256];
 	char path[MAX_PATH];
 

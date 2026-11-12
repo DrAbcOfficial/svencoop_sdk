@@ -44,7 +44,7 @@ bool CBasePlayer::IsImpostor( const char *name )
 	UTIL_CopyString( lowerName, name, sizeof( lowerName ) );
 
 	for ( unsigned int index = 0; index < length; index++ )
-		lowerName[index] = tolower( lowerName[index] );
+		lowerName[index] = tolower((unsigned char) lowerName[index]);
 
 	const char *match = strstr( lowerName, "sven" );
 

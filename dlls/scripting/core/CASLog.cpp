@@ -2,6 +2,7 @@
 #include "util.h"
 #include "utils/CLog.h"
 #include "scripting/core/CASLog.h"
+#include "PortableTime.h"
 #include <math.h>
 
 cvar_t as_log_level = { "as_log_level", "0", FCVAR_PROTECTED };
@@ -9,11 +10,12 @@ cvar_t as_script_log_max = { "as_script_log_max", "8", FCVAR_PROTECTED };
 
 const char *LogTime(char *buffer, unsigned int size)
 {
-	time_t now;
+	tm localTime;
 
-	time(&now);
+	if (!PortableLocaltimeNow(&localTime))
+		return "Unknown time";
 
-	return strftime(buffer, size, "%Y-%m-%d %H:%M:%S", localtime(&now)) ? buffer : "Unknown time";
+	return strftime(buffer, size, "%Y-%m-%d %H:%M:%S", &localTime) ? buffer : "Unknown time";
 }
 
 CASLog::CASLog() : m_pLog(NULL)

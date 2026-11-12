@@ -45,30 +45,30 @@ public:
 	void PrintGlobals(void *file);
 
 	bool CallFunction(void *returnValue, bool optional, const char *declaration,
-		int argumentCount, va_list arguments);
+		int argumentCount, va_list &arguments);
 	bool CallFunction(void *returnValue, bool optional, const char *declaration,
 		int argumentCount, ...);
-	bool CallFunction(bool optional, const char *declaration, int argumentCount, va_list arguments);
+	bool CallFunction(bool optional, const char *declaration, int argumentCount, va_list &arguments);
 	bool CallFunction(bool optional, const char *declaration, int argumentCount, ...);
-	bool CallFunction(void *returnValue, const char *declaration, int argumentCount, va_list arguments);
+	bool CallFunction(void *returnValue, const char *declaration, int argumentCount, va_list &arguments);
 	bool CallFunction(void *returnValue, const char *declaration, int argumentCount, ...);
-	bool CallFunction(const char *declaration, int argumentCount, va_list arguments);
+	bool CallFunction(const char *declaration, int argumentCount, va_list &arguments);
 	bool CallFunction(const char *declaration, int argumentCount, ...);
 
 	bool CallMethod(void *returnValue, bool optional, void *object,
-		const char *classDeclaration, const char *methodDeclaration, int argumentCount, va_list arguments);
+		const char *classDeclaration, const char *methodDeclaration, int argumentCount, va_list &arguments);
 	bool CallMethod(void *returnValue, bool optional, void *object,
 		const char *classDeclaration, const char *methodDeclaration, int argumentCount, ...);
 	bool CallMethod(bool optional, void *object, const char *classDeclaration,
-		const char *methodDeclaration, int argumentCount, va_list arguments);
+		const char *methodDeclaration, int argumentCount, va_list &arguments);
 	bool CallMethod(bool optional, void *object, const char *classDeclaration,
 		const char *methodDeclaration, int argumentCount, ...);
 	bool CallMethod(void *returnValue, void *object, const char *classDeclaration,
-		const char *methodDeclaration, int argumentCount, va_list arguments);
+		const char *methodDeclaration, int argumentCount, va_list &arguments);
 	bool CallMethod(void *returnValue, void *object, const char *classDeclaration,
 		const char *methodDeclaration, int argumentCount, ...);
 	bool CallMethod(void *object, const char *classDeclaration, const char *methodDeclaration,
-		int argumentCount, va_list arguments);
+		int argumentCount, va_list &arguments);
 	bool CallMethod(void *object, const char *classDeclaration, const char *methodDeclaration,
 		int argumentCount, ...);
 

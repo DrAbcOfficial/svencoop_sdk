@@ -27,7 +27,7 @@ public:
 	void CallMapFunction(const char *declaration);
 	void Think(void);
 	void CallFunctionOnAllModules(CBasePlayer *player, const CASHook &hook,
-		int argumentCount, va_list arguments, HookReturnCode_t &result);
+		int argumentCount, va_list &arguments, HookReturnCode_t &result);
 
 	void LoadPluginLists(void);
 	void LoadAllPlugins(bool force, bool scanExtra);

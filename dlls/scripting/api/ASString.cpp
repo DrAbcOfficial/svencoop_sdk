@@ -61,67 +61,67 @@ namespace
 
 	bool isalnum(char character)
 	{
-		return ::isalnum(character) != 0;
+		return ::isalnum((unsigned char) character) != 0;
 	}
 
 	bool isalpha(char character)
 	{
-		return ::isalpha(character) != 0;
+		return ::isalpha((unsigned char) character) != 0;
 	}
 
 	bool iscntrl(char character)
 	{
-		return ::iscntrl(character) != 0;
+		return ::iscntrl((unsigned char) character) != 0;
 	}
 
 	bool isdigit(char character)
 	{
-		return ::isdigit(character) != 0;
+		return ::isdigit((unsigned char) character) != 0;
 	}
 
 	bool isgraph(char character)
 	{
-		return ::isgraph(character) != 0;
+		return ::isgraph((unsigned char) character) != 0;
 	}
 
 	bool islower(char character)
 	{
-		return ::islower(character) != 0;
+		return ::islower((unsigned char) character) != 0;
 	}
 
 	bool isprint(char character)
 	{
-		return ::isprint(character) != 0;
+		return ::isprint((unsigned char) character) != 0;
 	}
 
 	bool ispunct(char character)
 	{
-		return ::ispunct(character) != 0;
+		return ::ispunct((unsigned char) character) != 0;
 	}
 
 	bool isspace(char character)
 	{
-		return ::isspace(character) != 0;
+		return ::isspace((unsigned char) character) != 0;
 	}
 
 	bool isupper(char character)
 	{
-		return ::isupper(character) != 0;
+		return ::isupper((unsigned char) character) != 0;
 	}
 
 	bool isxdigit(char character)
 	{
-		return ::isxdigit(character) != 0;
+		return ::isxdigit((unsigned char) character) != 0;
 	}
 
 	char tolower(char character)
 	{
-		return (char)::tolower(character);
+		return (char)::tolower((unsigned char) character);
 	}
 
 	char toupper(char character)
 	{
-		return (char)::toupper(character);
+		return (char)::toupper((unsigned char) character);
 	}
 
 	void RegisterSCScriptCharFunctions(CASDocumentation *documentation)

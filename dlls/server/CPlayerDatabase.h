@@ -4,6 +4,7 @@
 #include "server/donid.h"
 
 #include <mutex>
+#include <stop_token>
 #include <thread>
 #include <vector>
 

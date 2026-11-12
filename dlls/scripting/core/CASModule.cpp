@@ -254,7 +254,7 @@ CASMethod *CASModule::GetMethod(const char *classDeclaration, const char *method
 }
 
 bool CASModule::CallFunction(void *returnValue, bool optional, const char *declaration,
-                             int argumentCount, va_list arguments)
+                             int argumentCount, va_list &arguments)
 {
 	CASFunction *function = GetFunction(declaration);
 
@@ -280,7 +280,7 @@ bool CASModule::CallFunction(void *returnValue, bool optional, const char *decla
 	return success;
 }
 
-bool CASModule::CallFunction(bool optional, const char *declaration, int argumentCount, va_list arguments)
+bool CASModule::CallFunction(bool optional, const char *declaration, int argumentCount, va_list &arguments)
 {
 	CASFunction *function = GetFunction(declaration);
 
@@ -305,7 +305,7 @@ bool CASModule::CallFunction(bool optional, const char *declaration, int argumen
 	return success;
 }
 
-bool CASModule::CallFunction(void *returnValue, const char *declaration, int argumentCount, va_list arguments)
+bool CASModule::CallFunction(void *returnValue, const char *declaration, int argumentCount, va_list &arguments)
 {
 	return CallFunction(returnValue, false, declaration, argumentCount, arguments);
 }
@@ -321,7 +321,7 @@ bool CASModule::CallFunction(void *returnValue, const char *declaration, int arg
 	return success;
 }
 
-bool CASModule::CallFunction(const char *declaration, int argumentCount, va_list arguments)
+bool CASModule::CallFunction(const char *declaration, int argumentCount, va_list &arguments)
 {
 	return CallFunction(false, declaration, argumentCount, arguments);
 }
@@ -339,7 +339,7 @@ bool CASModule::CallFunction(const char *declaration, int argumentCount, ...)
 
 bool CASModule::CallMethod(void *returnValue, bool optional, void *object,
                            const char *classDeclaration, const char *methodDeclaration,
-                           int argumentCount, va_list arguments)
+                           int argumentCount, va_list &arguments)
 {
 	CASMethod *method = GetMethod(classDeclaration, methodDeclaration);
 
@@ -373,7 +373,7 @@ bool CASModule::CallMethod(void *returnValue, bool optional, void *object,
 }
 
 bool CASModule::CallMethod(bool optional, void *object, const char *classDeclaration,
-                           const char *methodDeclaration, int argumentCount, va_list arguments)
+                           const char *methodDeclaration, int argumentCount, va_list &arguments)
 {
 	CASMethod *method = GetMethod(classDeclaration, methodDeclaration);
 
@@ -406,7 +406,7 @@ bool CASModule::CallMethod(bool optional, void *object, const char *classDeclara
 }
 
 bool CASModule::CallMethod(void *returnValue, void *object, const char *classDeclaration,
-                           const char *methodDeclaration, int argumentCount, va_list arguments)
+                           const char *methodDeclaration, int argumentCount, va_list &arguments)
 {
 	return CallMethod(returnValue, false, object, classDeclaration, methodDeclaration, argumentCount, arguments);
 }
@@ -425,7 +425,7 @@ bool CASModule::CallMethod(void *returnValue, void *object, const char *classDec
 }
 
 bool CASModule::CallMethod(void *object, const char *classDeclaration, const char *methodDeclaration,
-                           int argumentCount, va_list arguments)
+                           int argumentCount, va_list &arguments)
 {
 	return CallMethod(false, object, classDeclaration, methodDeclaration, argumentCount, arguments);
 }

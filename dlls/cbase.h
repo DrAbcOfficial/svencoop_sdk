@@ -324,11 +324,14 @@ public:
 	// allow engine to allocate instance data
     void *operator new( size_t stAllocateBlock, entvars_t *pev )
 	{
-		return (void *)ALLOC_PRIVATE(ENT(pev), stAllocateBlock);
+		// The engine's private-data allocator belongs to the 32-bit ABI and
+		// takes an int32 even when this module is compiled for a 64-bit
+		// target; make the narrowing explicit rather than implicit.
+		return (void *)ALLOC_PRIVATE(ENT(pev), (int32)stAllocateBlock);
 	};
 
 	// don't use this.
-#if _MSC_VER >= 1200 // only build this code if MSVC++ 6.0 or higher
+#if defined(_MSC_VER) && _MSC_VER >= 1200 // only build this code if MSVC++ 6.0 or higher
 	void operator delete(void *pMem, entvars_t *pev)
 	{
 		pev->flags |= FL_KILLME;

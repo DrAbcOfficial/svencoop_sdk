@@ -85,7 +85,7 @@ bool CASModuleHookManager::HookExists(unsigned int code) const
 	return IsValidHookCode(code) && !FindScriptHook(code)->m_Functions.empty();
 }
 
-HookReturnCode_t CASModuleHookManager::CallHook(const CASHook &hook, int argumentCount, va_list arguments)
+HookReturnCode_t CASModuleHookManager::CallHook(const CASHook &hook, int argumentCount, va_list &arguments)
 {
 	if (!HookExists(hook.m_uiCode))
 		return HOOK_CONTINUE;

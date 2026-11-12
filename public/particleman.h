@@ -8,9 +8,9 @@
 
 #ifdef _WIN32
 #define PARTICLEMAN_DLLNAME "cl_dlls/particleman.dll"
-#elif defined(OSX)
+#elif defined(__APPLE__)
 #define PARTICLEMAN_DLLNAME "cl_dlls/particleman.dylib"
-#elif defined(LINUX)
+#elif defined(__unix__) || defined(POSIX)
 #define PARTICLEMAN_DLLNAME "cl_dlls/particleman.so"
 #else
 #error
@@ -89,7 +89,7 @@ public:
 	{
 	   return( g_pParticleMan->RequestNewMemBlock( size ) );
 	}
-#ifdef POSIX
+#if !defined(_WIN32)
 	void * operator new( size_t size, const std::nothrow_t&) throw() //this asks for a new block of memory from the MiniMem class
 	{
 	   return( g_pParticleMan->RequestNewMemBlock( size ) );

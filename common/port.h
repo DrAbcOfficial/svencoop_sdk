@@ -23,7 +23,7 @@
 #include <unistd.h> // exit()
 #include <string.h> // strncpy()
 #include <ctype.h> // tolower()
-#include <linux/limits.h>
+#include <limits.h>
 #include <sys/time.h>
 #include <errno.h>
 #include <sys/ioctl.h>
@@ -33,6 +33,11 @@
 
 #ifndef u_long
 #define u_long unsigned long
+#endif
+
+// PATH_MAX is optional in POSIX; the engine uses a fixed-size buffer anyway.
+#ifndef PATH_MAX
+#define PATH_MAX 4096
 #endif
 
 typedef unsigned char BYTE;
@@ -81,7 +86,7 @@ typedef struct RECT_s
 //#undef FALSE
 //#undef TRUE
 
-#ifdef OSX
+#if defined(__APPLE__)
 //#else
 //const bool	FALSE		= false;
 //const bool	TRUE		= true;
@@ -97,7 +102,18 @@ typedef struct RECT_s
 #endif
 
 #ifdef __cplusplus
-inline int		ioctlsocket( int d, int cmd, uint32 *argp )	{ return ioctl( d, cmd, argp ); }
+inline int		ioctlsocket( int d, int cmd, uint32 *argp )
+{
+	// ioctl() is variadic and expects a pointer to a long-sized value; copy
+	// through a correctly sized object instead of passing a uint32*.
+	unsigned long value = argp ? (unsigned long) *argp : 0;
+	int result = ioctl( d, cmd, &value );
+
+	if ( argp )
+		*argp = (uint32) value;
+
+	return result;
+}
 inline int		closesocket( int fd )								{ return close( fd ); }
 inline char *	GetCurrentDirectory( size_t size, char * buf )		{ return getcwd( buf, size ); }
 inline int		WSAGetLastError()									{ return errno; }
@@ -125,14 +141,14 @@ extern char g_szEXEName[ 4096 ];
 #endif
 #endif // !__cplusplus
 
-#if defined(OSX)
+#if defined(__APPLE__)
 #define SO_ARCH_SUFFIX ".dylib"
-#else
-#if defined ( __x86_64__ )
+#elif defined(__x86_64__) || defined(_M_X64)
 #define SO_ARCH_SUFFIX "_amd64.so"
+#elif defined(__aarch64__) || defined(_M_ARM64)
+#define SO_ARCH_SUFFIX "_arm64.so"
 #else
 #define SO_ARCH_SUFFIX ".so"
-#endif
 #endif
 #endif
 

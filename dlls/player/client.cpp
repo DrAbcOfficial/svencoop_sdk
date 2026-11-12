@@ -2067,8 +2067,30 @@ One of the ENGINE_FORCE_UNMODIFIED files failed the consistency check for the sp
 */
 int	InconsistentFile( const edict_t *player, const char *filename, char *disconnect_message )
 {
-	// The client DLL itself is always enforced
-	if ( !stricmp( filename, "cl_dlls/client.dll" ) )
+	// The client module itself is always enforced.  The engine reports the
+	// platform-specific file name, so every supported spelling is checked.
+	static const char *const s_ClientModules[] =
+	{
+		"cl_dlls/client.dll",
+		"cl_dlls/client.so",
+		"cl_dlls/client.dylib",
+	};
+
+	bool isClientModule = false;
+
+	if ( filename )
+	{
+		for ( size_t i = 0; i < ARRAYSIZE( s_ClientModules ); ++i )
+		{
+			if ( !stricmp( filename, s_ClientModules[i] ) )
+			{
+				isClientModule = true;
+				break;
+			}
+		}
+	}
+
+	if ( isClientModule )
 	{
 		if ( player )
 			ALERT( at_console, "Dropped %s: Incorrect game version.\n", STRING( player->v.netname ) );

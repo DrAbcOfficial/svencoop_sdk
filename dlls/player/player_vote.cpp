@@ -7,8 +7,12 @@
 
 void CBasePlayer::VoteStarted( VOTETYPE type )
 {
-	// Keep this SSE operand order for when both inputs are NaNs
-	volatile float deadline = mp_playervotedelay.value;
+	// Keep this SSE operand order for when both inputs are NaNs.  The
+	// volatile store/load forces the value to be rounded to float before it
+	// is used; compound assignment on a volatile object is deprecated in
+	// C++20, so the read and the addition are kept separate.
+	volatile float storedDelay = mp_playervotedelay.value;
+	float deadline = storedDelay;
 
 	deadline += gpGlobals->time;
 	m_flNextVoteTime = deadline;

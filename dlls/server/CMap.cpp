@@ -95,7 +95,7 @@ void CMap::InitializeForcedPlayerModels(const char *models)
 
 	UTIL_CopyString(list, models, sizeof(list));
 
-#ifdef _WIN32
+#ifdef _MSC_VER
 	char *model = strtok_s(list, ";", &context);
 #else
 	char *model = strtok_r(list, ";", &context);
@@ -112,7 +112,7 @@ void CMap::InitializeForcedPlayerModels(const char *models)
 
 		UTIL_CopyString(m_szForcedPlayerModels[m_uiForcedPlayerModels++], model, MAX_FORCED_MODEL_NAME);
 
-#ifdef _WIN32
+#ifdef _MSC_VER
 		model = strtok_s(NULL, ";", &context);
 #else
 		model = strtok_r(NULL, ";", &context);

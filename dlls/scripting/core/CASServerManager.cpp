@@ -151,7 +151,7 @@ bool CASServerManager::OnMapStart(void)
 }
 
 bool CASServerManager::CallFunctionOnAllModules(CBasePlayer *player, unsigned char moduleTypes,
-	const CASHook &hook, int argumentCount, va_list arguments)
+	const CASHook &hook, int argumentCount, va_list &arguments)
 {
 	if (!m_pMapModule)
 		return false;

@@ -309,7 +309,6 @@ set(SVENCOOP_SERVER_SOURCES
   external/angelscript/sdk/angelscript/source/as_builder.cpp
   external/angelscript/sdk/angelscript/source/as_bytecode.cpp
   external/angelscript/sdk/angelscript/source/as_callfunc.cpp
-  external/angelscript/sdk/angelscript/source/as_callfunc_x86.cpp
   external/angelscript/sdk/angelscript/source/as_compiler.cpp
   external/angelscript/sdk/angelscript/source/as_configgroup.cpp
   external/angelscript/sdk/angelscript/source/as_context.cpp

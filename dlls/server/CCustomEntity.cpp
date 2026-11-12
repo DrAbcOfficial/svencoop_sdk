@@ -1,3 +1,9 @@
+// dladdr() and Dl_info are GNU extensions on glibc; the macro must be
+// defined before the first system header.
+#if !defined(_WIN32) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE
+#endif
+
 #include "extdll.h"
 #include "util.h"
 #include "cbase.h"
@@ -87,17 +93,25 @@ void *Sys_GetCurrentModule( void )
 	                    (LPCSTR) &Sys_GetCurrentModule, &module );
 	return module;
 #else
+	static void *module = NULL;
+
+	if ( module )
+		return module;
+
 	Dl_info info;
 
-	if ( !dladdr( (void *) &Sys_GetCurrentModule, &info ) )
+	if ( !dladdr( (void *) &Sys_GetCurrentModule, &info ) || !info.dli_fname )
 		return NULL;
 
-	void *module = dlopen( info.dli_fname, RTLD_NOW | RTLD_NOLOAD );
+#if defined(RTLD_NOLOAD)
+	// Do not load a second copy; only look up the already loaded module.
+	module = dlopen( info.dli_fname, RTLD_NOW | RTLD_NOLOAD );
+#else
+	module = dlopen( info.dli_fname, RTLD_NOW );
+#endif
 
-	// dlopen added a reference to a library that is already loaded
-	if ( module )
-		dlclose( module );
-
+	// The handle is intentionally kept for the lifetime of the module: it is
+	// only used with dlsym(), and closing it would invalidate the handle.
 	return module;
 #endif
 }

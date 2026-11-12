@@ -190,8 +190,8 @@ bool CPlayerDatabase::PerformHttpRequest()
 	char plain[512];
 	unsigned char encrypted[512];
 	char key[DONID_CRYPT_KEY_LENGTH + 1];
-	int length = snprintf( plain, sizeof( plain ), "ipaddr=%s\ntimestamp=%ld\nauthid=%s\n",
-	                       m_szIpAddress, (long) m_iTimestamp, m_szAuthId );
+	int length = snprintf( plain, sizeof( plain ), "ipaddr=%s\ntimestamp=%lld\nauthid=%s\n",
+	                       m_szIpAddress, (long long) m_iTimestamp, m_szAuthId );
 
 	GetDonidCryptKey( key );
 	DonidCryptBuffer( (const unsigned char *) plain, encrypted, length, key );
@@ -310,9 +310,9 @@ void CPlayerDatabase::DecodeServerResponse()
 		char returnedTimeZone[EXTRAS_RESPONSE_TIMEZONE_LENGTH + 1] = { 0 };
 		char name[EXTRAS_NAME_LENGTH + 1] = { 0 };
 		char description[EXTRAS_DESCRIPTION_LENGTH + 1] = { 0 };
-		long returnedTimestamp = 0;
+		long long returnedTimestamp = 0;
 		int level = EXTRAS_INIT;
-		int count = sscanf( fields, "%44s %ld %32s %7s %*[\"]%32[^\"]%*[\"] %*[\"]%128[^\"]%*[\"] %d",
+		int count = sscanf( fields, "%44s %lld %32s %7s %*[\"]%32[^\"]%*[\"] %*[\"]%128[^\"]%*[\"] %d",
 		                    returnedAuthId, &returnedTimestamp, returnedIp, returnedTimeZone, name, description, &level );
 
 		delete[] fields;

@@ -6,8 +6,15 @@
 # Usage:
 #   cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-linux-x86.cmake
 
+# Force the x86 target name.  Without this, building on a non-x86 host (for
+# example an AArch64 build machine with an i386 multilib cross toolchain)
+# would report the host CPU, and the AngelScript / Crypto++ source and flag
+# selection would be wrong.
+set(CMAKE_SYSTEM_PROCESSOR "i686" CACHE STRING "" FORCE)
+
 set(CMAKE_C_FLAGS_INIT   "-m32")
 set(CMAKE_CXX_FLAGS_INIT "-m32")
+set(CMAKE_ASM_FLAGS_INIT "-m32")
 set(CMAKE_EXE_LINKER_FLAGS_INIT    "-m32")
 set(CMAKE_SHARED_LINKER_FLAGS_INIT "-m32")
 set(CMAKE_MODULE_LINKER_FLAGS_INIT "-m32")

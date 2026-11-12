@@ -51,7 +51,7 @@ LINK_ENTITY_TO_CLASS( info_node, CNodeEnt );
 LINK_ENTITY_TO_CLASS( info_node_air, CNodeEnt );
 LINK_ENTITY_TO_CLASS( info_node_ladder, CNodeEnt );
 LINK_ENTITY_TO_CLASS( info_node_elevator, CNodeEnt );
-#ifdef _LINUX
+#if !defined(_WIN32)
 #include <unistd.h>
 #define CreateDirectory(p, n) mkdir(p, 0777)
 #endif
@@ -771,7 +771,7 @@ int CGraph :: FindShortestPath ( int *piPath, int iStart, int iDest, int iHull, 
 	return iNumPathNodes;
 }
 
-inline ULONG Hash(void *p, int len)
+inline uint32 Hash(void *p, int len)
 {
 	CRC32_t ulCrc;
 	CRC32_INIT(&ulCrc);
@@ -871,7 +871,7 @@ int CGraph::FindNearestNode( const Vector &origin, int nodeTypes, entvars_t *ign
 		return NO_NODE;
 	}
 
-	ULONG hash = ( CACHE_SIZE_ - 1 ) & Hash( (void *) (const float *) origin, sizeof( origin ) );
+	uint32 hash = ( CACHE_SIZE_ - 1 ) & Hash( (void *) (const float *) origin, sizeof( origin ) );
 
 	if ( m_Cache[hash].v == origin )
 		return m_Cache[hash].n;
@@ -1923,7 +1923,7 @@ void CTestHull :: BuildNodeGraph( void )
 	fprintf ( file, "\n\n-------------------------------------------------------------------------------\n");
 	fprintf ( file, "Total Number of Connections in Pool: %d\n", cPoolLinks );
 	fprintf ( file, "-------------------------------------------------------------------------------\n");
-	fprintf ( file, "Connection Pool: %d bytes\n", sizeof ( CLink ) * cPoolLinks );
+	fprintf ( file, "Connection Pool: %llu bytes\n", (unsigned long long)( sizeof ( CLink ) * cPoolLinks ) );
 	fprintf ( file, "-------------------------------------------------------------------------------\n");
 
 

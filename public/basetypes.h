@@ -30,7 +30,11 @@
 
 typedef int BOOL;
 typedef int qboolean;
-typedef unsigned long ULONG;
+#ifdef _WIN32
+typedef unsigned long ULONG;		// must match the Win32 ULONG
+#else
+typedef unsigned int ULONG;			// LP64: long is 64-bit, ULONG is not
+#endif
 typedef unsigned char BYTE;
 typedef unsigned char byte;
 typedef unsigned short word;

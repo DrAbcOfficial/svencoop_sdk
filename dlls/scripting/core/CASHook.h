@@ -22,7 +22,7 @@ public:
 	CASHook(unsigned char dllTypes, unsigned char moduleTypes, const char *nameSpace,
 	        const char *name, const char *arguments, const CASHookArguments &hookArguments);
 
-	bool VCall(CBasePlayer *player, int argumentCount, va_list arguments);
+	bool VCall(CBasePlayer *player, int argumentCount, va_list &arguments);
 	bool Call(CBasePlayer *player, int argumentCount, ...);
 	bool Call(int argumentCount, ...);
 	static void OutputHooksToFile(const char *fileName);

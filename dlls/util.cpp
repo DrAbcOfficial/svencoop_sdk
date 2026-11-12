@@ -24,6 +24,7 @@
 #include "util.h"
 #include "cbase.h"
 #include "server/saverestore.h"
+#include <stdint.h>
 #include <time.h>
 
 #ifdef _M_IX86
@@ -2809,10 +2810,10 @@ static int gSizes[FIELD_TYPECOUNT] =
 	sizeof(float)*3,	// FIELD_POSITION_VECTOR
 	sizeof(int *),		// FIELD_POINTER
 	sizeof(int),		// FIELD_INTEGER
-#ifdef GNUC
-	sizeof(int *)*2,		// FIELD_FUNCTION
+#if defined(_MSC_VER) && defined(_WIN32)
+	sizeof(int *),		// FIELD_FUNCTION (single-inheritance MSVC ABI)
 #else
-	sizeof(int *),		// FIELD_FUNCTION	
+	sizeof(int *)*2,	// FIELD_FUNCTION (Itanium C++ ABI)
 #endif
 	sizeof(int),		// FIELD_BOOLEAN
 	sizeof(short),		// FIELD_SHORT

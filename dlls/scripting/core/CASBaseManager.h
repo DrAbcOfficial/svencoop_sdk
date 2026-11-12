@@ -60,7 +60,7 @@ public:
 	// MSVC reverses this overload group
 	// Keep the order to match vtables on both platforms
 	virtual bool CallFunctionOnAllModules(CBasePlayer *player, unsigned char moduleTypes,
-		const CASHook &hook, int argumentCount, va_list arguments);
+		const CASHook &hook, int argumentCount, va_list &arguments);
 	virtual bool CallFunctionOnAllModules(CBasePlayer *player, unsigned char moduleTypes,
 		const CASHook &hook, int argumentCount, ...);
 
@@ -152,7 +152,7 @@ private:
 	friend bool CASReflection::SetArguments(asIScriptFunction *function, asIScriptContext *context,
 		CASArguments &arguments);
 	friend bool CASReflection::SetArguments(asIScriptFunction *function, asIScriptContext *context,
-		va_list arguments);
+		va_list &arguments);
 
 	enum
 	{

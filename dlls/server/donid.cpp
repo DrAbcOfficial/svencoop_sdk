@@ -174,9 +174,9 @@ bool DecodePlayerDbResponse( extrasinfo_s &extras, const unsigned char *response
 	char returnedTimeZone[EXTRAS_RESPONSE_TIMEZONE_LENGTH + 1] = { 0 };
 	char name[EXTRAS_NAME_LENGTH + 1] = { 0 };
 	char description[EXTRAS_DESCRIPTION_LENGTH + 1] = { 0 };
-	long returnedTimestamp = 0;
+	long long returnedTimestamp = 0;
 	int level = EXTRAS_INIT;
-	int fields = sscanf( decoded, "%44s %ld %32s %7s %*[\"]%32[^\"]%*[\"] %*[\"]%128[^\"]%*[\"] %d",
+	int fields = sscanf( decoded, "%44s %lld %32s %7s %*[\"]%32[^\"]%*[\"] %*[\"]%128[^\"]%*[\"] %d",
 	                     returnedAuthId, &returnedTimestamp, returnedIp, returnedTimeZone, name, description, &level );
 
 	delete[] decoded;

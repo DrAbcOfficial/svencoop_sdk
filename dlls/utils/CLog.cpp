@@ -3,6 +3,7 @@
 #include "server/server_filesystem.h"
 #include "server/server_support.h"
 #include "utils/CLog.h"
+#include "PortableTime.h"
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -98,10 +99,12 @@ bool CLog::CreateFilename(char *buffer, unsigned int size)
 	if (!buffer || !size)
 		return false;
 
-	time_t now;
+	tm localTime;
 
-	time(&now);
-	return CreateFilename(buffer, size, localtime(&now));
+	if (!PortableLocaltimeNow(&localTime))
+		return false;
+
+	return CreateFilename(buffer, size, &localTime);
 }
 
 unsigned int CLog::LimitToAmount(unsigned int count)

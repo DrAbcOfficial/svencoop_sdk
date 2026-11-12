@@ -60,12 +60,16 @@
 // feature enables
 #define NEW_SOFTWARE_LIGHTING
 
-#ifdef POSIX
-// need this for _alloca
-#include <alloca.h>
-#endif
-
+#if defined(_WIN32)
+// <malloc.h> is part of the Windows CRT; _alloca/_msize come from there.
 #include <malloc.h>
+#elif defined(__APPLE__)
+#include <alloca.h>
+#include <malloc/malloc.h>
+#else
+#include <alloca.h>
+#include <malloc.h>
+#endif
 #ifdef __cplusplus
 #include <new>
 #endif
@@ -113,8 +117,10 @@
 #endif
 
 #define IsPlatformOpenGL() true
-#elif defined( POSIX )
+#elif defined( POSIX ) || defined( __unix__ ) || defined( __APPLE__ ) || defined( __linux__ )
 
+// Accept the compiler's own platform macros as well as the build system's
+// POSIX define, so this header also works outside this CMake project.
 #define IsLinux() true
 #define IsOSX() false
 #define IsPosix() true
@@ -125,39 +131,20 @@
 #define IsPS3() false
 #define IsPlatformWindowsPC64() false
 #define IsPlatformWindowsPC32() false
-#define PLATFORM_LINUX 1	
+#define PLATFORM_LINUX 1
 
 #else
-#error
+#error "Unsupported platform: neither _WIN32 nor a POSIX target was detected."
 #endif
 
 typedef unsigned char uint8;
 typedef signed char int8;
 
-#ifdef __x86_64__
+#if defined(__x86_64__) || defined(_M_X64) || defined(__aarch64__) || defined(_M_ARM64) || defined(__powerpc64__)
 #define X64BITS
 #endif
 
-#if defined( _WIN32 )
-
-typedef __int16 int16;
-typedef unsigned __int16 uint16;
-typedef __int32 int32;
-typedef unsigned __int32 uint32;
-typedef __int64 int64;
-typedef unsigned __int64 uint64;
-
-
-#ifdef X64BITS
-typedef __int64 intp;				// intp is an integer that can accomodate a pointer
-typedef unsigned __int64 uintp;		// (ie, sizeof(intp) >= sizeof(int) && sizeof(intp) >= sizeof(void *)
-#else
-typedef __int32 intp;
-typedef unsigned __int32 uintp;
-#endif
-
-#else // _WIN32
-
+// Standard spellings only: __int16/__int32/__int64 are MSVC extensions.
 typedef short int16;
 typedef unsigned short uint16;
 typedef int int32;
@@ -166,14 +153,12 @@ typedef long long int64;
 typedef unsigned long long uint64;
 
 #ifdef X64BITS
-typedef long long intp;
-typedef unsigned long long uintp;
+typedef long long intp;				// intp is an integer that can accomodate a pointer
+typedef unsigned long long uintp;	// (ie, sizeof(intp) >= sizeof(int) && sizeof(intp) >= sizeof(void *)
 #else
 typedef int intp;
 typedef unsigned int uintp;
 #endif
-
-#endif // else _WIN32
 
 #undef OVERRIDE
 #define OVERRIDE override
@@ -288,16 +273,23 @@ FIXME: Enable this when we no longer fear change =)
 #define MAX_PATH  260
 #endif
 
-#elif POSIX
+#elif defined(POSIX) || defined(__unix__) || defined(__APPLE__)
+#include <limits.h>
+
 #define _vsnprintf vsnprintf
 
 typedef unsigned int DWORD;
 //typedef unsigned short WORD;
 typedef void* HINSTANCE;
 
+#if defined(PATH_MAX)
 #define _MAX_PATH PATH_MAX
+#else
+#define _MAX_PATH 260
+#endif
 #define __cdecl
-#define __declspec
+// __declspec is an MSVC attribute; on other compilers it expands to nothing.
+#define __declspec(x)
 
 // Defines MAX_PATH
 #ifndef MAX_PATH
@@ -307,17 +299,22 @@ typedef void* HINSTANCE;
 
 #define ALIGN_VALUE( val, alignment ) ( ( val + alignment - 1 ) & ~( alignment - 1 ) ) //  need macro for constant expression
 
-// Used to step into the debugger
-#ifdef _WIN32
-#define DebuggerBreak()  __asm { int 3 }
+// Used to step into the debugger.  MSVC / clang-cl provide __debugbreak();
+// GCC and Clang provide __builtin_trap().  MSVC inline assembly is not
+// available on x64 or ARM64, so it must not be used here.
+#if defined(_MSC_VER)
+#include <intrin.h>
+#define DebuggerBreak()  __debugbreak()
+#elif defined(__GNUC__) || defined(__clang__)
+#define DebuggerBreak()  __builtin_trap()
 #else
-#define DebuggerBreak()  {}
+#define DebuggerBreak()  ((void)0)
 #endif
 
 // C functions for external declarations that call the appropriate C++ methods
 #ifndef EXPORT
 #ifdef _WIN32
-#define EXPORT	_declspec( dllexport )
+#define EXPORT	__declspec( dllexport )
 #else 
 #define EXPORT	__attribute__((visibility("default")))
 #endif
@@ -333,7 +330,7 @@ typedef void* HINSTANCE;
 #ifdef _WIN32
 #define DECL_ALIGN(x) __declspec(align(x))
 
-#elif GNUC
+#elif defined(__GNUC__) || defined(__clang__)
 #define DECL_ALIGN(x) __attribute__((aligned(x)))
 #else
 #define DECL_ALIGN(x) /* */
@@ -352,7 +349,7 @@ typedef void* HINSTANCE;
 #define ALIGN16_POST
 #define ALIGN32_POST
 #define ALIGN128_POST
-#elif defined( GNUC )
+#elif defined(__GNUC__) || defined(__clang__)
 // gnuc has the align decoration at the end
 #define ALIGN4
 #define ALIGN8 
@@ -379,14 +376,14 @@ typedef void* HINSTANCE;
 //-----------------------------------------------------------------------------
 // Stack-based allocation related helpers
 //-----------------------------------------------------------------------------
-#if defined( GNUC )
+#if defined(__GNUC__) || defined(__clang__)
 #define stackalloc( _size )		alloca( ALIGN_VALUE( _size, 16 ) )
-#ifdef _LINUX
+#if defined(__linux__) || defined(__FreeBSD__)
 #define mallocsize( _p )	( malloc_usable_size( _p ) )
-#elif defined(OSX)
+#elif defined(__APPLE__)
 #define mallocsize( _p )	( malloc_size( _p ) )
 #else
-#error
+#define mallocsize( _p )	( 0 )
 #endif
 #elif defined ( _WIN32 )
 #define stackalloc( _size )		_alloca( ALIGN_VALUE( _size, 16 ) )
@@ -397,7 +394,7 @@ typedef void* HINSTANCE;
 
 // Linux had a few areas where it didn't construct objects in the same order that Windows does.
 // So when CVProfile::CVProfile() would access g_pMemAlloc, it would crash because the allocator wasn't initalized yet.
-#ifdef POSIX
+#if !defined(_WIN32)
 #define CONSTRUCT_EARLY __attribute__((init_priority(101)))
 #else
 #define CONSTRUCT_EARLY
@@ -408,7 +405,7 @@ typedef void* HINSTANCE;
 #define RESTRICT __restrict
 #define RESTRICT_FUNC __declspec(restrict)
 #define FMTFUNCTION( a, b )
-#elif defined(GNUC)
+#elif defined(__GNUC__) || defined(__clang__)
 #define SELECTANY __attribute__((weak))
 #if defined(LINUX) && !defined(DEDICATED)
 #define RESTRICT
@@ -458,10 +455,14 @@ typedef void* HINSTANCE;
 
 #define DLL_LOCAL
 
-#elif defined GNUC
+#elif defined(__GNUC__) || defined(__clang__)
 // Used for dll exporting and importing
+#ifndef DLL_EXPORT
 #define  DLL_EXPORT   C_EXTERN __attribute__ ((visibility("default")))
+#endif
+#ifndef DLL_IMPORT
 #define  DLL_IMPORT   C_EXTERN
+#endif
 
 // Can't use extern "C" when DLL exporting a class
 #define  DLL_CLASS_EXPORT __attribute__ ((visibility("default")))
@@ -491,7 +492,13 @@ typedef void* HINSTANCE;
 // GCC 3.4.1 has a bug in supporting forced inline of templated functions
 // this macro lets us not force inlining in that case
 #define  FORCEINLINE_TEMPLATE
+// __stdcall only exists on 32-bit x86; elsewhere the attribute is ignored
+// (and warns), so it must expand to nothing.
+#if defined(__i386__)
 #define  __stdcall			__attribute__ ((__stdcall__)) 
+#else
+#define  __stdcall
+#endif
 #endif
 
 // Force a function call site -not- to inlined. (useful for profiling)
@@ -519,7 +526,7 @@ typedef void* HINSTANCE;
 // as little code as possible, and throw an assertion in debug.
 #define NO_DEFAULT default: UNREACHABLE();
 
-#ifdef _WIN32
+#ifdef _MSC_VER
 // Remove warnings from warning level 4.
 #pragma warning(disable : 4514) // warning C4514: 'acosl' : unreferenced inline function has been removed
 #pragma warning(disable : 4100) // warning C4100: 'hwnd' : unreferenced formal parameter
@@ -551,13 +558,13 @@ typedef void* HINSTANCE;
 #endif
 
 // When we port to 64 bit, we'll have to resolve the int, ptr vs size_t 32/64 bit problems...
-#if !defined( _WIN64 ) && defined( WIN32 )
+#if defined(_MSC_VER) && !defined( _WIN64 )
 #pragma warning( disable : 4267 )	// conversion from 'size_t' to 'int', possible loss of data
 #pragma warning( disable : 4311 )	// pointer truncation from 'char *' to 'int'
 #pragma warning( disable : 4312 )	// conversion from 'unsigned int' to 'memhandle_t' of greater size
 #endif
 
-#ifdef POSIX
+#if !defined(_WIN32)
 #ifndef _stricmp
 #define _stricmp stricmp
 #endif
@@ -580,9 +587,13 @@ typedef void* HINSTANCE;
 #define _getcwd getcwd
 #define _snwprintf swprintf
 #define swprintf_s swprintf
-#define wcsicmp _wcsicmp
-#define _wcsicmp wcscmp
-#define _finite finite
+// NOTE: there is no portable case-insensitive wide-character compare in
+// POSIX; add a wcscasecmp() wrapper at the call site if it is ever needed.
+#ifdef __cplusplus
+#define _finite(x) std::isfinite(x)
+#else
+#define _finite(x) isfinite(x)
+#endif
 #define _tempnam tempnam
 #define _unlink unlink
 #define _access access
@@ -604,7 +615,9 @@ typedef void* HANDLE;
 //-----------------------------------------------------------------------------
 //#define CHECK_FLOAT_EXCEPTIONS 1
 
-#ifdef _MSC_VER
+// MSVC inline assembly (x87 control word) only exists on 32-bit x86.  On
+// x64/ARM64 the compiler rejects __asm blocks, so the helpers become no-ops.
+#if defined(_MSC_VER) && defined(_M_IX86)
 
 inline void SetupFPUControlWordForceExceptions()
 {

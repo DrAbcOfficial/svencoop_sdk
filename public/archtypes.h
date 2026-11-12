@@ -15,7 +15,7 @@
 #include <stddef.h>
 #define _S_IREAD S_IREAD
 #define _S_IWRITE S_IWRITE
-typedef long unsigned int ulong;
+typedef unsigned long ulong;	// matches the system <sys/types.h> definition
 #endif
 
 #endif // ARCHTYPES_H

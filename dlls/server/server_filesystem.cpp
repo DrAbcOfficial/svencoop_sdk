@@ -7,8 +7,10 @@ CSysModule *g_pFileSystemModule;
 
 bool InitializeFileSystem(void)
 {
-#ifdef _WIN32
+#if defined(_WIN32)
 	g_pFileSystemModule = Sys_LoadModule("filesystem_stdio.dll");
+#elif defined(__APPLE__)
+	g_pFileSystemModule = Sys_LoadModule("filesystem_stdio.dylib");
 #else
 	g_pFileSystemModule = Sys_LoadModule("filesystem_stdio.so");
 #endif

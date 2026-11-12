@@ -9,6 +9,10 @@
 
 // Common constants
 static const unsigned int DT_NULL_LINK = 0xffffffff;
+// dtPoly::refs stores 16-bit neighbour indices, so the "no neighbour"
+// sentinel must be 16-bit as well; comparing it against DT_NULL_LINK would
+// be a tautology (and would treat every slot as valid).
+static const unsigned short DT_NULL_REF = 0xffff;
 
 enum dtPolyType
 {

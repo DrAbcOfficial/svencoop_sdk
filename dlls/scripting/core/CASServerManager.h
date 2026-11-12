@@ -27,7 +27,7 @@ public:
 	virtual void PostMapActivate(bool success);
 	virtual bool OnMapStart(void);
 	virtual bool CallFunctionOnAllModules(CBasePlayer *player, unsigned char moduleTypes,
-		const CASHook &hook, int argumentCount, va_list arguments);
+		const CASHook &hook, int argumentCount, va_list &arguments);
 	virtual bool CallFunctionOnAllModules(CBasePlayer *player, unsigned char moduleTypes,
 		const CASHook &hook, int argumentCount, ...);
 
