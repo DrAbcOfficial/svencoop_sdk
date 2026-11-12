@@ -9,3 +9,6 @@ CMakeUserPresets.json
 # Local test artifacts
 /.test-*/
 /*.log
+
+# Python
+__pycache__/

@@ -173,7 +173,8 @@ public:
 	bool                      m_bDeadItemsPacked;
 	bool                      m_bRespawnMessageShown;
 
-	bool m_bBarnacleMouth;
+	bool	m_bBarnacleMouth;
+	EHANDLE	m_hBarnacle;
 
 	float                     m_flLastClientPutInServerTime;
 	Vector                    m_vecRepelStart;

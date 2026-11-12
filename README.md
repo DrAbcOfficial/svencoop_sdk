@@ -18,7 +18,7 @@ git submodule update --init --recursive
 
 ### Visual Studio 2019
 
-Install `v142` toolset, Windows 10 SDK and open:
+Install `v142` (VS2019) toolset, Windows 10 SDK and open:
 
 ```text
 projects/vs2010/svencoop.sln
@@ -32,3 +32,4 @@ Select `Win32` and `Debug` or `Release`, then build the solution.
 
 ## Special thanks
 - [Sw1ft](https://github.com/sw1ft747) - for help in some questions and reversing as well
+- anewnick (cdqke) - for RE logo in this README

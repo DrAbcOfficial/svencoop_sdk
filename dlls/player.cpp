@@ -67,6 +67,7 @@ extern DLL_GLOBAL BOOL		g_fGameOver;
 extern DLL_GLOBAL	BOOL	g_fDrawLines;
 bool gEvilImpulse101;
 extern DLL_GLOBAL int		g_iSkillLevel, gDisplayTitle;
+extern bool PM_HACK_GetBarnacleParalyze( void );
 
 
 BOOL gInitHUD = TRUE;
@@ -3112,6 +3113,7 @@ void CBasePlayer::Spawn( void )
 
 	m_bDeadItemsPacked = false;
 	m_bBarnacleMouth = false;
+	m_hBarnacle = NULL;
 	Inventory_RemoveAllFromHolder( this, false, false, true );
 
 	ResetEffects();
@@ -5559,8 +5561,19 @@ void CBasePlayer :: UpdateClientData( void )
 //=========================================================
 bool CBasePlayer :: FBecomeProne ( CBaseEntity *pOther )
 {
+	if ( !pOther )
+		return false;
+
 	m_afPhysicsFlags |= PFLAG_ONBARNACLE;
-	return TRUE;
+	SetAnimation( PLAYER_BARNACLE_HIT );
+
+	if ( PM_HACK_GetBarnacleParalyze() )
+	{
+		BlockWeapons( pOther );
+		m_hBarnacle = pOther;
+	}
+
+	return true;
 }
 
 //=========================================================
@@ -5587,6 +5600,12 @@ void CBasePlayer :: BarnacleVictimReleased ( void )
 {
 	m_afPhysicsFlags &= ~PFLAG_ONBARNACLE;
 	m_bBarnacleMouth = false;
+
+	if ( m_hBarnacle != NULL )
+	{
+		UnblockWeapons( m_hBarnacle );
+		m_hBarnacle = NULL;
+	}
 }
 
 
