@@ -179,7 +179,6 @@ public:
 
 	bool				m_fIsNotRevivable;
 	float				m_flReviveTime;
-	EHANDLE				m_hHealer;				// the medic reviving this corpse
 	float				m_flNextMedicCallTime;	// no medic is asked for help before this time
 
 	bool				m_fShockGlow;

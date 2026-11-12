@@ -188,7 +188,7 @@ public:
 	unsigned int		m_uiPortalVisibilityGeneration[32 + 1];	// one per client, indexed by entity index
 
 	EHANDLE				m_pSightLink;	// Look's list of everything seen, corpses included
-	EHANDLE				m_hAssignedMedic;	// medic reserving this entity for healing or revival
+	EHANDLE				m_hHealer;		// medic reserving this entity for healing or revival
 #endif
 
 	bool				m_fOverrideClass;

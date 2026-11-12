@@ -209,7 +209,7 @@ CBaseEntity::CBaseEntity()
 	m_iszOnDestroy = 0;
 	m_pUserData = NULL;
 	m_pSoundReplacementMap = NULL;
-	m_hAssignedMedic = NULL;
+	m_hHealer = NULL;
 	m_fCustomModel = false;
 	m_uiEntityFlags = 0;
 	m_vecLastOrigin = Vector( 0, 0, 0 );
