@@ -6,6 +6,7 @@
 #include "server/server_support.h"
 #include <float.h>
 #include <limits.h>
+#include <vector>
 
 CBaseEntity *ChangeValueHandleEntity( EHANDLE &handle )
 {
@@ -93,17 +94,12 @@ void CTriggerChangeValue::Spawn( void )
 		return;
 
 	unsigned int size = length + m_iAppendSpaces + 1;
-	char *buffer = (char *) malloc( size );
+	std::vector<char> buffer( size, 0 );
 
-	if ( !buffer )
-		return;
-
-	memset( buffer, 0, size );
-	UTIL_CopyString( buffer, value, size );
-	memset( buffer + length, ' ', m_iAppendSpaces );
+	UTIL_CopyString( buffer.data(), value, size );
+	memset( buffer.data() + length, ' ', m_iAppendSpaces );
 	buffer[length + m_iAppendSpaces] = 0;
-	m_iszNewValue = AllocStringLocal( buffer );
-	free( buffer );
+	m_iszNewValue = AllocStringLocal( buffer.data() );
 }
 
 void CTriggerChangeValue::Use( CBaseEntity *activator, CBaseEntity *caller, USE_TYPE useType, float value )

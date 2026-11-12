@@ -12,8 +12,6 @@ const char *CCustomKeyvalues::nullVec = "0.0 0.0 0.0";
 CCustomKeyvalues::CCustomKeyvalues(int maxHeight)
 {
 	m_pRoot = NULL;
-	m_ppTrace = NULL;
-	m_pbTraceDirections = NULL;
 	m_bInitialized = false;
 	m_iCount = 0;
 	m_iMaxHeight = maxHeight;
@@ -25,8 +23,6 @@ CCustomKeyvalues::~CCustomKeyvalues()
 	{
 		DestroyTree(m_pRoot);
 		delete m_ppTrace[0];
-		free(m_ppTrace);
-		free(m_pbTraceDirections);
 	}
 }
 
@@ -35,10 +31,9 @@ void CCustomKeyvalues::Init(void)
 	if (m_bInitialized)
 		return;
 
-	m_ppTrace = (DynKVNode **)malloc((m_iMaxHeight + 1) * sizeof(DynKVNode *));
+	m_ppTrace.assign(m_iMaxHeight + 1, NULL);
 	m_ppTrace[0] = new DynKVNode();
-	m_pbTraceDirections = (bool *)malloc((m_iMaxHeight + 1) * sizeof(bool));
-	m_pbTraceDirections[0] = false;
+	m_pbTraceDirections.assign(m_iMaxHeight + 1, false);
 	m_bInitialized = true;
 }
 

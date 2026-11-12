@@ -160,7 +160,7 @@ void *CTriggerEntityIterator::GetKeyValue( const char *name, entvartype_s &type 
 
 void CTriggerEntityIterator::Stop( void )
 {
-	m_iEntityCount = 0;
+	m_Entities.clear();
 	SetThink( NULL );
 	m_bActive = false;
 }
@@ -173,14 +173,7 @@ void CTriggerEntityIterator::Spawn( void )
 
 void CTriggerEntityIterator::ClearEntityList( void )
 {
-	m_iEntityCount = 0;
-	m_iEntityCapacity = 0;
-
-	if ( m_pEntities )
-	{
-		free( m_pEntities );
-		m_pEntities = NULL;
-	}
+	m_Entities.clear();
 }
 
 void CTriggerEntityIterator::OnDestroy( void )
@@ -261,7 +254,7 @@ void CTriggerEntityIterator::Use( CBaseEntity *activator, CBaseEntity *caller, U
 	}
 
 	m_iCurrentEntity = 0;
-	m_iEntityCount = 0;
+	m_Entities.clear();
 	ProcessIteration();
 }
 
@@ -303,30 +296,13 @@ void CTriggerEntityIterator::AddEntity( CBaseEntity *entity )
 	if ( !IteratorPlayerConnected( entity ) )
 		return;
 
-	if ( m_iEntityCount == 0 )
-	{
-		m_iEntityCapacity = 8;
-		m_pEntities = (EHANDLE *) malloc( sizeof( EHANDLE ) * 8 );
-	}
-	else if ( m_iEntityCount >= m_iEntityCapacity )
-	{
-		int capacity = m_iEntityCount + 8;
-		EHANDLE *entities = (EHANDLE *) realloc( m_pEntities, sizeof( EHANDLE ) * capacity );
-
-		if ( !entities )
-			return;
-
-		m_iEntityCapacity = capacity;
-		m_pEntities = entities;
-	}
-
-	IteratorSetHandle( m_pEntities[m_iEntityCount], entity );
-	m_iEntityCount++;
+	m_Entities.emplace_back();
+	IteratorSetHandle( m_Entities.back(), entity );
 }
 
 bool CTriggerEntityIterator::BuildEntityList( void )
 {
-	m_iEntityCount = 0;
+	m_Entities.clear();
 	m_pSearchCursor = NULL;
 
 	if ( !HasFilters() )
@@ -429,19 +405,19 @@ void CTriggerEntityIterator::ProcessIteration( void )
 	{
 		bool listed = true;
 
-		if ( m_iCurrentEntity == m_iEntityCount )
+		if ( m_iCurrentEntity == static_cast<int>( m_Entities.size() ) )
 		{
 			listed = BuildEntityList();
 			m_iCurrentEntity = 0;
 		}
 
-		if ( m_iEntityCount > 0 )
+		if ( !m_Entities.empty() )
 		{
 			if ( !listed )
 				Stop();
 			else
 			{
-				CBaseEntity *entity = IteratorHandleEntity( m_pEntities[m_iCurrentEntity] );
+				CBaseEntity *entity = IteratorHandleEntity( m_Entities[m_iCurrentEntity] );
 
 				if ( entity )
 					TriggerEntity( entity );
@@ -459,13 +435,13 @@ void CTriggerEntityIterator::ProcessIteration( void )
 	{
 		SetThink( &CTriggerEntityIterator::ProcessIteration );
 
-		if ( m_iCurrentEntity == m_iEntityCount )
+		if ( m_iCurrentEntity == static_cast<int>( m_Entities.size() ) )
 		{
 			pev->nextthink = gpGlobals->time + m_flDelayBetweenRuns;
 			FinishRun( true );
 		}
 	}
-	else if ( m_iCurrentEntity == m_iEntityCount )
+	else if ( m_iCurrentEntity == static_cast<int>( m_Entities.size() ) )
 	{
 		Stop();
 		FinishRun( true );

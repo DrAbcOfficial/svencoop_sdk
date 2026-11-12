@@ -5,6 +5,7 @@
 
 #include <mutex>
 #include <thread>
+#include <vector>
 
 class CPlayerDatabase
 {
@@ -49,8 +50,7 @@ private:
 	extrasinfo_s  m_Result;
 	char          m_szError[256];
 
-	char    *m_pResponse;
-	size_t  m_uiResponseLength;
+	std::vector<char>  m_Response;
 
 	extrasinfo_s	*m_pQueryResult;
 	int				m_iRequestCode;

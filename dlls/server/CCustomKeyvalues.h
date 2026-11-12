@@ -3,6 +3,8 @@
 
 #include "server/entvars_types.h"
 
+#include <vector>
+
 enum Ownership
 {
 	OWNERSHIP_NO_DELETE = 0,
@@ -72,8 +74,8 @@ public:
 
 private:
 	DynKVNode	*m_pRoot;
-	DynKVNode	**m_ppTrace;
-	bool		*m_pbTraceDirections;
+	std::vector<DynKVNode *>	m_ppTrace;
+	std::vector<bool>		m_pbTraceDirections;
 	bool		m_bInitialized;
 	int			m_iCount;
 	int			m_iMaxHeight;

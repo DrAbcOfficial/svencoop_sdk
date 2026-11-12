@@ -1,6 +1,8 @@
 #ifndef TRIGGER_ENTITY_ITERATOR_H
 #define TRIGGER_ENTITY_ITERATOR_H
 
+#include <vector>
+
 class CTriggerEntityIterator : public CBaseEntity
 {
 public:
@@ -38,12 +40,10 @@ private:
 	string_t	m_iszNameFilter;
 	int			m_iMaximumRuns;
 
-	EHANDLE		*m_pEntities;
+	std::vector<EHANDLE>	m_Entities;
 	EHANDLE		m_hTarget;
 	EHANDLE		m_hActivator;
 	int			m_iCurrentEntity;
-	int			m_iEntityCount;
-	int			m_iEntityCapacity;
 	int			m_iRunCount;
 	CBaseEntity	*m_pSearchCursor;
 };

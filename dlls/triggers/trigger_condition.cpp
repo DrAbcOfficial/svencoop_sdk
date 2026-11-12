@@ -3,6 +3,7 @@
 #include "cbase.h"
 #include "triggers/trigger_condition.h"
 #include "server/server_entvars.h"
+#include <vector>
 
 #define SF_CONDITION_START_OFF 1
 #define SF_CONDITION_IGNORE_X 2
@@ -939,11 +940,8 @@ void CTriggerCondition::CheckBytes( int count )
 	else
 		UTIL_StringToIntArray( values, count, STRING( m_iszCheckValue ) );
 
-	char *leftText = (char *) malloc( count * 3 );
-	char *rightText = (char *) malloc( count * 3 );
-
-	memset( leftText, 0, count * 3 );
-	memset( rightText, 0, count * 3 );
+	std::vector<char> leftText( count * 3, 0 );
+	std::vector<char> rightText( count * 3, 0 );
 
 	for ( int i = 0; i < count; i++ )
 	{
@@ -954,10 +952,10 @@ void CTriggerCondition::CheckBytes( int count )
 
 		sprintf( text, "%x", left[i] );
 		text[2] = i == count - 1 ? 0 : ' ';
-		strncat( leftText, text, count * 3 - strlen( leftText ) - 1 );
+		strncat( leftText.data(), text, count * 3 - strlen( leftText.data() ) - 1 );
 		sprintf( text, "%x", right[i] );
 		text[2] = i == count - 1 ? 0 : ' ';
-		strncat( rightText, text, count * 3 - strlen( rightText ) - 1 );
+		strncat( rightText.data(), text, count * 3 - strlen( rightText.data() ) - 1 );
 	}
 
 	if ( (unsigned int) m_iCheckType <= CONDITION_BIT_AND )
@@ -972,10 +970,10 @@ void CTriggerCondition::CheckBytes( int count )
 
 		if ( m_iCheckType == CONDITION_BIT_AND )
 			ALERT( at_aiconsole, "Trigger_condition \"%s\": Byte-array %s byte-wise AND with %s leaves all %i bytes non-zero?",
-			       STRING( pev->targetname ), leftText, rightText, count );
+			       STRING( pev->targetname ), leftText.data(), rightText.data(), count );
 		else
 			ALERT( at_aiconsole, "Trigger_condition \"%s\": Byte-array %s %s%s %s?", STRING( pev->targetname ),
-			       leftText, m_iCheckType >= CONDITION_LESS ? "byte-wise " : "", g_ConditionOperations[m_iCheckType], rightText );
+			       leftText.data(), m_iCheckType >= CONDITION_LESS ? "byte-wise " : "", g_ConditionOperations[m_iCheckType], rightText.data() );
 
 		Result( m_iCheckType == CONDITION_NOT_EQUAL ? matches != 0 : matches == count );
 	}
@@ -992,8 +990,6 @@ void CTriggerCondition::CheckBytes( int count )
 		UTIL_Remove( this );
 	}
 
-	free( leftText );
-	free( rightText );
 	delete[] values;
 	delete[] left;
 	delete[] right;

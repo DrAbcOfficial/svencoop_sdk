@@ -349,10 +349,8 @@ void CGlobalState :: DumpGlobals( void )
 
 void CGlobalState :: EntityAdd( string_t globalname, string_t mapName, GLOBALESTATE state )
 {
-	globalentity_t *pNewEntity = (globalentity_t *)calloc( sizeof( globalentity_t ), 1 );
+	globalentity_t *pNewEntity = new globalentity_t();
 
-	if ( !pNewEntity )
-		return;
 	pNewEntity->pNext = m_pList;
 	m_pList = pNewEntity;
 	UTIL_CopyString( pNewEntity->name, STRING( globalname ), sizeof(pNewEntity->name));
@@ -465,7 +463,7 @@ void CGlobalState::ClearStates( void )
 	while ( pFree )
 	{
 		globalentity_t *pNext = pFree->pNext;
-		free( pFree );
+		delete pFree;
 		pFree = pNext;
 	}
 	Reset();

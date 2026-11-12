@@ -23,8 +23,7 @@ static bool g_bPlayerDbInitialized;
 CPlayerDatabase::CPlayerDatabase( const char *authId, const char *ipAddress, long long timestamp,
                                   float queryTime, const char *url )
     : m_bStarted( false ), m_bFinished( false ),
-      m_iTimestamp( timestamp ), m_flQueryTime( queryTime ), m_pResponse( NULL ), m_uiResponseLength( 0 ),
-      m_pQueryResult( NULL ), m_iRequestCode( CURLE_OK )
+      m_iTimestamp( timestamp ), m_flQueryTime( queryTime ), m_pQueryResult( NULL ), m_iRequestCode( CURLE_OK )
 {
 	memset( &m_Result, 0, sizeof( m_Result ) );
 
@@ -42,7 +41,6 @@ CPlayerDatabase::~CPlayerDatabase()
 {
 	Cancel();
 	Join();
-	free( m_pResponse );
 }
 
 class CCurlInit
@@ -159,23 +157,18 @@ size_t CPlayerDatabase::OnData( char *data, size_t size, size_t count, void *con
 {
 	CPlayerDatabase *database = (CPlayerDatabase *) context;
 
-	if ( ( size && count > (size_t) -1 / size ) || database->IsCancelled() )
+	if ( ( size && count > ( std::vector<char>().max_size() - 1 ) / size ) || database->IsCancelled() )
 		return 0;
 
 	size_t length = size * count;
+	std::vector<char> &response = database->m_Response;
 
-	if ( length >= (size_t) -1 - database->m_uiResponseLength )
+	if ( length >= response.max_size() - response.size() - 1 )
 		return 0;
 
-	char *response = (char *) realloc( database->m_pResponse, database->m_uiResponseLength + length + 1 );
-
-	if ( !response )
-		return 0;
-
-	database->m_pResponse = response;
-	memcpy( response + database->m_uiResponseLength, data, length );
-	database->m_uiResponseLength += length;
-	response[database->m_uiResponseLength] = 0;
+	response.insert( response.end(), data, data + length );
+	response.push_back( 0 );
+	response.pop_back();
 
 	return length;
 }
@@ -185,9 +178,7 @@ bool CPlayerDatabase::PerformHttpRequest()
 	if ( !m_szAuthId[0] || !m_iTimestamp || !m_szIpAddress[0] )
 	{
 		ALERT( at_warning, "CPlayerDatabase: Query preperation failed.\n" );
-		free( m_pResponse );
-		m_pResponse = NULL;
-		m_uiResponseLength = 0;
+		m_Response.clear();
 		return false;
 	}
 
@@ -203,9 +194,7 @@ bool CPlayerDatabase::PerformHttpRequest()
 	m_iRequestCode = CURLE_OK;
 	m_pQueryResult->flLastQuery = m_flQueryTime;
 
-	free( m_pResponse );
-	m_pResponse = NULL;
-	m_uiResponseLength = 0;
+	m_Response.clear();
 	m_szError[0] = 0;
 
 	try
@@ -240,24 +229,12 @@ bool CPlayerDatabase::PerformHttpRequest()
 		curl_slist_free_all( headers );
 		curl_easy_cleanup( curl );
 
-		if ( !m_pResponse )
-		{
-			m_pResponse = (char *) malloc( 1 );
-
-			if ( !m_pResponse )
-				throw std::bad_alloc();
-
-			m_pResponse[0] = 0;
-		}
-
 		return true;
 	}
 	catch ( const std::exception &error )
 	{
 		ALERT( at_warning, "CPlayerDatabase: Request error. (%s)\n", error.what() );
-		free( m_pResponse );
-		m_pResponse = NULL;
-		m_uiResponseLength = 0;
+		m_Response.clear();
 		return false;
 	}
 }
@@ -270,11 +247,11 @@ void CPlayerDatabase::DecodeServerResponse()
 		return;
 	}
 
-	if ( strstr( m_pResponse, "[Critical Error]" ) )
+	if ( strstr( m_Response.data(), "[Critical Error]" ) )
 	{
 		char serviceError[SERVICE_ERROR_LENGTH + 1] = { 0 };
 
-		if ( sscanf( m_pResponse, "[Critical Error] %[^\t\n]", serviceError ) == 1 )
+		if ( sscanf( m_Response.data(), "[Critical Error] %[^\t\n]", serviceError ) == 1 )
 		{
 			serviceError[SERVICE_ERROR_LENGTH] = 0;
 			ALERT( at_warning, "CPlayerDatabase: Service error. (%s)\n", serviceError );
@@ -286,6 +263,7 @@ void CPlayerDatabase::DecodeServerResponse()
 		return;
 	}
 
+	const size_t responseLength = m_Response.size();
 	char *decoded = NULL;
 	char *fields = NULL;
 
@@ -293,29 +271,29 @@ void CPlayerDatabase::DecodeServerResponse()
 	{
 		char key[DONID_CRYPT_KEY_LENGTH + 1];
 
-		decoded = new char[m_uiResponseLength + 1];
-		memset( decoded, 0, m_uiResponseLength + 1 );
+		decoded = new char[responseLength + 1];
+		memset( decoded, 0, responseLength + 1 );
 
 		GetDonidCryptKey( key );
-		DonidCryptBuffer( (const unsigned char *) m_pResponse, (unsigned char *) decoded, m_uiResponseLength, key );
-		fields = new char[m_uiResponseLength + 1];
-		memset( fields, 0, m_uiResponseLength + 1 );
+		DonidCryptBuffer( (const unsigned char *) m_Response.data(), (unsigned char *) decoded, responseLength, key );
+		fields = new char[responseLength + 1];
+		memset( fields, 0, responseLength + 1 );
 
 		size_t readPosition = 0;
 		size_t writePosition = 0;
 
-		while ( readPosition < m_uiResponseLength && decoded[readPosition] )
+		while ( readPosition < responseLength && decoded[readPosition] )
 		{
-			while ( readPosition < m_uiResponseLength && decoded[readPosition] == '|' )
+			while ( readPosition < responseLength && decoded[readPosition] == '|' )
 				readPosition++;
 
-			if ( readPosition == m_uiResponseLength || !decoded[readPosition] )
+			if ( readPosition == responseLength || !decoded[readPosition] )
 				break;
 
-			while ( readPosition < m_uiResponseLength && decoded[readPosition] && decoded[readPosition] != '|' )
+			while ( readPosition < responseLength && decoded[readPosition] && decoded[readPosition] != '|' )
 				fields[writePosition++] = decoded[readPosition++];
 
-			if ( writePosition < m_uiResponseLength )
+			if ( writePosition < responseLength )
 				fields[writePosition++] = ' ';
 		}
 
@@ -406,7 +384,7 @@ void CPlayerDatabase::GetPlayerExtras( extrasinfo_s *extras )
 	{
 		extras->iSource = EXTRAS_SOURCE_ONLINE;
 
-		if ( m_pResponse && m_uiResponseLength >= 1 && m_iRequestCode == CURLE_OK )
+		if ( !m_Response.empty() && m_iRequestCode == CURLE_OK )
 			DecodeServerResponse();
 		else
 		{
@@ -420,7 +398,4 @@ void CPlayerDatabase::GetPlayerExtras( extrasinfo_s *extras )
 		extras->iLevel = EXTRAS_ERROR;
 	}
 
-	free( m_pResponse );
-	m_pResponse = NULL;
-	m_uiResponseLength = 0;
 }

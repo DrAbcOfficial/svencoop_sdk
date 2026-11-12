@@ -561,11 +561,11 @@ void CASPluginManager::ScanExtraPluginLists(void)
 
 	IFileSystem_SvEngine *fileSystem = static_cast<IFileSystem_SvEngine *>(g_pFileSystem);
 	int length = fileSystem->GetSearchPath("GAME", false, NULL, 0);
-	char *paths = (char *) malloc(length + 1);
+	std::vector<char> paths(length + 1, 0);
 
-	fileSystem->GetSearchPath("GAME", false, paths, length);
+	fileSystem->GetSearchPath("GAME", false, paths.data(), length);
 
-	for (char *path = strtok(paths, ";"); path; path = strtok(NULL, ";"))
+	for (char *path = strtok(paths.data(), ";"); path; path = strtok(NULL, ";"))
 	{
 		char relativePath[MAX_PATH];
 
@@ -595,8 +595,6 @@ void CASPluginManager::ScanExtraPluginLists(void)
 
 		m_PluginLists.push_back(file);
 	}
-
-	free(paths);
 }
 
 bool CASPluginManager::CompilePlugin(CASModuleBuilder &builder, const CKvBlockNode &data,
