@@ -222,7 +222,7 @@ bool CMap::LoadMapSkillFile(void)
 
 void SoundReplacementLoadedCallback(CStringMap &map)
 {
-	for (unsigned int i = 0; i < map.m_uiCount; i++)
+	for (unsigned int i = 0; i < map.Count(); i++)
 		CServer_SoundEngine::GetSoundEngine()->PrecacheSound(map[i]);
 }
 

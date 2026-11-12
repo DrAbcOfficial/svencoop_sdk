@@ -1907,13 +1907,14 @@ float UTIL_SplineFraction( float value, float scale )
 char* UTIL_VarArgs( const char *format, ... )
 {
 	va_list		argptr;
+	// Shared scratch buffer; the result is only valid until the next call.
 	static char		string[1024];
-	
+
 	va_start (argptr, format);
-	vsprintf (string, format,argptr);
+	vsnprintf( string, sizeof( string ), format, argptr );
 	va_end (argptr);
 
-	return string;	
+	return string;
 }
 	
 Vector UTIL_GetAimVector( edict_t *pent, float flSpeed )

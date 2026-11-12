@@ -1,10 +1,12 @@
 #ifndef CHASHSTRINGPOOL_H
 #define CHASHSTRINGPOOL_H
 
-#include "CAutoString.h"
-#include <cstddef>
+#include <string>
 #include <unordered_set>
 
+// String interning pool. Pointers handed out by Find/Allocate stay valid
+// until Clear(); AllocStringLocal relies on that to build engine string_t
+// offsets, so elements must never be erased individually.
 class CHashStringPool
 {
 public:
@@ -17,7 +19,7 @@ public:
 	void DebugPrint(void) const;
 
 private:
-	std::unordered_set<CAutoString>	m_Strings;
+	std::unordered_set<std::string>	m_Strings;
 };
 
 #endif

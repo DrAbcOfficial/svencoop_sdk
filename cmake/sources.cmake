@@ -370,7 +370,6 @@ set(SVENCOOP_SERVER_SOURCES
   external/cryptopp/sha_simd.cpp
   external/cryptopp/sse_simd.cpp
   external/cryptopp/strciphr.cpp
-  game_shared/CAutoString.cpp
   game_shared/CHashStringPool.cpp
   game_shared/CString.cpp
   game_shared/materials.cpp
