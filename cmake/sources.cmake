@@ -69,7 +69,6 @@ set(SVENCOOP_SERVER_SOURCES
   dlls/server/CNetworkProfiler.cpp
   dlls/utils/CObjectLifetimeHandler.cpp
   dlls/server/CPlayerDatabase.cpp
-  dlls/server/CPlayerExtrasList.cpp
   dlls/server/CReplacementMap.cpp
   dlls/scripting/core/CScriptDictionary.cpp
   dlls/server/CServer.cpp

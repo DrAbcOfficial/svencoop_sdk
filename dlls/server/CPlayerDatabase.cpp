@@ -15,8 +15,6 @@
 #include <stdexcept>
 #include <system_error>
 
-static const char g_szPlayerDbUrl[] = "https://gameinfo.svencoop.com:443/public/playerextras.php";
-
 #define SERVICE_ERROR_LENGTH 128
 static bool g_bPlayerDbInitialized;
 
@@ -33,7 +31,7 @@ CPlayerDatabase::CPlayerDatabase( const char *authId, const char *ipAddress, lon
 
 	snprintf( m_szAuthId, sizeof( m_szAuthId ), "%s", authId ? authId : "" );
 	snprintf( m_szIpAddress, sizeof( m_szIpAddress ), "%s", ipAddress ? ipAddress : "" );
-	snprintf( m_szUrl, sizeof( m_szUrl ), "%s", url ? url : g_szPlayerDbUrl );
+	snprintf( m_szUrl, sizeof( m_szUrl ), "%s", url ? url : "" );
 	snprintf( m_Result.szAuthId, sizeof( m_Result.szAuthId ), "%s", m_szAuthId );
 }
 
@@ -178,6 +176,13 @@ bool CPlayerDatabase::PerformHttpRequest()
 	if ( !m_szAuthId[0] || !m_iTimestamp || !m_szIpAddress[0] )
 	{
 		ALERT( at_warning, "CPlayerDatabase: Query preperation failed.\n" );
+		m_Response.clear();
+		return false;
+	}
+
+	if ( !m_szUrl[0] )
+	{
+		ALERT( at_warning, "CPlayerDatabase: No online API URL configured.\n" );
 		m_Response.clear();
 		return false;
 	}

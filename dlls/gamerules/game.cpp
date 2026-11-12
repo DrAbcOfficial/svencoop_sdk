@@ -113,6 +113,8 @@ cvar_t mp_ammo_respawndelay = { "mp_ammo_respawndelay", "-2", FCVAR_PROTECTED };
 
 cvar_t skillcfgfile = { "skillcfgfile", "skill.cfg", FCVAR_SERVER | FCVAR_UNLOGGED };
 cvar_t sv_disable_online_api = { "sv_disable_online_api", "0", FCVAR_SERVER };
+cvar_t sv_online_api_url = { "sv_online_api_url", "https://gameinfo.svencoop.com:443/public/playerextras.php", FCVAR_PROTECTED | FCVAR_UNLOGGED };
+cvar_t sv_online_api_bans = { "sv_online_api_bans", "0", FCVAR_PROTECTED | FCVAR_UNLOGGED };
 
 // multiplayer server rules
 cvar_t	fragsleft	= {"mp_fragsleft","0", FCVAR_SERVER | FCVAR_UNLOGGED };	  // Don't spam console/log files/users with this changing
@@ -750,6 +752,12 @@ void GameDLLInit( void )
 
 	if ( !CVAR_GET_POINTER( "sv_disable_online_api" ) )
 		CVAR_REGISTER( &sv_disable_online_api );
+
+	if ( !CVAR_GET_POINTER( "sv_online_api_url" ) )
+		CVAR_REGISTER( &sv_online_api_url );
+
+	if ( !CVAR_GET_POINTER( "sv_online_api_bans" ) )
+		CVAR_REGISTER( &sv_online_api_bans );
 
 	CServer::GetInstance();
 	CConCommandSystem::GetInstance()->Initialize();

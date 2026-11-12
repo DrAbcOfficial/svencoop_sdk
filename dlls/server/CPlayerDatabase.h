@@ -43,7 +43,7 @@ private:
 
 	char       m_szAuthId[EXTRAS_AUTHID_LENGTH + 1];
 	char       m_szIpAddress[EXTRAS_IP_ADDRESS_LENGTH + 1];
-	char       m_szUrl[256];
+	char       m_szUrl[512];
 	long long  m_iTimestamp;
 	float      m_flQueryTime;
 

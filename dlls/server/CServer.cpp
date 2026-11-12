@@ -6,7 +6,6 @@
 #include "server/server_commands.h"
 #include "server/CServerCrypto.h"
 #include "server/CPlayerDatabase.h"
-#include "server/CPlayerExtrasList.h"
 #include "server/server_support.h"
 #include "server/user_messages.h"
 #include "gamerules/CVoteManager.h"
@@ -44,8 +43,8 @@ struct ServerPlayerData
 
 struct ServerPlayerQuery
 {
-	ServerPlayerQuery( const char *authId, const char *ip, float now )
-	    : database( authId, ip, (long long) time( NULL ), now ), next( NULL )
+	ServerPlayerQuery( const char *authId, const char *ip, float now, const char *url )
+	    : database( authId, ip, (long long) time( NULL ), now, url ), next( NULL )
 	{
 	}
 
@@ -76,7 +75,6 @@ public:
 	unsigned int       reservedSlots;
 	CVoteManager       votes;
 	ServerPlayerData   players[SERVER_PLAYER_SLOTS];
-	CPlayerExtrasList  local;
 	CServerCrypto      crypto;
 	ServerPlayerQuery  *queries;
 	bool               curlReady;
@@ -92,9 +90,6 @@ CServerState::CServerState() : playerCount( 0 ), reservedSlots( 0 ), queries( NU
 
 	for ( unsigned int i = 0; i < SERVER_PLAYER_SLOTS; i++ )
 		ResetPlayer( i );
-
-	if ( !local.Load() )
-		ALERT( at_error, "CServer: Unable to load the embedded player extras list.\n" );
 
 	curlReady = CPlayerDatabase::Initialize();
 
@@ -233,7 +228,8 @@ void CServerState::ApplyExtras( unsigned int slot, const extrasinfo_s &info )
 	state.nextRefresh = gpGlobals->time + RANDOM_FLOAT( EXTRAS_REFRESH_MIN_TIME, EXTRAS_REFRESH_MAX_TIME );
 	state.dirty = state.dirty || changed;
 
-	if ( info.iLevel == EXTRAS_BANNED && changed )
+	// Remote bans are opt-in so an untrusted or compromised list cannot kick players by default.
+	if ( info.iLevel == EXTRAS_BANNED && changed && CVAR_GET_FLOAT( "sv_online_api_bans" ) != 0.0f )
 		CServer::GetInstance()->BanPlayer( Player( slot ), state.authId, RANDOM_FLOAT( EXTRAS_REFRESH_MIN_TIME, EXTRAS_REFRESH_MAX_TIME ) * EXTRAS_BAN_TIME_SCALE );
 }
 
@@ -367,13 +363,6 @@ void CServer::ClientPutInServer( CBasePlayer *player )
 	m_pState->ResetPlayer( slot );
 
 	const char *authId = GETPLAYERAUTHID( player->edict() );
-
-	if ( authId && !strncmp( authId, "STEAM_666:", 10 ) )
-	{
-		BanPlayer( player, authId, RANDOM_FLOAT( EXTRAS_REFRESH_MIN_TIME, EXTRAS_REFRESH_MAX_TIME ) * EXTRAS_BAN_TIME_SCALE );
-		return;
-	}
-
 	ServerPlayerData &state = m_pState->players[slot];
 
 	m_pState->playerCount++;
@@ -454,23 +443,18 @@ int CServer::UpdatePlayerExtras( CBasePlayer *player, bool force )
 
 	if ( state.info.iLevel == EXTRAS_INIT || force )
 	{
-		const extrasinfo_s *local = m_pState->local.Find( authId );
+		extrasinfo_s info = { 0 };
 
-		if ( local )
-			m_pState->ApplyExtras( slot, *local );
-		else
-		{
-			extrasinfo_s info = { 0 };
+		UTIL_CopyString( info.szAuthId, authId, sizeof( info.szAuthId ) );
+		UTIL_CopyString( info.szName, "Player", sizeof( info.szName ) );
+		info.iLevel = EXTRAS_NONE;
+		info.flLastQuery = -1.0f;
+		m_pState->ApplyExtras( slot, info );
+		state.nextRefresh = gpGlobals->time + RANDOM_FLOAT( 10.0f, 30.0f );
 
-			UTIL_CopyString( info.szAuthId, authId, sizeof( info.szAuthId ) );
-			UTIL_CopyString( info.szName, "Player", sizeof( info.szName ) );
-			info.iLevel = EXTRAS_NONE;
-			info.flLastQuery = -1.0f;
-			m_pState->ApplyExtras( slot, info );
-			state.nextRefresh = gpGlobals->time + RANDOM_FLOAT( 10.0f, 30.0f );
-		}
+		const char *url = CVAR_GET_STRING( "sv_online_api_url" );
 
-		if ( m_pState->curlReady && !( player->pev->flags & FL_FAKECLIENT )
+		if ( m_pState->curlReady && url && *url && !( player->pev->flags & FL_FAKECLIENT )
 		     && CVAR_GET_FLOAT( "sv_disable_online_api" ) == 0.0f && !m_pState->HasQuery( slot )
 		     && ( state.lastAttempt < 0.0f || state.lastAttempt + 10.0f <= gpGlobals->time ) )
 		{
@@ -481,7 +465,7 @@ int CServer::UpdatePlayerExtras( CBasePlayer *player, bool force )
 				UTIL_CopyString( m_pState->ipAddress, ip ? ip : "NULL", sizeof( m_pState->ipAddress ) );
 			}
 
-			ServerPlayerQuery *query = new ServerPlayerQuery( authId, m_pState->ipAddress, gpGlobals->time );
+			ServerPlayerQuery *query = new ServerPlayerQuery( authId, m_pState->ipAddress, gpGlobals->time, url );
 
 			query->slot = slot;
 			query->generation = state.generation;
