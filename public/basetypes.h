@@ -9,9 +9,6 @@
 #define BASETYPES_H
 
 #include "tier0/commonmacros.h"
-#include "tier0/wchartypes.h"
-
-#include "tier0/valve_off.h"
 
 #ifdef _WIN32
 #pragma once
@@ -23,8 +20,6 @@
 #define DLLExtTokenPaste2(x) DLLExtTokenPaste(x)
 #define DLL_EXT_STRING DLLExtTokenPaste2( _DLL_EXT )
 
-
-#include "tier0/protected_things.h"
 
 // stdio.h
 #ifndef NULL
@@ -300,7 +295,5 @@ protected:
 #define UID_CAT2(a,c) UID_CAT1(a,c)
 #define EXPAND_CONCAT(a,c) UID_CAT1(a,c)
 #define UNIQUE_ID UID_CAT2(UID_PREFIX,__LINE__)
-
-#include "tier0/valve_on.h"
 
 #endif // BASETYPES_H

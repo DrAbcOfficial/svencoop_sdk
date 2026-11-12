@@ -73,60 +73,7 @@ void CrossProduct( const vec_t* v1, const vec_t* v2, vec_t* cross );
 float VectorNormalize( vec_t* v );		// returns vector length
 void VectorInverse( vec_t* v );
 void VectorScale( const vec_t* in, vec_t scale, vec_t* out );
-int Q_log2( int val );
 
-void R_ConcatRotations( float in1[3][3], float in2[3][3], float out[3][3] );
-void R_ConcatTransforms( float in1[3][4], float in2[3][4], float out[3][4] );
-
-// Here are some "manual" INLINE routines for doing floating point to integer conversions
-extern short new_cw, old_cw;
-
-typedef union DLONG {
-	int		i[2];
-	double	d;
-	float	f;
-	} DLONG;
-
-extern DLONG	dlong;
-
-#ifdef _WIN32
-void __inline set_fpu_cw( void )
-{
-	_asm	
-	{		wait
-			fnstcw	old_cw
-			wait
-			mov		ax, word ptr old_cw
-			or		ah, 0xc
-			mov		word ptr new_cw,ax
-			fldcw	new_cw
-	}
-}
-
-int __inline quick_ftol( float f )
-{
-	_asm {
-		// Assumes that we are already in chop mode, and only need a 32-bit int
-		fld		DWORD PTR f
-		fistp	DWORD PTR dlong
-	}
-	return dlong.i[0];
-}
-
-void __inline restore_fpu_cw( void )
-{
-	_asm	fldcw	old_cw
-}
-#else
-#define set_fpu_cw() /* */
-#define quick_ftol(f) ftol(f)
-#define restore_fpu_cw() /* */
-#endif
-
-void FloorDivMod( double numer, double denom, int* quotient,
-		int* rem );
-fixed16_t Invert24To16( fixed16_t val );
-int GreatestCommonDivisor( int i1, int i2 );
 
 #ifdef AngleVectors
 #undef AngleVectors
@@ -134,17 +81,6 @@ int GreatestCommonDivisor( int i1, int i2 );
 void AngleVectors( const vec_t* angles, vec_t* forward, vec_t* right, vec_t* up );
 void AngleVectorsTranspose( const vec_t* angles, vec_t* forward, vec_t* right, vec_t* up );
 #define AngleIVectors	AngleVectorsTranspose
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-	void BOPS_Error( void );
-	int BoxOnPlaneSide( vec_t * emins, vec_t * emaxs, struct mplane_s* p );
-
-#ifdef __cplusplus
-}
-#endif
 
 void AngleMatrix( const vec_t* angles, float(*matrix)[4] );
 void AngleIMatrix( const vec_t* angles, float(*matrix)[4] );
@@ -183,23 +119,3 @@ void VectorIRotate( const Vector &in, const float matrix[3][4], Vector &out );
 void VectorScale( const Vector &in, float scale, float (&out)[4] );
 void VectorInverse( float (&v)[4] );
 #endif
-
-#ifdef GLQUAKE
-float HalfToFloat( uint16_t h );
-#endif
-
-#define BOX_ON_PLANE_SIDE(emins, emaxs, p)	\
-	(((p)->type < 3)?						\
-	(										\
-		((p)->dist <= (emins)[(p)->type])?	\
-			1								\
-		:									\
-		(									\
-			((p)->dist >= (emaxs)[(p)->type])?\
-				2							\
-			:								\
-				3							\
-		)									\
-	)										\
-	:										\
-		BoxOnPlaneSide( (emins), (emaxs), (p)))

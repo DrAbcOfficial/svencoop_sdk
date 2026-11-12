@@ -9,9 +9,7 @@
 #ifndef PLATFORM_H
 #define PLATFORM_H
 
-#include "wchartypes.h"
 #include "basetypes.h"
-#include "tier0/valve_off.h"
 
 #ifdef _WIN32
 #pragma once
@@ -315,7 +313,6 @@ typedef void* HINSTANCE;
 #else
 #define DebuggerBreak()  {}
 #endif
-#define	DebuggerBreakIfDebugging() if ( !Plat_IsInDebugSession() ) ; else DebuggerBreak()
 
 // C functions for external declarations that call the appropriate C++ methods
 #ifndef EXPORT
@@ -371,9 +368,6 @@ typedef void* HINSTANCE;
 #else
 #error
 #endif
-
-// Pull in the /analyze code annotations.
-#include "annotations.h"
 
 //-----------------------------------------------------------------------------
 // Convert int<-->pointer, avoiding 32/64-bit compiler warnings:
@@ -880,115 +874,9 @@ FORCEINLINE void StoreLittleDWord( unsigned long *base, unsigned int dwordIndex,
 #endif
 #else	// BUILD_AS_DLL
 #define PLATFORM_INTERFACE	extern
-#define PLATFORM_OVERLOAD	
+#define PLATFORM_OVERLOAD
 #define PLATFORM_CLASS
 #endif	// BUILD_AS_DLL
-
-PLATFORM_INTERFACE double			Plat_FloatTime();		// Returns time in seconds since the module was loaded.
-PLATFORM_INTERFACE unsigned long	Plat_MSTime();			// Time in milliseconds.
-
-// b/w compatibility
-//#define Sys_FloatTime Plat_FloatTime
-
-// Processor Information:
-struct CPUInformation
-{
-	int	 m_Size;		// Size of this structure, for forward compatability.
-
-	bool m_bRDTSC : 1,	// Is RDTSC supported?
-		 m_bCMOV  : 1,  // Is CMOV supported?
-		 m_bFCMOV : 1,  // Is FCMOV supported?
-		 m_bSSE	  : 1,	// Is SSE supported?
-		 m_bSSE2  : 1,	// Is SSE2 Supported?
-		 m_b3DNow : 1,	// Is 3DNow! Supported?
-		 m_bMMX   : 1,	// Is MMX supported?
-		 m_bHT	  : 1;	// Is HyperThreading supported?
-
-	uint8 m_nLogicalProcessors,		// Number op logical processors.
-		    m_nPhysicalProcessors;	// Number of physical processors
-
-	int64 m_Speed;						// In cycles per second.
-
-	tchar* m_szProcessorID;				// Processor vendor Identification.
-};
-
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wreturn-type-c-linkage"
-#endif
-
-PLATFORM_INTERFACE const CPUInformation& GetCPUInformation();
-
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
-
-// ---------------------------------------------------------------------------------- //
-// Performance Monitoring Events - L2 stats etc...
-// ---------------------------------------------------------------------------------- //
-PLATFORM_INTERFACE void InitPME();
-PLATFORM_INTERFACE void ShutdownPME();
-//PLATFORM_INTERFACE bool g_bPME;
-
-
-
-//-----------------------------------------------------------------------------
-// Thread related functions
-//-----------------------------------------------------------------------------
-// Registers the current thread with Tier0's thread management system. 
-// This should be called on every thread created in the game.
-PLATFORM_INTERFACE unsigned long Plat_RegisterThread( const tchar *pName = _T("Source Thread"));
-
-// Registers the current thread as the primary thread.
-PLATFORM_INTERFACE unsigned long Plat_RegisterPrimaryThread();
-
-// VC-specific. Sets the thread's name so it has a friendly name in the debugger.
-// This should generally only be handled by Plat_RegisterThread and Plat_RegisterPrimaryThread
-PLATFORM_INTERFACE void	Plat_SetThreadName( unsigned long dwThreadID, const tchar *pName );
-
-// These would be private if it were possible to export private variables from a .DLL.
-// They need to be variables because they are checked by inline functions at performance
-// critical places.
-PLATFORM_INTERFACE unsigned long Plat_PrimaryThreadID;
-
-// Returns the ID of the currently executing thread.
-PLATFORM_INTERFACE unsigned long Plat_GetCurrentThreadID();
-
-// Returns the ID of the primary thread.
-inline unsigned long Plat_GetPrimaryThreadID()
-{
-	return Plat_PrimaryThreadID;
-}
-
-// Returns true if the current thread is the primary thread.
-inline bool Plat_IsPrimaryThread()
-{
-	//return true;
-	return (Plat_GetPrimaryThreadID() == Plat_GetCurrentThreadID() );
-}
-
-//-----------------------------------------------------------------------------
-// Process related functions
-//-----------------------------------------------------------------------------
-PLATFORM_INTERFACE const tchar *Plat_GetCommandLine();
-#ifndef _WIN32
-// helper function for OS's that don't have a ::GetCommandLine() call
-PLATFORM_INTERFACE void Plat_SetCommandLine( const char *cmdLine );
-#endif
-
-
-//-----------------------------------------------------------------------------
-// Include additional dependant header components.
-//-----------------------------------------------------------------------------
-#include "tier0/fasttimer.h"
-
-
-//-----------------------------------------------------------------------------
-// Just logs file and line to simple.log
-//-----------------------------------------------------------------------------
-PLATFORM_INTERFACE void* Plat_SimpleLog( const tchar* file, int line );
-
-//#define Plat_dynamic_cast Plat_SimpleLog(GOLDSRCPLUS_FILE,__LINE__),dynamic_cast
 
 #if _X360
 #define Plat_FastMemset XMemSet
@@ -996,15 +884,6 @@ PLATFORM_INTERFACE void* Plat_SimpleLog( const tchar* file, int line );
 #else
 #define Plat_FastMemset memset
 #define Plat_FastMemcpy memcpy
-#endif
-
-//-----------------------------------------------------------------------------
-// Returns true if debugger attached, false otherwise
-//-----------------------------------------------------------------------------
-#if defined(_WIN32)
-PLATFORM_INTERFACE bool Plat_IsInDebugSession();
-#else
-#define Plat_IsInDebugSession() (false)
 #endif
 
 //-----------------------------------------------------------------------------
@@ -1165,55 +1044,9 @@ inline void Destruct( T* pMemory )
 	};
 */
 
-PLATFORM_INTERFACE bool vtune( bool resume );
 
 
-#define TEMPLATE_FUNCTION_TABLE(RETURN_TYPE, NAME, ARGS, COUNT)			\
-																		\
-typedef RETURN_TYPE (FASTCALL *__Type_##NAME) ARGS;						\
-																		\
-template<const int nArgument>											\
-struct __Function_##NAME												\
-{																		\
-	static RETURN_TYPE FASTCALL Run ARGS;								\
-};																		\
-																		\
-template <const int i>													\
-struct __MetaLooper_##NAME : __MetaLooper_##NAME<i-1>					\
-{																		\
-	__Type_##NAME func;													\
-	inline __MetaLooper_##NAME() { func = __Function_##NAME<i>::Run; }	\
-};																		\
-																		\
-template<>																\
-struct __MetaLooper_##NAME<0>											\
-{																		\
-	__Type_##NAME func;													\
-	inline __MetaLooper_##NAME() { func = __Function_##NAME<0>::Run; }	\
-};																		\
-																		\
-class NAME																\
-{																		\
-private:																\
-    static const __MetaLooper_##NAME<COUNT> m;							\
-public:																	\
-	enum { count = COUNT };												\
-	static const __Type_##NAME* functions;								\
-};																		\
-const __MetaLooper_##NAME<COUNT> NAME::m;								\
-const __Type_##NAME* NAME::functions = (__Type_##NAME*)&m;				\
-template<const int nArgument>											\
-RETURN_TYPE FASTCALL __Function_##NAME<nArgument>::Run ARGS						
 
-
-#define LOOP_INTERCHANGE(BOOLEAN, CODE)\
-	if( (BOOLEAN) )\
-	{\
-		CODE;\
-	} else\
-	{\
-		CODE;\
-	}
 
 //-----------------------------------------------------------------------------
 
@@ -1243,7 +1076,5 @@ private:
 //-----------------------------------------------------------------------------
 
 #endif // #ifdef __cplusplus
-
-#include "tier0/valve_on.h"
 
 #endif /* PLATFORM_H */

@@ -62,7 +62,6 @@ set(SVENCOOP_SERVER_SOURCES
   dlls/utils/CKeyvaluesLexer.cpp
   dlls/utils/CKeyvaluesParser.cpp
   dlls/utils/CKeyvaluesWriter.cpp
-  dlls/utils/CLinkedStringPool.cpp
   dlls/utils/CLog.cpp
   dlls/server/CMap.cpp
   dlls/server/CMapPreprocessor.cpp

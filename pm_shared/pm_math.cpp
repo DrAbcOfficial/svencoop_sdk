@@ -365,16 +365,6 @@ void VectorScale(const float* in, float scale, float* out)
 #endif
 
 
-int Q_log2( int val )
-{
-	int answer = 0;
-
-	while (val >>= 1)
-		answer++;
-
-	return answer;
-}
-
 void VectorMatrix( vec3_t forward, vec3_t right, vec3_t up )
 {
 	vec3_t tmp;
