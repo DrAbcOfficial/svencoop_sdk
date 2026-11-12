@@ -48,6 +48,7 @@
 #include "user_messages.h"
 #include "CServer.h"
 #include "server_support.h"
+#include "client_commands.h"
 #include "AdminLevel.h"
 #include "ConCommandDefs.h"
 #include "observer.h"
@@ -3045,6 +3046,145 @@ ReturnSpot:
 	return pSpot->edict();
 }
 
+bool CBasePlayer::IsRevivable( void )
+{
+	return AreBaseReviveConditionsMet() && !( pev->effects & EF_NODRAW );
+}
+
+void CBasePlayer::BeginRevive( float flTimeUntilRevive )
+{
+}
+
+void CBasePlayer::Revive( void )
+{
+	SetThink( NULL );
+	pev->rendermode = m_iOriginalRenderMode;
+	pev->renderfx = m_iOriginalRenderFX;
+	pev->renderamt = m_flOriginalRenderAmount;
+	pev->rendercolor = m_vecOriginalRenderColor;
+
+	SpecialSpawn();
+	pev->flags &= ~FL_FROZEN;
+	g_PlayerRevivedHook.Call( 0, this );
+}
+
+void CBasePlayer::SpecialSpawn( void )
+{
+	memset( m_flNextWeaponPickup, 0, sizeof( m_flNextWeaponPickup ) );
+	pev->deadflag = DEAD_NO;
+	m_pObserver->StopObserver( false );
+
+	pev->health = pev->max_health * 0.5f;
+
+	if ( pev->health < 1.0f )
+		pev->health = 1.0f;
+
+	if ( pev->health > pev->max_health )
+		pev->health = pev->max_health;
+
+	pev->takedamage = DAMAGE_AIM;
+	pev->solid = SOLID_SLIDEBOX;
+	pev->movetype = MOVETYPE_WALK;
+	pev->flags = ( pev->flags & FL_FAKECLIENT ) | FL_CLIENT;
+	pev->air_finished = gpGlobals->time + 12.0f;
+	pev->dmg = 2;
+	pev->effects = 0;
+	pev->dmg_take = 0;
+	pev->dmg_save = 0;
+	pev->friction = 1.0f;
+	m_bitsHUDDamage = -1;
+	m_bitsDamageType = 0;
+	m_afPhysicsFlags = 0;
+	m_fWeaponsBlocked = false;
+	m_iKeyValueCheats = 0;
+	m_iCheats = 0;
+	m_fLongJump = false;
+
+	g_engfuncs.pfnSetPhysicsKeyValue( edict(), "nolj", "0" );
+	g_engfuncs.pfnSetPhysicsKeyValue( edict(), "hl", "1" );
+
+	m_flMaxSpeedOverride = -1.0f;
+	UpdatePlayerSpeed();
+	m_flMaxSpeed = (float) (int) ceil( (double) CVAR_GET_FLOAT( "sv_maxspeed" ) );
+	UpdatePlayerSpeed();
+
+	pev->iuser4 = 0;
+	pev->fuser4 = -1.0f;
+	m_iFOV = 0;
+	m_iClientFOV = -1;
+	m_flNextDecalTime = 0;
+	m_flTimeStepSound = 0;
+	m_flFieldOfView = 0.5f;
+	m_flgeigerDelay = gpGlobals->time + 2.0;
+	m_flNextAttack = UTIL_WeaponTimeBase();
+	StartSneaking();
+
+	m_iFlashBattery = 99;
+	m_flFlashLightTime = 1;
+	m_flFallVelocity = 0;
+	m_vecViewModelPos = g_vecZero;
+	m_bViewModelPos = false;
+	m_bDeadItemsPacked = false;
+
+	SET_MODEL( ENT( pev ), "models/player.mdl" );
+	g_ulModelIndexPlayer = pev->modelindex;
+	pev->sequence = LookupActivity( ACT_IDLE );
+
+	TraceResult trace;
+
+	UTIL_TraceHull( pev->origin, pev->origin, dont_ignore_monsters, human_hull, edict(), &trace );
+
+	if ( FBitSet( pev->flags, FL_DUCKING ) || !trace.fInOpen )
+	{
+		pev->button |= IN_DUCK;
+		m_afPhysicsFlags |= PFLAG_DUCKING;
+		pev->flags |= FL_DUCKING;
+		pev->view_ofs = Vector( 0, 0, 12 );
+		UTIL_SetSize( pev, VEC_DUCK_HULL_MIN, VEC_DUCK_HULL_MAX );
+	}
+	else
+	{
+		UTIL_SetSize( pev, VEC_HULL_MIN, VEC_HULL_MAX );
+		pev->view_ofs = VEC_VIEW;
+	}
+
+	m_fNoPlayerSound = FALSE;
+	m_pLastItem = NULL;
+	m_iClientHideHUD = -1;
+	m_fWeapon = FALSE;
+	m_pClientActiveItem = NULL;
+	m_iClientBattery = -1;
+	m_bRespawnMessageShown = false;
+	m_lastx = m_lasty = 0;
+	m_flNextChatTime = gpGlobals->time;
+	m_flNextClientCommandTime = gpGlobals->time;
+	m_flNextMiscCommandTime = gpGlobals->time;
+	m_flNextNpcCommandTime = 0;
+	m_flRespawnDelayTime = 0;
+
+	g_engfuncs.pfnSetView( edict(), edict() );
+	UTIL_TraceLine( pev->origin + Vector( 0, 0, 32 ), pev->origin, ignore_monsters, edict(), &trace );
+	pev->origin = trace.vecEndPos;
+	FixPlayerCrouchStuck( edict() );
+	FixPlayerStuck( edict() );
+
+	pev->v_angle = g_vecZero;
+	pev->velocity = g_vecZero;
+	pev->punchangle = g_vecZero;
+	pev->fixangle = 1;
+	pev->angles.z = 0;
+
+	if ( m_pActiveItem && !m_fWeaponsBlocked )
+		m_pActiveItem->Deploy();
+
+	ClearTimeBasedDamage();
+	m_idrowndmg = 0;
+	m_idrownrestored = 0;
+	m_hHealer = NULL;
+	pev->air_finished = ( ( m_flEffectRespiration + 12.0f ) + 0.0f ) + gpGlobals->time;
+	ApplyEffects();
+}
+
 void CBasePlayer::Spawn( void )
 {
 	m_pObserver->StopObserver( false );
@@ -3061,7 +3201,7 @@ void CBasePlayer::Spawn( void )
 	pev->solid			= SOLID_SLIDEBOX;
 	pev->movetype		= MOVETYPE_WALK;
 	pev->max_health		= pev->health;
-	pev->flags		   &= FL_PROXY;	// keep proxy flag sey by engine
+	pev->flags		   &= FL_FAKECLIENT;
 	pev->flags		   |= FL_CLIENT;
 	pev->air_finished	= gpGlobals->time + 12;
 	pev->dmg			= 2;				// initial water damage

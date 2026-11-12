@@ -3216,7 +3216,7 @@ void CBaseMonster::ReviveThink( void )
 			continue;
 		}
 
-		if ( entity->IsPlayer() )
+		if ( entity->IsBSPModel() )
 		{
 			TraceResult trace;
 			Vector top = pev->origin + Vector( 0, 0, pev->maxs.z );
@@ -3250,7 +3250,7 @@ void CBaseMonster::ReviveThink( void )
 		{
 			CBasePlayer *player = (CBasePlayer *) this;
 
-			player->m_fReviving = false;
+			player->m_bRespawnMessageShown = false;
 			SetThink( &CBasePlayer::PlayerDeathThink );
 		}
 	}

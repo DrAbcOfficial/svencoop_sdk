@@ -171,6 +171,9 @@ public:
 	bool CanSpawn( void );
 	void EXPORT ForcedRespawnThink( void );
 	void SpawnDead( CBaseEntity *point );
+	virtual bool IsRevivable( void );
+	virtual void BeginRevive( float flTimeUntilRevive );
+	virtual void Revive( void );
 	static EntityHandle<CBaseEntity> SelectSpawnPoint( CBaseEntity *player );
 	void StartRepelDown( float speed );
 	void EndRepelDown( void );
@@ -446,6 +449,9 @@ public:
 	char m_szTeamName[TEAM_NAME_LENGTH];
 
 	virtual void Spawn( void );
+#ifndef CLIENT_DLL
+	virtual void SpecialSpawn( void );
+#endif
 	void Pain( void );
 
 //	virtual void Think( void );
