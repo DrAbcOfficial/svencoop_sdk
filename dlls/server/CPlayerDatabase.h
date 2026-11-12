@@ -2,7 +2,9 @@
 #define CPLAYERDATABASE_H
 
 #include "server/donid.h"
-#include "utils/CMutex.h"
+
+#include <mutex>
+#include <thread>
 
 class CPlayerDatabase
 {
@@ -28,21 +30,15 @@ private:
 	bool PerformHttpRequest();
 	void DecodeServerResponse();
 	bool IsCancelled();
+	void ThreadEntry( std::stop_token stopToken );
 	static size_t OnData( char *data, size_t size, size_t count, void *context );
-#ifdef _WIN32
-	static DWORD WINAPI ThreadEntry( void *context );
 
-	HANDLE m_hThread;
-#else
-	static void *ThreadEntry( void *context );
+	std::mutex       m_Mutex;
+	std::stop_source m_StopSource;
+	std::jthread     m_Thread;
 
-	pthread_t m_Thread;
-#endif
-
-	CMutex  m_Mutex;
 	bool    m_bStarted;
 	bool    m_bFinished;
-	bool    m_bCancelled;
 
 	char       m_szAuthId[EXTRAS_AUTHID_LENGTH + 1];
 	char       m_szIpAddress[EXTRAS_IP_ADDRESS_LENGTH + 1];

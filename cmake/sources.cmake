@@ -65,7 +65,6 @@ set(SVENCOOP_SERVER_SOURCES
   dlls/utils/CLog.cpp
   dlls/server/CMap.cpp
   dlls/server/CMapPreprocessor.cpp
-  dlls/utils/CMutex.cpp
   dlls/server/CNetworkMessages.cpp
   dlls/server/CNetworkProfiler.cpp
   dlls/utils/CObjectLifetimeHandler.cpp

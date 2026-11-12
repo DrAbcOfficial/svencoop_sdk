@@ -13,6 +13,7 @@
 #include <exception>
 #include <new>
 #include <stdexcept>
+#include <system_error>
 
 static const char g_szPlayerDbUrl[] = "https://gameinfo.svencoop.com:443/public/playerextras.php";
 
@@ -21,15 +22,10 @@ static bool g_bPlayerDbInitialized;
 
 CPlayerDatabase::CPlayerDatabase( const char *authId, const char *ipAddress, long long timestamp,
                                   float queryTime, const char *url )
-    : m_bStarted( false ), m_bFinished( false ), m_bCancelled( false ),
+    : m_bStarted( false ), m_bFinished( false ),
       m_iTimestamp( timestamp ), m_flQueryTime( queryTime ), m_pResponse( NULL ), m_uiResponseLength( 0 ),
       m_pQueryResult( NULL ), m_iRequestCode( CURLE_OK )
 {
-#ifdef _WIN32
-	m_hThread = NULL;
-#else
-	memset( &m_Thread, 0, sizeof( m_Thread ) );
-#endif
 	memset( &m_Result, 0, sizeof( m_Result ) );
 
 	m_Result.iLevel = EXTRAS_INIT;
@@ -90,38 +86,35 @@ bool CPlayerDatabase::Start()
 	if ( m_bStarted )
 		return false;
 
-#ifdef _WIN32
-	m_hThread = CreateThread( NULL, 0, ThreadEntry, this, 0, NULL );
-	m_bStarted = m_hThread != NULL;
-#else
-	m_bStarted = pthread_create( &m_Thread, NULL, ThreadEntry, this ) == 0;
-#endif
+	try
+	{
+		m_Thread = std::jthread( [this, token = m_StopSource.get_token()]() {
+			ThreadEntry( token );
+		} );
+		m_bStarted = true;
+	}
+	catch ( const std::system_error & )
+	{
+		m_bStarted = false;
+	}
+
 	return m_bStarted;
 }
 
 void CPlayerDatabase::Cancel()
 {
-	m_Mutex.Lock();
-	m_bCancelled = true;
-	m_Mutex.Unlock();
+	m_StopSource.request_stop();
 }
 
 bool CPlayerDatabase::IsCancelled()
 {
-	m_Mutex.Lock();
-	bool cancelled = m_bCancelled;
-
-	m_Mutex.Unlock();
-	return cancelled;
+	return m_StopSource.stop_requested();
 }
 
 bool CPlayerDatabase::IsFinished()
 {
-	m_Mutex.Lock();
-	bool finished = m_bFinished;
-
-	m_Mutex.Unlock();
-	return finished;
+	std::scoped_lock lock( m_Mutex );
+	return m_bFinished;
 }
 
 void CPlayerDatabase::Join()
@@ -129,13 +122,9 @@ void CPlayerDatabase::Join()
 	if ( !m_bStarted )
 		return;
 
-#ifdef _WIN32
-	WaitForSingleObject( m_hThread, INFINITE );
-	CloseHandle( m_hThread );
-	m_hThread = NULL;
-#else
-	pthread_join( m_Thread, NULL );
-#endif
+	if ( m_Thread.joinable() )
+		m_Thread.join();
+
 	m_bStarted = false;
 }
 
@@ -149,30 +138,21 @@ const char *CPlayerDatabase::GetError() const
 	return m_szError;
 }
 
-#ifdef _WIN32
-DWORD WINAPI CPlayerDatabase::ThreadEntry( void *context )
-#else
-void *CPlayerDatabase::ThreadEntry( void *context )
-#endif
+void CPlayerDatabase::ThreadEntry( std::stop_token stopToken )
 {
-	CPlayerDatabase *database = (CPlayerDatabase *) context;
-
 	try
 	{
-		if ( !database->IsCancelled() )
-			database->GetPlayerExtras( &database->m_Result );
+		if ( !stopToken.stop_requested() )
+			GetPlayerExtras( &m_Result );
 	}
 	catch ( const std::exception &error )
 	{
-		database->m_Result.iLevel = EXTRAS_ERROR;
-		snprintf( database->m_szError, sizeof( database->m_szError ), "%s", error.what() );
+		m_Result.iLevel = EXTRAS_ERROR;
+		snprintf( m_szError, sizeof( m_szError ), "%s", error.what() );
 	}
 
-	database->m_Mutex.Lock();
-	database->m_bFinished = true;
-	database->m_Mutex.Unlock();
-
-	return 0;
+	std::scoped_lock lock( m_Mutex );
+	m_bFinished = true;
 }
 
 size_t CPlayerDatabase::OnData( char *data, size_t size, size_t count, void *context )
