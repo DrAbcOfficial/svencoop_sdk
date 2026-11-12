@@ -1,67 +1,20 @@
 package main
 
 import (
-	"bytes"
-	"crypto/rc4"
 	"encoding/hex"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func newTestApp(t *testing.T) *App {
-	t.Helper()
-
-	store := &Store{
-		path: filepath.Join(t.TempDir(), "players.csv"),
-		players: map[string]Player{
-			"STEAM_0:0:100000001": {
-				AuthID:      "STEAM_0:0:100000001",
-				Name:        "Example Donor",
-				Description: "Example donor",
-				Level:       1,
-			},
-			"STEAM_0:0:100000003": {
-				AuthID:      "STEAM_0:0:100000003",
-				Name:        "Example Banned",
-				Description: "Example ban",
-				Level:       -1,
-			},
-		},
-	}
-
-	return &App{
-		store:      store,
-		key:        defaultKey,
-		timeZone:   defaultTimeZone,
-		lookupPath: defaultLookupPath,
-		adminToken: "secret",
-	}
-}
-
-func encryptForTest(t *testing.T, key string, input []byte) []byte {
-	t.Helper()
-
-	cipher, err := rc4.NewCipher([]byte(key))
-	if err != nil {
-		t.Fatalf("rc4.NewCipher: %v", err)
-	}
-
-	output := make([]byte, len(input))
-	cipher.XORKeyStream(output, input)
-	return output
-}
-
-func decryptForTest(t *testing.T, key string, input []byte) []byte {
-	t.Helper()
-	return encryptForTest(t, key, input)
-}
-
 func TestCryptMatchesReference(t *testing.T) {
-	plain := []byte("ipaddr=127.0.0.1\ntimestamp=1234567890\nauthid=STEAM_0:0:100000001\n")
+	plain := []byte(strings.Join([]string{
+		"ipaddr=127.0.0.1",
+		"timestamp=1234567890",
+		"authid=STEAM_0:0:100000001",
+		"",
+	}, testNewline))
 	got, err := crypt(defaultKey, plain)
 	if err != nil {
 		t.Fatalf("crypt: %v", err)
@@ -70,6 +23,24 @@ func TestCryptMatchesReference(t *testing.T) {
 	want := "8e2275e400aca6ff8be78aa25b053216909a17bc1bfcbc04a7782a1be7db71bde3fabdbed5c93c6914ece36bedac974bcbf9979c38789135f4e5cd09fdf5733a00"
 	if hex.EncodeToString(got) != want {
 		t.Fatalf("ciphertext = %x, want %s", got, want)
+	}
+}
+
+func TestCryptRoundTrip(t *testing.T) {
+	plain := []byte("hello world")
+
+	encrypted, err := crypt(defaultKey, plain)
+	if err != nil {
+		t.Fatalf("crypt: %v", err)
+	}
+
+	decrypted, err := crypt(defaultKey, encrypted)
+	if err != nil {
+		t.Fatalf("crypt: %v", err)
+	}
+
+	if string(decrypted) != string(plain) {
+		t.Fatalf("round trip = %q, want %q", decrypted, plain)
 	}
 }
 
@@ -86,138 +57,6 @@ func TestLoadExampleCSV(t *testing.T) {
 	player, found := store.Lookup("STEAM_0:0:100000003")
 	if !found || player.Level != -1 {
 		t.Fatalf("banned player = %+v, found = %t", player, found)
-	}
-}
-
-func TestLookupKnownPlayer(t *testing.T) {
-	app := newTestApp(t)
-	body := encryptForTest(t, defaultKey, []byte("ipaddr=127.0.0.1\ntimestamp=1234567890\nauthid=STEAM_0:0:100000001\n"))
-
-	request := httptest.NewRequest(http.MethodPut, defaultLookupPath, bytes.NewReader(body))
-	recorder := httptest.NewRecorder()
-	app.routes().ServeHTTP(recorder, request)
-
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d (%s)", recorder.Code, http.StatusOK, recorder.Body.String())
-	}
-
-	response := string(decryptForTest(t, defaultKey, recorder.Body.Bytes()))
-	want := "STEAM_0:0:100000001|1234567890|127.0.0.1|UTC|\"Example Donor\"|\"Example donor\"|1"
-	if response != want {
-		t.Fatalf("response = %q, want %q", response, want)
-	}
-}
-
-func TestLookupUnknownPlayer(t *testing.T) {
-	app := newTestApp(t)
-	body := encryptForTest(t, defaultKey, []byte("ipaddr=10.0.0.1\ntimestamp=42\nauthid=STEAM_0:0:999999999\n"))
-
-	request := httptest.NewRequest(http.MethodPut, defaultLookupPath, bytes.NewReader(body))
-	recorder := httptest.NewRecorder()
-	app.routes().ServeHTTP(recorder, request)
-
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d (%s)", recorder.Code, http.StatusOK, recorder.Body.String())
-	}
-
-	response := string(decryptForTest(t, defaultKey, recorder.Body.Bytes()))
-	want := "STEAM_0:0:999999999|42|10.0.0.1|UTC|\"Player\"|\"-\"|0"
-	if response != want {
-		t.Fatalf("response = %q, want %q", response, want)
-	}
-}
-
-func TestLookupRejectsBadRequest(t *testing.T) {
-	app := newTestApp(t)
-	body := encryptForTest(t, defaultKey, []byte("ipaddr=127.0.0.1\nauthid=STEAM_0:0:100000001\n"))
-
-	request := httptest.NewRequest(http.MethodPut, defaultLookupPath, bytes.NewReader(body))
-	recorder := httptest.NewRecorder()
-	app.routes().ServeHTTP(recorder, request)
-
-	if recorder.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
-	}
-	if !strings.Contains(recorder.Body.String(), "[Critical Error]") {
-		t.Fatalf("body = %q, want a [Critical Error] marker", recorder.Body.String())
-	}
-}
-
-func TestAdminUpsertAndDelete(t *testing.T) {
-	app := newTestApp(t)
-	router := app.routes()
-
-	upsertBody := "{\"auth_id\":\"STEAM_0:0:100000002\",\"name\":\"New Player\",\"description\":\"Added by admin\",\"level\":2}"
-	upsertRequest := httptest.NewRequest(http.MethodPost, adminPlayersPath, strings.NewReader(upsertBody))
-	upsertRequest.Header.Set("Authorization", "Bearer secret")
-	upsertRecorder := httptest.NewRecorder()
-	router.ServeHTTP(upsertRecorder, upsertRequest)
-
-	if upsertRecorder.Code != http.StatusCreated {
-		t.Fatalf("upsert status = %d, want %d (%s)", upsertRecorder.Code, http.StatusCreated, upsertRecorder.Body.String())
-	}
-
-	if player, found := app.store.Lookup("STEAM_0:0:100000002"); !found || player.Level != 2 {
-		t.Fatalf("upserted player = %+v, found = %t", player, found)
-	}
-
-	deleteRequest := httptest.NewRequest(http.MethodDelete, adminPlayersPath+"/STEAM_0:0:100000002", nil)
-	deleteRequest.Header.Set("X-Admin-Token", "secret")
-	deleteRecorder := httptest.NewRecorder()
-	router.ServeHTTP(deleteRecorder, deleteRequest)
-
-	if deleteRecorder.Code != http.StatusNoContent {
-		t.Fatalf("delete status = %d, want %d (%s)", deleteRecorder.Code, http.StatusNoContent, deleteRecorder.Body.String())
-	}
-
-	reloaded, err := NewStore(app.store.path)
-	if err != nil {
-		t.Fatalf("NewStore: %v", err)
-	}
-	if reloaded.Count() != 2 {
-		t.Fatalf("reloaded count = %d, want 2", reloaded.Count())
-	}
-}
-
-func TestAdminRequiresToken(t *testing.T) {
-	app := newTestApp(t)
-	request := httptest.NewRequest(http.MethodGet, adminPlayersPath, nil)
-	recorder := httptest.NewRecorder()
-	app.routes().ServeHTTP(recorder, request)
-
-	if recorder.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
-	}
-
-	app.adminToken = ""
-	recorder = httptest.NewRecorder()
-	app.routes().ServeHTTP(recorder, request)
-
-	if recorder.Code != http.StatusForbidden {
-		t.Fatalf("disabled admin status = %d, want %d", recorder.Code, http.StatusForbidden)
-	}
-}
-
-func TestAdminList(t *testing.T) {
-	app := newTestApp(t)
-	request := httptest.NewRequest(http.MethodGet, adminPlayersPath, nil)
-	request.Header.Set("Authorization", "Bearer secret")
-	recorder := httptest.NewRecorder()
-	app.routes().ServeHTTP(recorder, request)
-
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
-	}
-
-	var result struct {
-		Count   int      `json:"count"`
-		Players []Player `json:"players"`
-	}
-	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if result.Count != 2 || len(result.Players) != 2 {
-		t.Fatalf("result = %+v, want two players", result)
 	}
 }
 
@@ -239,5 +78,101 @@ func TestTruncateUTF8(t *testing.T) {
 	}
 	if got := truncateUTF8("你好世界", 4); got != "你" {
 		t.Fatalf("truncateUTF8 = %q, want %q", got, "你")
+	}
+}
+
+func TestCleanTimeZone(t *testing.T) {
+	if got := cleanTimeZone("  "); got != defaultTimeZone {
+		t.Fatalf("cleanTimeZone(blank) = %q, want %q", got, defaultTimeZone)
+	}
+	if got := cleanTimeZone("|CET\n"); got != "CET" {
+		t.Fatalf("cleanTimeZone(pipe) = %q, want %q", got, "CET")
+	}
+	if got := cleanTimeZone("Europe/Berlin"); got != "Europe/" {
+		t.Fatalf("cleanTimeZone(long) = %q, want %q", got, "Europe/")
+	}
+}
+
+func TestResolveAdminToken(t *testing.T) {
+	if token, err := resolveAdminToken("", ""); err != nil || token != "" {
+		t.Fatalf("empty token = %q, %v; want empty and no error", token, err)
+	}
+
+	if _, err := resolveAdminToken("short", ""); err == nil {
+		t.Fatal("short token should be rejected")
+	}
+
+	token, err := resolveAdminToken("  "+testAdminToken+"  ", "")
+	if err != nil || token != testAdminToken {
+		t.Fatalf("token = %q, %v; want %q", token, err, testAdminToken)
+	}
+
+	if _, err := resolveAdminToken(testAdminToken, "ignored"); err == nil {
+		t.Fatal("specifying both a token and a token file should fail")
+	}
+}
+
+func TestResolveAdminTokenFromFile(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "admin-token")
+
+	if err := os.WriteFile(path, []byte(testAdminToken+testNewline), 0o600); err != nil {
+		t.Fatalf("write token: %v", err)
+	}
+
+	token, err := resolveAdminToken("", path)
+	if err != nil {
+		t.Fatalf("resolveAdminToken: %v", err)
+	}
+	if token != testAdminToken {
+		t.Fatalf("token = %q, want %q", token, testAdminToken)
+	}
+
+	emptyPath := filepath.Join(directory, "empty-token")
+	if err := os.WriteFile(emptyPath, []byte(testNewline), 0o600); err != nil {
+		t.Fatalf("write empty token: %v", err)
+	}
+
+	if _, err := resolveAdminToken("", emptyPath); err == nil {
+		t.Fatal("an empty token file should be rejected")
+	}
+}
+
+func TestEnabledText(t *testing.T) {
+	if enabledText(true) != "enabled" || enabledText(false) != "disabled" {
+		t.Fatal("enabledText returned an unexpected value")
+	}
+}
+
+func TestParseLookupRequest(t *testing.T) {
+	request, err := parseLookupRequest([]byte("ipaddr=1.2.3.4\ntimestamp=10\nauthid=STEAM_0:1:2\n"))
+	if err != nil {
+		t.Fatalf("parseLookupRequest: %v", err)
+	}
+	if request.IP != "1.2.3.4" || request.Timestamp != 10 || request.AuthID != "STEAM_0:1:2" {
+		t.Fatalf("request = %+v", request)
+	}
+
+	for _, invalid := range []string{
+		"timestamp=10\nauthid=STEAM_0:1:2\n",
+		"ipaddr=1.2.3.4\nauthid=STEAM_0:1:2\n",
+		"ipaddr=1.2.3.4\ntimestamp=0\nauthid=STEAM_0:1:2\n",
+		"ipaddr=1.2.3.4\ntimestamp=10\n",
+	} {
+		if _, err := parseLookupRequest([]byte(invalid)); err == nil {
+			t.Fatalf("parseLookupRequest(%q) should fail", invalid)
+		}
+	}
+}
+
+func TestParseLookupRequestRejectsLongFields(t *testing.T) {
+	longIP := strings.Repeat("1", maxIPLength+1)
+	if _, err := parseLookupRequest([]byte("ipaddr=" + longIP + "\ntimestamp=10\nauthid=STEAM_0:1:2\n")); err == nil {
+		t.Fatal("an oversized ipaddr should be rejected")
+	}
+
+	longAuthID := strings.Repeat("A", maxAuthIDLength+1)
+	if _, err := parseLookupRequest([]byte("ipaddr=1.2.3.4\ntimestamp=10\nauthid=" + longAuthID + "\n")); err == nil {
+		t.Fatal("an oversized authid should be rejected")
 	}
 }
