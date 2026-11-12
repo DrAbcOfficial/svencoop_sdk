@@ -1,7 +1,7 @@
 #include "extdll.h"
 #include "util.h"
-#include "server_filesystem.h"
-#include "server_support.h"
+#include "server/server_filesystem.h"
+#include "server/server_support.h"
 #define MATERIAL_ALERT ALERT
 #include "materials.h"
 #include "pm_materials.h"

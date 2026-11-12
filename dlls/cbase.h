@@ -43,11 +43,11 @@ CBaseEntity
 #define		FCAP_FORCE_TRANSITION		0x00000080		// ALWAYS goes across transitions
 
 #include "archtypes.h"     // DAL
-#include "saverestore.h"
-#include "schedule.h"
+#include "server/saverestore.h"
+#include "ai/schedule.h"
 
 #ifndef MONSTEREVENT_H
-#include "monsterevent.h"
+#include "monsters/monsterevent.h"
 #endif
 
 #include "Platform.h"
@@ -92,9 +92,9 @@ typedef void (CBaseEntity::*ENTITYFUNCPTR)(CBaseEntity *pOther );
 typedef void (CBaseEntity::*USEPTR)( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
 
 // For CLASSIFY
-#include "EntityClassification.h"
-#include "CCustomKeyvalues.h"
-#include "CStringMap.h"
+#include "server/EntityClassification.h"
+#include "server/CCustomKeyvalues.h"
+#include "utils/CStringMap.h"
 
 int AllocStringLocal( const char *text );
 
@@ -1113,7 +1113,7 @@ class CBaseMonster;
 class CCineMonster;
 class CSound;
 
-#include "basemonster.h"
+#include "ai/basemonster.h"
 
 
 const char *ButtonSound( int sound );				// get string of button sound number

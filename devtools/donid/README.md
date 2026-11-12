@@ -1,6 +1,6 @@
 # Player extras and bans
 
-Sven Co-op has [donid](/dlls/donid.cpp) system which gives some extras or bans player entirely from any game servers he joins, even their local one. Of course, if server's game DLL cares indeed.
+Sven Co-op has [donid](/dlls/server/donid.cpp) system which gives some extras or bans player entirely from any game servers he joins, even their local one. Of course, if server's game DLL cares indeed.
 Two instances of it exist: offline + online.
 
 `players.csv` here contains ~5300 SteamIDs, including 114 banned ones.
@@ -17,8 +17,8 @@ Anyway, there is ready extracted list and Python script to read donid data heade
 
 Run from repo root with Python (depends on your situation):
 ```
-python3 devtools/donid/donid_data.py generate devtools/donid/players.csv --output dlls/donid_data.h
-python3 devtools/donid/donid_data.py read dlls/donid_data.h --output devtools/donid/players.csv
+python3 devtools/donid/donid_data.py generate devtools/donid/players.csv --output dlls/server/donid_data.h
+python3 devtools/donid/donid_data.py read dlls/server/donid_data.h --output devtools/donid/players.csv
 ```
 
 If you're curious what extras level means:

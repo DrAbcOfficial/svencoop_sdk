@@ -285,6 +285,7 @@ inline void CCycleCount::Sample()
 		mov		[ecx+4],   edx
 	}
 #elif defined POSIX
+#if defined(__i386__) || defined(__x86_64__)
        __asm__ __volatile__ (  
 			"rdtsc\n\t"
 			"movl %%eax,  (%0)\n\t"
@@ -292,6 +293,11 @@ inline void CCycleCount::Sample()
                         : /* no output regs */
                         : "D" (pSample)
                         : "%eax", "%edx");
+#else
+	// Non-x86 POSIX has no rdtsc; this build is a syntax-validation only
+	// build, so provide a stub sample instead of the x86 inline asm.
+	m_Int64 = 0;
+#endif
 #endif
 }
 

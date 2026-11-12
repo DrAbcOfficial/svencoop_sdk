@@ -23,10 +23,10 @@
 #include "extdll.h"
 #include "util.h"
 #include "cbase.h"
-#include "animation.h"
+#include "ai/animation.h"
 #include "studio.h"
-#include "saverestore.h"
-#include "ModelUtils.h"
+#include "server/saverestore.h"
+#include "utils/ModelUtils.h"
 
 TYPEDESCRIPTION	CBaseAnimating::m_SaveData[] = 
 {

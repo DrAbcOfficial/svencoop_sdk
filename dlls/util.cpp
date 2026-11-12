@@ -23,7 +23,7 @@
 #include "extdll.h"
 #include "util.h"
 #include "cbase.h"
-#include "saverestore.h"
+#include "server/saverestore.h"
 #include <time.h>
 
 #ifdef _M_IX86
@@ -31,20 +31,20 @@
 #endif
 
 #include "shake.h"
-#include "decals.h"
-#include "player.h"
-#include "weapons.h"
-#include "gamerules.h"
-#include "animation.h"
+#include "combat/decals.h"
+#include "player/player.h"
+#include "weapons/weapons.h"
+#include "gamerules/gamerules.h"
+#include "ai/animation.h"
 #include <string>
-#include "server_support.h"
-#include "game.h"
-#include "server_sound.h"
-#include "observer.h"
-#include "item_inventory.h"
-#include "teleportdestination.h"
-#include "CSpawnPoints.h"
-#include "user_messages.h"
+#include "server/server_support.h"
+#include "gamerules/game.h"
+#include "sound/server_sound.h"
+#include "player/observer.h"
+#include "items/item_inventory.h"
+#include "world/teleportdestination.h"
+#include "server/CSpawnPoints.h"
+#include "server/user_messages.h"
 
 CBasePlayer *UTIL_PlayerBySteamId( const char *authId )
 {
@@ -3126,7 +3126,7 @@ void CSave :: WriteFunction( const char *pname, void **data, int count )
 {
 	const char *functionName;
 
-	functionName = NAME_FOR_FUNCTION( (uint32)*data );
+	functionName = NAME_FOR_FUNCTION( (uint32)(uintptr_t)*data );
 	if ( functionName )
 		BufferField( pname, strlen(functionName) + 1, functionName );
 	else

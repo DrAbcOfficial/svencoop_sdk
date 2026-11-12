@@ -18,7 +18,7 @@
 // Misc utility code
 //
 #ifndef ACTIVITY_H
-#include "activity.h"
+#include "ai/activity.h"
 #endif
 
 #ifndef ENGINECALLBACK_H
@@ -328,7 +328,7 @@ inline void			UTIL_CenterPrintAll( const char *msg_name, const char *param1 = NU
 class CBasePlayerItem;
 class CBasePlayer;
 
-#include "IPlayerInVolumeListener.h"
+#include "utils/IPlayerInVolumeListener.h"
 
 extern CBasePlayer *UTIL_PlayerBySteamId( const char *authId );
 extern CBasePlayer *UTIL_GetActivePlayer( int index );

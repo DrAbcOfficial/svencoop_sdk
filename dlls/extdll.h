@@ -28,7 +28,7 @@ typedef unsigned int string_t;				// from engine's pr_comp.h;
 typedef float vec_t;				// needed before including progdefs.h
 
 // Vector class
-#include "vector.h"
+#include "utils/vector.h"
 
 // Defining it as a (bogus) struct helps enforce type-checking
 #define vec3_t Vector

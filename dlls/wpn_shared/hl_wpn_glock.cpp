@@ -16,15 +16,15 @@
 #include "extdll.h"
 #include "util.h"
 #include "cbase.h"
-#include "monsters.h"
-#include "weapons.h"
-#include "player.h"
+#include "monsters/monsters.h"
+#include "weapons/weapons.h"
+#include "player/player.h"
 #include "weaponinfo.h"
 #include "event_flags.h"
 
-#include "CClassicMode.h"
-#include "game.h"
-#include "playerammo.h"
+#include "gamerules/CClassicMode.h"
+#include "gamerules/game.h"
+#include "player/playerammo.h"
 
 #undef PRECACHE_MODEL
 #define PRECACHE_MODEL( path ) UTIL_PrecacheModel( this, path )
