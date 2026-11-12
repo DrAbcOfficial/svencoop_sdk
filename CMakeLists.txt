@@ -3,9 +3,11 @@
 # Builds only the server module:
 #   * server.dll  (Windows, 32-bit)
 #   * hl_i386.so  (Linux, 32-bit)
+#   * server.so   (Linux, native 64-bit; SVENCOOP_NATIVE_64BIT=ON)
 #
 # The GoldSrc engine and the bundled server-side third-party dependencies are
-# 32-bit x86.
+# 32-bit x86. A native 64-bit Linux build is only meant as a syntax check by
+# the compiler; the resulting module cannot be loaded by the 32-bit engine.
 
 cmake_minimum_required(VERSION 3.20)
 
@@ -21,23 +23,48 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-option(SVENCOOP_WARNINGS    "Enable the compiler warning level used by the old projects" ON)
-option(SVENCOOP_ALLOW_64BIT "Allow a 64-bit Linux build (requires 64-bit dependencies)" OFF)
+option(SVENCOOP_WARNINGS     "Enable the compiler warning level used by the old projects" ON)
+option(SVENCOOP_ALLOW_64BIT  "Allow a 64-bit Linux build (requires 64-bit dependencies)" OFF)
+option(SVENCOOP_NATIVE_64BIT "Build a native 64-bit Linux module (x86_64/aarch64) for syntax validation only; it is not loadable by the 32-bit engine" OFF)
 
 # ---------------------------------------------------------------------------
 # Architecture checks
 # ---------------------------------------------------------------------------
-if(WIN32 AND NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
-    message(FATAL_ERROR
-        "This project is 32-bit only. Configure the Visual Studio generator with "
-        "'-A Win32' (e.g. cmake -S . -B build -G \"Visual Studio 17 2022\" -A Win32).")
+set(SVENCOOP_TARGET_64BIT FALSE)
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(SVENCOOP_TARGET_64BIT TRUE)
 endif()
 
-if(UNIX AND NOT APPLE AND CMAKE_SIZEOF_VOID_P EQUAL 8 AND NOT SVENCOOP_ALLOW_64BIT)
+# Target CPU family; used for the x86-only SIMD compile options and for
+# picking the AngelScript native calling convention sources.
+set(SVENCOOP_TARGET_ARCH "unknown")
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86|X86|AMD64|amd64|i[3-6]86|x86_64|X86_64)")
+    set(SVENCOOP_TARGET_ARCH "x86")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|ARM64|aarch64|AARCH64)")
+    set(SVENCOOP_TARGET_ARCH "arm64")
+endif()
+
+if(WIN32 AND SVENCOOP_TARGET_64BIT AND NOT SVENCOOP_NATIVE_64BIT)
     message(FATAL_ERROR
-        "GoldSrc and the bundled dependencies are 32-bit. Configure with the supplied "
-        "toolchain file: cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-linux-x86.cmake. "
-        "Set SVENCOOP_ALLOW_64BIT=ON only if you have 64-bit replacements for the server dependencies.")
+        "This project is 32-bit only. Configure the Visual Studio generator with "
+        "'-A Win32' (e.g. cmake -S . -B build -G \"Visual Studio 17 2022\" -A Win32), "
+        "or pass -DSVENCOOP_NATIVE_64BIT=ON for a 64-bit syntax-validation build.")
+endif()
+
+if(UNIX AND NOT APPLE AND SVENCOOP_TARGET_64BIT
+        AND NOT SVENCOOP_ALLOW_64BIT AND NOT SVENCOOP_NATIVE_64BIT)
+    message(FATAL_ERROR
+        "GoldSrc and the bundled dependencies are 32-bit. Either configure with the "
+        "supplied toolchain file: "
+        "cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-linux-x86.cmake "
+        "(needs 32-bit multilib), or pass -DSVENCOOP_NATIVE_64BIT=ON for a native "
+        "64-bit build that only validates the syntax and cannot run.")
+endif()
+
+if(SVENCOOP_TARGET_64BIT)
+    message(STATUS "Target: 64-bit (${SVENCOOP_TARGET_ARCH}); syntax-validation build")
+else()
+    message(STATUS "Target: 32-bit (${SVENCOOP_TARGET_ARCH})")
 endif()
 
 # ---------------------------------------------------------------------------
@@ -113,11 +140,21 @@ if(MSVC)
 endif()
 
 # Crypto++ selects its SIMD implementations at compile time on GCC/Clang.
+# The explicit instruction-set flags below are per-architecture: x86 needs its
+# extension flags, AArch64 needs the crypto extension for the ARMv8 paths
+# (Crypto++ enables them optimistically for GCC >= 4.8).
 if(NOT MSVC)
-    set_source_files_properties(external/cryptopp/gcm_simd.cpp      PROPERTIES COMPILE_OPTIONS "-mssse3;-mpclmul")
-    set_source_files_properties(external/cryptopp/rijndael_simd.cpp PROPERTIES COMPILE_OPTIONS "-msse4.1;-maes")
-    set_source_files_properties(external/cryptopp/sha_simd.cpp      PROPERTIES COMPILE_OPTIONS "-msse4.2;-msha")
-    set_source_files_properties(external/cryptopp/sse_simd.cpp      PROPERTIES COMPILE_OPTIONS "-msse2")
+    if(SVENCOOP_TARGET_ARCH STREQUAL "x86")
+        set_source_files_properties(external/cryptopp/gcm_simd.cpp      PROPERTIES COMPILE_OPTIONS "-mssse3;-mpclmul")
+        set_source_files_properties(external/cryptopp/rijndael_simd.cpp PROPERTIES COMPILE_OPTIONS "-msse4.1;-maes")
+        set_source_files_properties(external/cryptopp/sha_simd.cpp      PROPERTIES COMPILE_OPTIONS "-msse4.2;-msha")
+        set_source_files_properties(external/cryptopp/sse_simd.cpp      PROPERTIES COMPILE_OPTIONS "-msse2")
+    elseif(SVENCOOP_TARGET_ARCH STREQUAL "arm64")
+        set_source_files_properties(external/cryptopp/gcm_simd.cpp      PROPERTIES COMPILE_OPTIONS "-march=armv8-a+crypto")
+        set_source_files_properties(external/cryptopp/rijndael_simd.cpp PROPERTIES COMPILE_OPTIONS "-march=armv8-a+crypto")
+        set_source_files_properties(external/cryptopp/sha_simd.cpp      PROPERTIES COMPILE_OPTIONS "-march=armv8-a+crypto")
+        set_source_files_properties(external/cryptopp/sse_simd.cpp      PROPERTIES COMPILE_OPTIONS "-march=armv8-a+crypto")
+    endif()
 endif()
 
 # ---------------------------------------------------------------------------
@@ -237,6 +274,24 @@ target_include_directories(svencoop_server PRIVATE
 target_sources(svencoop_server PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/compat/cryptopp_client_templates.cpp
 )
+
+# On a 64-bit target AngelScript auto-selects a different native calling
+# convention (AS_X64_GCC / AS_ARM64), which needs its matching callfunc
+# sources. Unknown architectures fall back to AS_MAX_PORTABILITY and use the
+# portable implementation already present in as_callfunc.cpp.
+if(UNIX AND NOT APPLE AND SVENCOOP_TARGET_64BIT)
+    if(SVENCOOP_TARGET_ARCH STREQUAL "arm64")
+        enable_language(ASM)
+        target_sources(svencoop_server PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/external/angelscript/sdk/angelscript/source/as_callfunc_arm64.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/external/angelscript/sdk/angelscript/source/as_callfunc_arm64_gcc.S
+        )
+    elseif(SVENCOOP_TARGET_ARCH STREQUAL "x86")
+        target_sources(svencoop_server PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/external/angelscript/sdk/angelscript/source/as_callfunc_x64_gcc.cpp
+        )
+    endif()
+endif()
 target_compile_definitions(svencoop_server PRIVATE
     ${SVENCOOP_COMMON_DEFINITIONS}
     VALVE_DLL
@@ -271,10 +326,17 @@ else()
     # CPlayerDatabase uses the system libcurl on non-Windows platforms.
     find_package(CURL REQUIRED)
     target_link_libraries(svencoop_server PRIVATE m dl pthread CURL::libcurl)
-    # Keep the file names produced by the former Linux Makefiles.
-    set_target_properties(svencoop_server PROPERTIES
-        PREFIX ""
-        OUTPUT_NAME "hl_i386")
+    if(SVENCOOP_TARGET_64BIT)
+        # Native 64-bit build: name it like the Windows module.
+        set_target_properties(svencoop_server PROPERTIES
+            PREFIX ""
+            OUTPUT_NAME "server")
+    else()
+        # Keep the file names produced by the former Linux Makefiles.
+        set_target_properties(svencoop_server PROPERTIES
+            PREFIX ""
+            OUTPUT_NAME "hl_i386")
+    endif()
     if(APPLE)
         set_target_properties(svencoop_server PROPERTIES SUFFIX ".dylib")
     endif()

@@ -935,7 +935,13 @@ bool CASReflection::SetArguments(asIScriptFunction *function, asIScriptContext *
 
 bool CASReflection::SetArguments(asIScriptFunction *function, asIScriptContext *context, va_list arguments)
 {
+	// va_list is a pointer type on the x86 ABIs, but a struct on AArch64,
+	// where it cannot be null-checked.
+#if defined( __GNUC__ ) && (defined( __i386__ ) || defined( __x86_64__ ))
 	if (!function || !context || !arguments)
+#else
+	if (!function || !context)
+#endif
 		return false;
 
 	unsigned int count = function->GetParamCount();
