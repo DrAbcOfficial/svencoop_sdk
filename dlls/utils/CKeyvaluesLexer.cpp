@@ -5,21 +5,20 @@
 #include <ctype.h>
 
 CKeyvaluesLexer::CKeyvaluesLexer(const CKeyvaluesLexerSettings &settings)
-	: m_Input(0), m_pszReadPosition(NULL), m_TokenType(TOKEN_NONE), m_Settings(settings)
+	: m_pszReadPosition(NULL), m_TokenType(TOKEN_NONE), m_Settings(settings)
 {
 }
 
-CKeyvaluesLexer::CKeyvaluesLexer(CMemory<unsigned int> &input,
+CKeyvaluesLexer::CKeyvaluesLexer(std::vector<char> input,
 	const CKeyvaluesLexerSettings &settings)
-	: m_Input(0), m_TokenType(TOKEN_NONE), m_Settings(settings)
+	: m_Input(std::move(input)), m_TokenType(TOKEN_NONE), m_Settings(settings)
 {
-	m_Input.Swap(input);
-	m_pszReadPosition = m_Input.Data();
+	m_pszReadPosition = m_Input.data();
 }
 
 CKeyvaluesLexer::CKeyvaluesLexer(const char *fileName,
 	const CKeyvaluesLexerSettings &settings)
-	: m_Input(0)
+	: m_pszReadPosition(NULL), m_TokenType(TOKEN_NONE), m_Settings(settings)
 {
 	// The single-path constructor constructs a separate temporary lexer
 	CKeyvaluesLexer(fileName, "GAME", settings);
@@ -27,7 +26,7 @@ CKeyvaluesLexer::CKeyvaluesLexer(const char *fileName,
 
 CKeyvaluesLexer::CKeyvaluesLexer(const char *fileName, const char *pathID,
 	const CKeyvaluesLexerSettings &settings)
-	: m_Input(0), m_pszReadPosition(NULL), m_TokenType(TOKEN_NONE), m_Settings(settings)
+	: m_pszReadPosition(NULL), m_TokenType(TOKEN_NONE), m_Settings(settings)
 {
 	if (!fileName || !*fileName)
 		return;
@@ -38,15 +37,15 @@ CKeyvaluesLexer::CKeyvaluesLexer(const char *fileName, const char *pathID,
 		return;
 
 	unsigned int size = g_pFileSystem->Size(file);
-	CMemory<unsigned int> input(size);
-	int bytesRead = g_pFileSystem->Read(input.Data(), size, file);
+	std::vector<char> input(size);
+	int bytesRead = size > 0 ? g_pFileSystem->Read(input.data(), size, file) : 0;
 
 	g_pFileSystem->Close(file);
 
 	if (bytesRead == size)
 	{
-		m_Input.Swap(input);
-		m_pszReadPosition = m_Input.Data();
+		m_Input = std::move(input);
+		m_pszReadPosition = m_Input.data();
 	}
 }
 
@@ -56,17 +55,17 @@ CKeyvaluesLexer::~CKeyvaluesLexer()
 
 bool CKeyvaluesLexer::HasInputData(void) const
 {
-	return m_Input.Data() != NULL;
+	return !m_Input.empty();
 }
 
 unsigned int CKeyvaluesLexer::GetReadOffset(void) const
 {
-	return m_pszReadPosition ? m_pszReadPosition - m_Input.Data() : 0;
+	return m_pszReadPosition ? static_cast<unsigned int>(m_pszReadPosition - m_Input.data()) : 0;
 }
 
 void CKeyvaluesLexer::Reset(void)
 {
-	m_pszReadPosition = m_Input.Data();
+	m_pszReadPosition = m_Input.data();
 	m_TokenType = TOKEN_NONE;
 	m_Token = "";
 }
@@ -76,7 +75,7 @@ void CKeyvaluesLexer::Swap(CKeyvaluesLexer &lexer)
 	if (this == &lexer)
 		return;
 
-	m_Input.Swap(lexer.m_Input);
+	m_Input.swap(lexer.m_Input);
 
 	const char *position = m_pszReadPosition;
 	TokenType type = m_TokenType;
@@ -95,7 +94,7 @@ void CKeyvaluesLexer::Swap(CKeyvaluesLexer &lexer)
 
 bool CKeyvaluesLexer::IsValidReadPosition(void)
 {
-	return (unsigned int)(m_pszReadPosition - m_Input.Data()) < m_Input.Size();
+	return static_cast<unsigned int>(m_pszReadPosition - m_Input.data()) < m_Input.size();
 }
 
 void CKeyvaluesLexer::SkipWhitespace(void)
@@ -111,7 +110,7 @@ bool CKeyvaluesLexer::SkipCommentLine(void)
 	if (!IsValidReadPosition())
 		return false;
 
-	if ( m_Input.Size() - GetReadOffset() < 2 ||
+	if ( m_Input.size() - GetReadOffset() < 2 ||
 	     m_pszReadPosition[0] != '/' || m_pszReadPosition[1] != '/' )
 		return false;
 

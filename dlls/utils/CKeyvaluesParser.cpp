@@ -7,9 +7,9 @@ CBaseKeyvaluesParser::CBaseKeyvaluesParser(const CKeyvaluesParserSettings &setti
 	Construct();
 }
 
-CBaseKeyvaluesParser::CBaseKeyvaluesParser(CMemory<unsigned int> &input,
+CBaseKeyvaluesParser::CBaseKeyvaluesParser(std::vector<char> input,
 	const CKeyvaluesParserSettings &settings, bool iterative)
-	: m_Lexer(input, settings), m_iDepth(0), m_Settings(settings), m_bIterative(iterative)
+	: m_Lexer(std::move(input), settings), m_iDepth(0), m_Settings(settings), m_bIterative(iterative)
 {
 	Construct();
 }
@@ -39,9 +39,9 @@ unsigned int CBaseKeyvaluesParser::GetReadOffset(void) const
 	return m_Lexer.GetReadOffset();
 }
 
-void CBaseKeyvaluesParser::Initialize(CMemory<unsigned int> &input)
+void CBaseKeyvaluesParser::Initialize(std::vector<char> input)
 {
-	CKeyvaluesLexer lexer(input, m_Settings);
+	CKeyvaluesLexer lexer(std::move(input), m_Settings);
 
 	m_Lexer.Swap(lexer);
 	m_iDepth = m_bIterative ? 1 : 0;
@@ -181,9 +181,9 @@ CKeyvaluesParser::CKeyvaluesParser(const CKeyvaluesParserSettings &settings)
 {
 }
 
-CKeyvaluesParser::CKeyvaluesParser(CMemory<unsigned int> &input,
+CKeyvaluesParser::CKeyvaluesParser(std::vector<char> input,
 	const CKeyvaluesParserSettings &settings)
-	: CBaseKeyvaluesParser(input, settings, false)
+	: CBaseKeyvaluesParser(std::move(input), settings, false)
 {
 }
 
@@ -199,7 +199,7 @@ CKeyvaluesParser::CKeyvaluesParser(const char *fileName, const char *pathID,
 {
 }
 
-void CKeyvaluesParser::Initialize(CMemory<unsigned int> &input)
+void CKeyvaluesParser::Initialize(std::vector<char> input)
 {
 	CBaseKeyvaluesParser::Initialize(input);
 	m_pKeyvalues.reset();
@@ -221,9 +221,9 @@ CIterativeKeyvaluesParser::CIterativeKeyvaluesParser(const CKeyvaluesParserSetti
 {
 }
 
-CIterativeKeyvaluesParser::CIterativeKeyvaluesParser(CMemory<unsigned int> &input,
+CIterativeKeyvaluesParser::CIterativeKeyvaluesParser(std::vector<char> input,
 	const CKeyvaluesParserSettings &settings)
-	: CBaseKeyvaluesParser(input, settings, true)
+	: CBaseKeyvaluesParser(std::move(input), settings, true)
 {
 }
 

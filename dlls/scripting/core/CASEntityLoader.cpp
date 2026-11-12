@@ -115,8 +115,7 @@ bool CASEntityLoader::LoadFromFile( const CString &fileName, const Vector &offse
 		return false;
 
 	FileHandle_t file = g_pFileSystem->Open( path, "r", "GAME" );
-	char *buffer = NULL;
-	unsigned int bytesRead = 0;
+	std::vector<char> buffer;
 	bool read = false;
 
 	if ( file )
@@ -128,22 +127,23 @@ bool CASEntityLoader::LoadFromFile( const CString &fileName, const Vector &offse
 		unsigned int size = g_pFileSystem->Tell( file );
 
 		g_pFileSystem->Seek( file, position, FILESYSTEM_SEEK_HEAD );
-		buffer = new char[size + 1];
-		bytesRead = g_pFileSystem->Read( buffer, size, file );
+		buffer.resize( size + 1 );
+		int bytesRead = g_pFileSystem->Read( buffer.data(), size, file );
 		read = bytesRead != 0 || size == 0;
 		g_pFileSystem->Close( file );
+
+		if ( bytesRead > 0 )
+			buffer.resize( bytesRead );
 	}
 
 	if ( !read )
 	{
-		delete[] buffer;
 		CASLog::GetInstance()->Error( AS_LOG_DEFAULT,
 		                              "CEntityLoader::LoadFromFile: file '%s' does not exist!\n", fileName.Data() );
 		return false;
 	}
 
-	CMemory<unsigned int> input( buffer, bytesRead, true );
-	CKeyvaluesParser parser( input, CKeyvaluesParserSettings( true, true, true, false ) );
+	CKeyvaluesParser parser( std::move( buffer ), CKeyvaluesParserSettings( true, true, true, false ) );
 
 	if ( parser.Parse() == CBaseKeyvaluesParser::PARSE_SUCCESS )
 	{

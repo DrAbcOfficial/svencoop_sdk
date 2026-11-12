@@ -1,10 +1,10 @@
 #ifndef BSPFILE_H
 #define BSPFILE_H
 
-#include "utils/CMemory.h"
+#include <vector>
 
 struct dheader_s;
 
-dheader_s *LoadBSPFile(const char *fileName, CMemory<unsigned int> &memory);
+dheader_s *LoadBSPFile(const char *fileName, std::vector<char> &memory);
 
 #endif

@@ -938,7 +938,7 @@ void CWorld :: Precache( void )
 	InitBodyQue();
 
 	CString mapPath;
-	CMemory<unsigned int> mapData;
+	std::vector<char> mapData;
 
 	mapPath.Format( "maps/%s.bsp", STRING( gpGlobals->mapname ) );
 
@@ -950,7 +950,7 @@ void CWorld :: Precache( void )
 		CBaseEntityPreprocessor *preprocessors[] = { &scripts };
 		CMapPreprocessor preprocessor( preprocessors, ARRAYSIZE( preprocessors ) );
 
-		preprocessor.Preprocess( mapData.Data() + header->lumps[LUMP_ENTITIES].fileofs,
+		preprocessor.Preprocess( mapData.data() + header->lumps[LUMP_ENTITIES].fileofs,
 			header->lumps[LUMP_ENTITIES].filelen );
 	}
 	else

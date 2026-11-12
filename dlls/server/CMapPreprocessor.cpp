@@ -48,10 +48,9 @@ void CMapPreprocessor::NotifyStateChanged(PreprocessState state)
 
 void CMapPreprocessor::Preprocess(const char *data, unsigned int size)
 {
-	CMemory<unsigned int> input(data, size);
 	std::shared_ptr<CKvBlockNode> entity;
 	CKeyvaluesParserSettings settings(true, true, true, false);
-	CIterativeKeyvaluesParser parser(input, settings);
+	CIterativeKeyvaluesParser parser(std::vector<char>(data, data + size), settings);
 
 	NotifyStateChanged(PREPROCESS_BEGIN);
 

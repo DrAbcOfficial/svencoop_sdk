@@ -1,6 +1,8 @@
 #ifndef CKEYVALUESPARSER_H
 #define CKEYVALUESPARSER_H
 
+#include <vector>
+
 #include "utils/CKeyvaluesLexer.h"
 #include "utils/CKeyvalues.h"
 
@@ -31,7 +33,7 @@ public:
 	};
 
 	CBaseKeyvaluesParser(const CKeyvaluesParserSettings &settings, bool iterative);
-	CBaseKeyvaluesParser(CMemory<unsigned int> &input,
+	CBaseKeyvaluesParser(std::vector<char> input,
 		const CKeyvaluesParserSettings &settings, bool iterative);
 	CBaseKeyvaluesParser(const char *fileName,
 		const CKeyvaluesParserSettings &settings, bool iterative);
@@ -40,7 +42,7 @@ public:
 
 	void Construct(void);
 	unsigned int GetReadOffset(void) const;
-	void Initialize(CMemory<unsigned int> &input);
+	void Initialize(std::vector<char> input);
 	ParseResult GetResultFor(CKeyvaluesLexer::ReadResult result, bool unexpectedEnd) const;
 	ParseResult ParseBlock(std::shared_ptr<CKvBlockNode> &block, bool root);
 	ParseResult ParseNext(std::shared_ptr<CKeyvalueNode> &node, bool read);
@@ -59,14 +61,14 @@ class CKeyvaluesParser : public CBaseKeyvaluesParser
 {
 public:
 	CKeyvaluesParser(const CKeyvaluesParserSettings &settings = CKeyvaluesParserSettings());
-	CKeyvaluesParser(CMemory<unsigned int> &input,
+	CKeyvaluesParser(std::vector<char> input,
 		const CKeyvaluesParserSettings &settings = CKeyvaluesParserSettings());
 	CKeyvaluesParser(const char *fileName,
 		const CKeyvaluesParserSettings &settings = CKeyvaluesParserSettings());
 	CKeyvaluesParser(const char *fileName, const char *pathID,
 		const CKeyvaluesParserSettings &settings = CKeyvaluesParserSettings());
 
-	void Initialize(CMemory<unsigned int> &input);
+	void Initialize(std::vector<char> input);
 	ParseResult Parse(void);
 	const std::shared_ptr<CKeyvalues> &GetKeyvalues(void) const { return m_pKeyvalues; }
 
@@ -78,7 +80,7 @@ class CIterativeKeyvaluesParser : public CBaseKeyvaluesParser
 {
 public:
 	CIterativeKeyvaluesParser(const CKeyvaluesParserSettings &settings = CKeyvaluesParserSettings());
-	CIterativeKeyvaluesParser(CMemory<unsigned int> &input,
+	CIterativeKeyvaluesParser(std::vector<char> input,
 		const CKeyvaluesParserSettings &settings = CKeyvaluesParserSettings());
 
 	ParseResult ParseBlock(std::shared_ptr<CKvBlockNode> &block);

@@ -1,7 +1,8 @@
 #ifndef CKEYVALUESLEXER_H
 #define CKEYVALUESLEXER_H
 
-#include "utils/CMemory.h"
+#include <vector>
+
 #include "CString.h"
 
 struct CKeyvaluesLexerSettings
@@ -39,7 +40,7 @@ public:
 	};
 
 	CKeyvaluesLexer(const CKeyvaluesLexerSettings &settings = CKeyvaluesLexerSettings());
-	CKeyvaluesLexer(CMemory<unsigned int> &input,
+	CKeyvaluesLexer(std::vector<char> input,
 		const CKeyvaluesLexerSettings &settings = CKeyvaluesLexerSettings());
 	CKeyvaluesLexer(const char *fileName,
 		const CKeyvaluesLexerSettings &settings = CKeyvaluesLexerSettings());
@@ -63,7 +64,7 @@ public:
 	const CString &GetToken(void) const { return m_Token; }
 
 private:
-	CMemory<unsigned int>		m_Input;
+	std::vector<char>			m_Input;
 	const char					*m_pszReadPosition;
 	TokenType					m_TokenType;
 	CString						m_Token;

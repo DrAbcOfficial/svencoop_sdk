@@ -2,7 +2,7 @@
 #include "server/server_filesystem.h"
 #include "utils/BSPFile.h"
 
-dheader_s *LoadBSPFile(const char *fileName, CMemory<unsigned int> &memory)
+dheader_s *LoadBSPFile(const char *fileName, std::vector<char> &memory)
 {
 	FileHandle_t file = OpenGameFile(fileName, "rb");
 
@@ -17,20 +17,17 @@ dheader_s *LoadBSPFile(const char *fileName, CMemory<unsigned int> &memory)
 
 	g_pFileSystem->Seek(file, position, FILESYSTEM_SEEK_HEAD);
 
-	char *data = new char[size + 1];
-	int bytesRead = g_pFileSystem->Read(data, size, file);
+	memory.resize(size);
+	int bytesRead = g_pFileSystem->Read(memory.data(), size, file);
 	dheader_s *header = NULL;
 
 	if (bytesRead == size)
 	{
-		CMemory<unsigned int> input(data, size, true);
-
-		memory.Swap(input);
-		header = (dheader_s *)memory.Data();
+		header = reinterpret_cast<dheader_s *>(memory.data());
 	}
 	else
 	{
-		delete[] data;
+		memory.clear();
 	}
 
 	g_pFileSystem->Close(file);
