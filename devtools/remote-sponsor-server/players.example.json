@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "players": [
+    {
+      "auth_id": "STEAM_0:0:100000001",
+      "name": "Example Donor",
+      "description": "Example donor (electric crowbar)",
+      "level": 1
+    },
+    {
+      "auth_id": "STEAM_0:0:100000002",
+      "name": "Example Staff",
+      "description": "Example staff",
+      "level": 6
+    },
+    {
+      "auth_id": "STEAM_0:0:100000003",
+      "name": "Example Banned",
+      "description": "Example ban",
+      "level": -1
+    }
+  ]
+}

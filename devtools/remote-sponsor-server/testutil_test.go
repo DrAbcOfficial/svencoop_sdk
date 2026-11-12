@@ -7,12 +7,12 @@ import (
 	"crypto/rc4"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/json"
 	"encoding/pem"
 	"math/big"
 	"net"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
@@ -21,21 +21,26 @@ const testAdminToken = "0123456789abcdef"
 
 var testNewline = string([]byte{0x0A})
 
-func csvLine(fields ...string) string {
-	quote := string([]byte{0x22})
+func writeJSONStore(t *testing.T, path string, players ...Player) {
+	t.Helper()
 
-	for i := range fields {
-		fields[i] = quote + fields[i] + quote
+	data, err := json.MarshalIndent(dataFile{Version: dataFormatVersion, Players: players}, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal JSON: %v", err)
 	}
 
-	return strings.Join(fields, ",") + testNewline
+	data = append(data, []byte(testNewline)...)
+
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write JSON: %v", err)
+	}
 }
 
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
 
 	return &Store{
-		path: filepath.Join(t.TempDir(), "players.csv"),
+		path: filepath.Join(t.TempDir(), "players.json"),
 		players: map[string]Player{
 			"STEAM_0:0:100000001": {
 				AuthID:      "STEAM_0:0:100000001",

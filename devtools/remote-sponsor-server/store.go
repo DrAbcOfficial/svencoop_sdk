@@ -1,9 +1,8 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
-	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,11 +10,12 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"unicode/utf8"
 )
+
+const dataFormatVersion = 1
 
 // Player is one row of the sponsor/ban list.
 type Player struct {
@@ -25,7 +25,13 @@ type Player struct {
 	Level       int    `json:"level"`
 }
 
-// Store owns the in-memory list and keeps the CSV file in sync.
+// dataFile is the on-disk JSON document.
+type dataFile struct {
+	Version int      `json:"version"`
+	Players []Player `json:"players"`
+}
+
+// Store owns the in-memory list and keeps the JSON file in sync.
 //
 // writeMu serializes reloads and mutations so a reload cannot replace a newer
 // in-memory list written by a concurrent admin request. mu protects the map
@@ -38,7 +44,7 @@ type Store struct {
 }
 
 func NewStore(path string) (*Store, error) {
-	players, err := loadCSV(path)
+	players, err := loadJSON(path)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			return nil, err
@@ -50,12 +56,12 @@ func NewStore(path string) (*Store, error) {
 	return &Store{path: path, players: players}, nil
 }
 
-// Reload replaces the in-memory list with the contents of the CSV file.
+// Reload replaces the in-memory list with the contents of the JSON file.
 func (s *Store) Reload() error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 
-	players, err := loadCSV(s.path)
+	players, err := loadJSON(s.path)
 	if err != nil {
 		return err
 	}
@@ -67,66 +73,48 @@ func (s *Store) Reload() error {
 	return nil
 }
 
-func loadCSV(path string) (map[string]Player, error) {
-	file, err := os.Open(path)
+func loadJSON(path string) (map[string]Player, error) {
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
 
-	reader := bufio.NewReader(file)
+	// Tolerate a UTF-8 BOM, which some editors add.
+	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
 
-	// Tolerate a UTF-8 BOM, which some spreadsheet exports add.
-	if prefix, err := reader.Peek(3); err == nil && bytes.Equal(prefix, []byte{0xEF, 0xBB, 0xBF}) {
-		if _, err := reader.Discard(3); err != nil {
-			return nil, err
-		}
+	var file dataFile
+
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&file); err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
 
-	csvReader := csv.NewReader(reader)
-	csvReader.FieldsPerRecord = 4
-	csvReader.TrimLeadingSpace = true
+	var extra any
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("read %s: unexpected trailing data", path)
+	}
 
-	players := make(map[string]Player)
-	rowNumber := 0
+	if file.Version != dataFormatVersion {
+		return nil, fmt.Errorf("read %s: unsupported version %d (expected %d)", path, file.Version, dataFormatVersion)
+	}
 
-	for {
-		rowNumber++
+	players := make(map[string]Player, len(file.Players))
 
-		record, err := csvReader.Read()
-		if errors.Is(err, io.EOF) {
-			break
-		}
+	for index, player := range file.Players {
+		player, err := validatePlayer(player)
 		if err != nil {
-			return nil, fmt.Errorf("read %s row %d: %w", path, rowNumber, err)
-		}
-
-		player, err := parsePlayer(record[0], record[1], record[2], record[3])
-		if err != nil {
-			return nil, fmt.Errorf("read %s row %d: %w", path, rowNumber, err)
+			return nil, fmt.Errorf("read %s player %d: %w", path, index, err)
 		}
 		if _, exists := players[player.AuthID]; exists {
-			return nil, fmt.Errorf("read %s row %d: duplicate auth_id %q", path, rowNumber, player.AuthID)
+			return nil, fmt.Errorf("read %s player %d: duplicate auth_id %q", path, index, player.AuthID)
 		}
 
 		players[player.AuthID] = player
 	}
 
 	return players, nil
-}
-
-func parsePlayer(authID, name, description, levelText string) (Player, error) {
-	level, err := strconv.Atoi(strings.TrimSpace(levelText))
-	if err != nil {
-		return Player{}, fmt.Errorf("level must be a whole number")
-	}
-
-	return validatePlayer(Player{
-		AuthID:      authID,
-		Name:        name,
-		Description: description,
-		Level:       level,
-	})
 }
 
 func validatePlayer(player Player) (Player, error) {
@@ -190,7 +178,7 @@ func (s *Store) saveLocked() error {
 		return err
 	}
 
-	tempFile, err := os.CreateTemp(directory, ".players-*.csv")
+	tempFile, err := os.CreateTemp(directory, ".players-*.json")
 	if err != nil {
 		return err
 	}
@@ -198,30 +186,19 @@ func (s *Store) saveLocked() error {
 
 	defer os.Remove(tempName)
 
-	writer := csv.NewWriter(tempFile)
-	authIDs := make([]string, 0, len(s.players))
-
-	for authID := range s.players {
-		authIDs = append(authIDs, authID)
+	players := make([]Player, 0, len(s.players))
+	for _, player := range s.players {
+		players = append(players, player)
 	}
-	sort.Strings(authIDs)
+	sort.Slice(players, func(i, j int) bool {
+		return players[i].AuthID < players[j].AuthID
+	})
 
-	for _, authID := range authIDs {
-		player := s.players[authID]
+	encoder := json.NewEncoder(tempFile)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
 
-		if err := writer.Write([]string{
-			player.AuthID,
-			player.Name,
-			player.Description,
-			strconv.Itoa(player.Level),
-		}); err != nil {
-			tempFile.Close()
-			return err
-		}
-	}
-
-	writer.Flush()
-	if err := writer.Error(); err != nil {
+	if err := encoder.Encode(dataFile{Version: dataFormatVersion, Players: players}); err != nil {
 		tempFile.Close()
 		return err
 	}

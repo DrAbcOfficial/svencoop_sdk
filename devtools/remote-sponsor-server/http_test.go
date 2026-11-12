@@ -277,7 +277,7 @@ func TestAdminReload(t *testing.T) {
 		t.Fatalf("status = %d, want %d (%s)", recorder.Code, http.StatusOK, recorder.Body.String())
 	}
 
-	// The store rewrote the CSV on upsert, so reload keeps all three rows.
+	// The store rewrote the JSON file on upsert, so reload keeps all three rows.
 	if app.store.Count() != 3 {
 		t.Fatalf("count after reload = %d, want 3", app.store.Count())
 	}

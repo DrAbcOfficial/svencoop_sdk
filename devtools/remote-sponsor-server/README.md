@@ -2,7 +2,7 @@
 
 This directory contains a self-hosted implementation of the Sven Co-op player
 extras service used by `CPlayerDatabase`. It speaks the same RC4-protected
-wire format as the game DLL, stores its list in a CSV file, serves HTTP or
+wire format as the game DLL, stores its list in a JSON file, serves HTTP or
 HTTPS, and exposes an authenticated admin API.
 
 The old built-in sponsor/ban list was removed from the game DLL. Servers now
@@ -36,7 +36,7 @@ echo 'change-me-0123456789' > admin-token
 chmod 600 admin-token
 ./remote-sponsor-server \
   -listen 127.0.0.1:8080 \
-  -list players.csv \
+  -list players.json \
   -admin-token-file admin-token
 ```
 
@@ -52,18 +52,18 @@ to the canonical HTTPS URL:
   -hsts \
   -http-listen :80 \
   -public-url https://sponsor.example.com \
-  -list players.csv \
+  -list players.json \
   -admin-token-file /etc/remote-sponsor/admin-token
 ```
 
 The certificate and key are re-read automatically when their size or
 modification time changes, so renewal does not require a restart.
 
-The server starts with an empty list if `players.csv` does not exist yet.
-Copy `players.example.csv` to `players.csv` for a quick smoke test:
+The server starts with an empty list if `players.json` does not exist yet.
+Copy `players.example.json` to `players.json` for a quick smoke test:
 
 ```sh
-cp players.example.csv players.csv
+cp players.example.json players.json
 ```
 
 ## Flags
@@ -73,7 +73,7 @@ cp players.example.csv players.csv
 | `-listen` | `:8080` | Main listen address. Serves HTTPS when both TLS flags are set. |
 | `-http-listen` | empty | Optional plain HTTP address that permanently redirects to `-public-url`. Requires TLS and `-public-url`. |
 | `-public-url` | empty | Absolute `https://` URL used by `-http-listen` for redirects. |
-| `-list` | `players.csv` | CSV file with `auth_id,name,description,level` rows. |
+| `-list` | `players.json` | JSON file containing a `version` and a `players` array. |
 | `-key` | built-in 64-byte key | RC4 key. Must match the game DLL. |
 | `-timezone` | `UTC` | Timezone field returned to the game (max 7 bytes). |
 | `-path` | `/playerextras.php` | Public lookup endpoint path. It cannot be under `/admin`. |
@@ -91,14 +91,34 @@ cp players.example.csv players.csv
 The built-in key is the one hard-coded in `dlls/server/donid.cpp`. If you
 change it with `-key`, change the DLL too and rebuild.
 
-## CSV format
+## JSON format
 
-The file has no header and exactly four columns:
+The file is a versioned object with a `players` array:
 
-```csv
-"STEAM_0:0:100000001","Example Donor","Example donor","1"
-"STEAM_0:0:100000003","Example Banned","Example ban","-1"
+```json
+{
+  "version": 1,
+  "players": [
+    {
+      "auth_id": "STEAM_0:0:100000001",
+      "name": "Example Donor",
+      "description": "Example donor (electric crowbar)",
+      "level": 1
+    },
+    {
+      "auth_id": "STEAM_0:0:100000003",
+      "name": "Example Banned",
+      "description": "Example ban",
+      "level": -1
+    }
+  ]
+}
 ```
+
+`version` must be `1`. Unknown fields, duplicate `auth_id` values and
+unsupported versions are rejected at startup. The file is rewritten atomically
+on every admin mutation. The old CSV format is no longer read; convert an
+existing list to this JSON document manually.
 
 | Level | Meaning |
 | --- | --- |
@@ -183,7 +203,7 @@ curl -X POST https://sponsor.example.com/admin/players \
 curl -X DELETE https://sponsor.example.com/admin/players/STEAM_0:0:100000002 \
   -H "Authorization: Bearer change-me-0123456789"
 
-# Reload the CSV from disk
+# Reload the JSON file from disk
 curl -X POST https://sponsor.example.com/admin/reload \
   -H "Authorization: Bearer change-me-0123456789"
 ```
@@ -195,6 +215,8 @@ curl -X POST https://sponsor.example.com/admin/reload \
 - Run behind a firewall or reverse proxy; only the lookup path and
   `/healthz` need to be public.
 - Use `-admin-token-file` with mode `0600` rather than `-admin-token`.
+- The JSON file and its directory must be writable by the server process for
+  admin mutations. In Docker, mount a writable volume at `/data`.
 - Use `-max-concurrent` to bound resource usage under load. The store is
   safe for concurrent lookups, edits and reloads.
 - The server shuts down gracefully on `SIGINT`/`SIGTERM` and stops accepting
@@ -216,7 +238,7 @@ ExecStart=/opt/remote-sponsor/remote-sponsor-server \
   -tls-key /etc/remote-sponsor/privkey.pem \
   -http-listen :80 \
   -public-url https://sponsor.example.com \
-  -list /var/lib/remote-sponsor/players.csv \
+  -list /var/lib/remote-sponsor/players.json \
   -admin-token-file /etc/remote-sponsor/admin-token
 Restart=on-failure
 User=remote-sponsor

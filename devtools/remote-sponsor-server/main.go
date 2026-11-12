@@ -1,6 +1,6 @@
 // Command remote-sponsor-server is a Sven Co-op player extras
 // (sponsor/ban list) server. It speaks the same RC4-protected protocol as the
-// server DLL, stores its list in a CSV file, serves HTTPS, and exposes an
+// server DLL, stores its list in a JSON file, serves HTTPS, and exposes an
 // authenticated admin API.
 package main
 
@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	serverVersion = "1.1.0"
+	serverVersion = "1.2.0"
 
 	defaultKey = "j.6v,A?cPk4)zL[89$~GTBM@fmR-(U{;u&3qY]eh/p}sbX#Z*75Jd=nE%DC_:xiK"
 
@@ -37,7 +37,7 @@ const (
 	defaultLookupPath     = "/playerextras.php"
 	defaultTimeZone       = "UTC"
 	defaultListenAddress  = ":8080"
-	defaultListFileName   = "players.csv"
+	defaultListFileName   = "players.json"
 	defaultTLSMinVersion  = "1.2"
 	defaultShutdownPeriod = 15 * time.Second
 
@@ -63,7 +63,7 @@ func main() {
 	listen := flag.String("listen", defaultListenAddress, "main listen address (HTTP, or HTTPS when TLS flags are set)")
 	httpListen := flag.String("http-listen", "", "optional plain HTTP listen address that redirects to -public-url; requires TLS")
 	publicURLFlag := flag.String("public-url", "", "absolute https URL used by -http-listen for redirects")
-	listPath := flag.String("list", defaultListFileName, "CSV file with auth_id,name,description,level rows")
+	listPath := flag.String("list", defaultListFileName, "JSON file with the sponsor/ban list")
 	key := flag.String("key", defaultKey, "RC4 key shared with the game DLL (64 characters by default)")
 	timeZone := flag.String("timezone", defaultTimeZone, "timezone field returned to the game (at most 7 bytes)")
 	lookupPath := flag.String("path", defaultLookupPath, "HTTP path used for public player lookups")

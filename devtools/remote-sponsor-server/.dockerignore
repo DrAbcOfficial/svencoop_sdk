@@ -1,6 +1,6 @@
 remote-sponsor-server
 remote-sponsor-server.exe
-players.csv
+players.json
 *.log
 Dockerfile
 .dockerignore

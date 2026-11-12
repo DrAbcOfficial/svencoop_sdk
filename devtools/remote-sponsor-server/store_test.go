@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,7 +10,7 @@ import (
 )
 
 func TestStoreCRUD(t *testing.T) {
-	store, err := NewStore(filepath.Join(t.TempDir(), "players.csv"))
+	store, err := NewStore(filepath.Join(t.TempDir(), "players.json"))
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
 	}
@@ -58,7 +59,7 @@ func TestStoreCRUD(t *testing.T) {
 }
 
 func TestStorePersistsToDisk(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "players.csv")
+	path := filepath.Join(t.TempDir(), "players.json")
 	store, err := NewStore(path)
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
@@ -79,8 +80,36 @@ func TestStorePersistsToDisk(t *testing.T) {
 	}
 }
 
+func TestStoreWritesVersionedJSON(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "players.json")
+	store, err := NewStore(path)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+
+	if _, _, err := store.Upsert(Player{AuthID: "STEAM_0:0:3", Name: "Saved", Description: "Saved", Level: 2}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
+
+	var file dataFile
+	if err := json.Unmarshal(data, &file); err != nil {
+		t.Fatalf("unmarshal file: %v", err)
+	}
+	if file.Version != dataFormatVersion {
+		t.Fatalf("version = %d, want %d", file.Version, dataFormatVersion)
+	}
+	if len(file.Players) != 1 || file.Players[0].AuthID != "STEAM_0:0:3" {
+		t.Fatalf("players = %+v", file.Players)
+	}
+}
+
 func TestStoreReloadReplacesContents(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "players.csv")
+	path := filepath.Join(t.TempDir(), "players.json")
 	store, err := NewStore(path)
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
@@ -90,11 +119,7 @@ func TestStoreReloadReplacesContents(t *testing.T) {
 		t.Fatalf("Upsert: %v", err)
 	}
 
-	content := csvLine("STEAM_0:0:2", "New", "New", "3")
-
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write CSV: %v", err)
-	}
+	writeJSONStore(t, path, Player{AuthID: "STEAM_0:0:2", Name: "New", Description: "New", Level: 3})
 
 	if err := store.Reload(); err != nil {
 		t.Fatalf("Reload: %v", err)
@@ -109,7 +134,7 @@ func TestStoreReloadReplacesContents(t *testing.T) {
 }
 
 func TestStoreRejectsInvalidPlayers(t *testing.T) {
-	store, err := NewStore(filepath.Join(t.TempDir(), "players.csv"))
+	store, err := NewStore(filepath.Join(t.TempDir(), "players.json"))
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
 	}
@@ -127,21 +152,20 @@ func TestStoreRejectsInvalidPlayers(t *testing.T) {
 	}
 }
 
-func TestLoadCSVRejectsDuplicateAuthIDs(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "players.csv")
-	content := csvLine("STEAM_0:0:1", "A", "A", "1") + csvLine("STEAM_0:0:1", "B", "B", "2")
+func TestLoadJSONRejectsDuplicateAuthIDs(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "players.json")
+	writeJSONStore(t, path,
+		Player{AuthID: "STEAM_0:0:1", Name: "A", Description: "A", Level: 1},
+		Player{AuthID: "STEAM_0:0:1", Name: "B", Description: "B", Level: 2},
+	)
 
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write CSV: %v", err)
-	}
-
-	if _, err := loadCSV(path); err == nil {
+	if _, err := loadJSON(path); err == nil {
 		t.Fatal("duplicate auth IDs should be rejected")
 	}
 }
 
 func TestStoreConcurrentAccess(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "players.csv")
+	path := filepath.Join(t.TempDir(), "players.json")
 	store, err := NewStore(path)
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
@@ -193,7 +217,7 @@ func TestStoreConcurrentAccess(t *testing.T) {
 
 	waitGroup.Wait()
 
-	if _, err := loadCSV(path); err != nil {
-		t.Fatalf("final CSV is invalid: %v", err)
+	if _, err := loadJSON(path); err != nil {
+		t.Fatalf("final JSON is invalid: %v", err)
 	}
 }

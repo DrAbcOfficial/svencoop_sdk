@@ -44,8 +44,8 @@ func TestCryptRoundTrip(t *testing.T) {
 	}
 }
 
-func TestLoadExampleCSV(t *testing.T) {
-	store, err := NewStore("players.example.csv")
+func TestLoadExampleJSON(t *testing.T) {
+	store, err := NewStore("players.example.json")
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
 	}
