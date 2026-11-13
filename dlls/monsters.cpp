@@ -1078,7 +1078,7 @@ BOOL CBaseMonster :: FRefreshRoute ( float flMoveRadius )
 		case MOVEGOAL_PATHCORNER:
 			{
 				// monster is on a path_corner loop
-				pPathCorner = m_pGoalEnt;
+				pPathCorner = m_hGoalEnt;
 				i = 0;
 
 				while ( pPathCorner && i < ROUTE_SIZE )
@@ -2132,11 +2132,11 @@ void CBaseMonster :: AdvanceRoute ( float distance )
 	{
 		if ( ! (m_Route[ m_iRouteIndex ].iType & bits_MF_IS_GOAL) )
 		{
-			// If we've just passed a path_corner, advance m_pGoalEnt
+			// If we've just passed a path_corner, advance m_hGoalEnt
 			if ( (m_Route[ m_iRouteIndex ].iType & ~bits_MF_NOT_TO_MASK) == bits_MF_TO_PATHCORNER )
 			{
-				if ( m_pGoalEnt )
-					m_pGoalEnt = m_pGoalEnt->GetNextTarget();
+				if ( m_hGoalEnt )
+					m_hGoalEnt = m_hGoalEnt->GetNextTarget();
 			}
 
 			if ( m_Route[m_iRouteIndex].iType & bits_MF_TO_JUMP )
@@ -3432,26 +3432,26 @@ void CBaseMonster :: StartMonster ( void )
 		else
 			goal = NULL;
 
-		m_pGoalEnt = NULL;
+		m_hGoalEnt = NULL;
 
 		if ( goal != NULL && goal->pev != NULL )
 		{
 			edict_t *goalEdict = goal->edict();
 
 			if ( goalEdict != NULL && !goalEdict->free )
-				m_pGoalEnt = CBaseEntity::Instance( goalEdict );
+				m_hGoalEnt = CBaseEntity::Instance( goalEdict );
 		}
 
-		if ( !m_pGoalEnt )
+		if ( !m_hGoalEnt )
 		{
 			ALERT(at_error, "ReadyMonster()--%s couldn't find target %s", STRING(pev->classname), STRING(pev->target));
 		}
 		else
 		{
 			// Monster will start turning towards his destination
-			MakeIdealYaw ( m_pGoalEnt->pev->origin );
+			MakeIdealYaw ( m_hGoalEnt->pev->origin );
 
-			if ( FClassnameIs( m_pGoalEnt->pev, "path_corner"))
+			if ( FClassnameIs( m_hGoalEnt->pev, "path_corner"))
 			{
 				m_movementGoal = MOVEGOAL_PATHCORNER;
 

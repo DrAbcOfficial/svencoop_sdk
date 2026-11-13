@@ -16,8 +16,9 @@
 #ifndef BASEMONSTER_H
 #define BASEMONSTER_H
 
-#ifndef CLIENT_DLL
 #include "TypedEntityHandle.h"
+
+#ifndef CLIENT_DLL
 #include "EntityHandle.h"
 #endif
 
@@ -64,9 +65,9 @@ public:
 
 	
 		// these fields have been added in the process of reworking the state machine. (sjb)
-		EHANDLE				m_hEnemy;		 // the entity that the monster is fighting.
-		EHANDLE				m_hTargetEnt;	 // the entity that the monster is trying to reach
-		EHANDLE				m_hHealTarget;	 // the entity a medic is healing or reviving
+		CEntityHandle<CBaseEntity>	m_hEnemy;			// the entity that the monster is fighting.
+		CEntityHandle<CBaseEntity>	m_hTargetEnt;		// the entity that the monster is trying to reach
+		EHANDLE						m_hHealTarget;		// the entity a medic is healing or reviving
 
 #ifndef CLIENT_DLL
 		EHANDLE				m_hSelectedTank;

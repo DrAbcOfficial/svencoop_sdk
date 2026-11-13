@@ -17,11 +17,11 @@
 
 
 #include "pm_materials.h"
+#include "TypedEntityHandle.h"
 
 #ifndef CLIENT_DLL
 #include <unordered_map>
 #include <unordered_set>
-#include "TypedEntityHandle.h"
 #include "EntityHandle.h"
 #include "VoteDefs.h"
 
@@ -390,12 +390,13 @@ public:
 	int					m_iTrain;				// Train control position
 	BOOL				m_fWeapon;				// Set this to FALSE to force a reset of the current weapon HUD info
 
-	EHANDLE				m_pTank;				// the tank which the player is currently controlling,  NULL if no tank
+	CEntityHandle<CBaseEntity> m_hTank; // the tank which the player is currently controlling,  NULL if no tank
 #ifndef CLIENT_DLL
-	EHANDLE				m_hVehicle;
-	EHANDLE m_hChumtoad;
-	PlayerSlot			*m_pVehicleSlot;
+	CEntityHandle<CBaseEntity> m_hVehicle;
+	EHANDLE                    m_hChumtoad;
+	PlayerSlot                *m_pVehicleSlot;
 #endif
+
 	float				m_fDeadTime;			// the time at which the player died  (used in PlayerDeathThink())
 
 	BOOL			m_fNoPlayerSound;	// a debugging feature. Player makes no sound if this is true. 

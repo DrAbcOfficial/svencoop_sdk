@@ -318,16 +318,16 @@ void COp4Mortar::TrackTarget( void )
 
 	pev->nextthink = gpGlobals->time + 0.1;
 
-	CBaseEntity *previousEnemy = Op4MortarHandleEntity( m_hEnemy );
+	CBaseEntity *previousEnemy = Op4MortarHandleEntity( m_hEnemy.m_Handle );
 
-	Op4MortarSetHandle( m_hEnemy, FindTarget() );
+	Op4MortarSetHandle( m_hEnemy.m_Handle, FindTarget() );
 
-	CBaseEntity *enemy = Op4MortarHandleEntity( m_hEnemy );
+	CBaseEntity *enemy = Op4MortarHandleEntity( m_hEnemy.m_Handle );
 
 	if ( !enemy || !enemy->IsAlive() )
 	{
-		Op4MortarSetHandle( m_hEnemy, previousEnemy );
-		enemy = Op4MortarHandleEntity( m_hEnemy );
+		Op4MortarSetHandle( m_hEnemy.m_Handle, previousEnemy );
+		enemy = Op4MortarHandleEntity( m_hEnemy.m_Handle );
 	}
 
 	if ( !enemy || !enemy->IsAlive() )

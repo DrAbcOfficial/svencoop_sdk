@@ -119,7 +119,7 @@ public:
 
 	float m_flAdj;
 
-	CSprite *m_pBall;
+	CEntityHandle<CSprite> m_hBall;
 
 	char m_szRechargerTarget[64];
 	char m_szDrawUse[64];
@@ -160,7 +160,7 @@ TYPEDESCRIPTION	CNihilanth::m_SaveData[] =
 	DEFINE_ARRAY( CNihilanth, m_hSphere, FIELD_EHANDLE, N_SPHERES ),
 	DEFINE_FIELD( CNihilanth, m_iActiveSpheres, FIELD_INTEGER ),
 	DEFINE_FIELD( CNihilanth, m_flAdj, FIELD_FLOAT ),
-	DEFINE_FIELD( CNihilanth, m_pBall, FIELD_CLASSPTR ),
+	DEFINE_FIELD( CNihilanth, m_hBall, FIELD_EHANDLE ),
 	DEFINE_ARRAY( CNihilanth, m_szRechargerTarget, FIELD_CHARACTER, 64 ),
 	DEFINE_ARRAY( CNihilanth, m_szDrawUse, FIELD_CHARACTER, 64 ),
 	DEFINE_ARRAY( CNihilanth, m_szTeleportUse, FIELD_CHARACTER, 64 ),
@@ -220,11 +220,11 @@ public:
 	void Zap( void );
 	void Teleport( void );
 
-	float m_flIdealVel;
-	Vector m_vecIdeal;
-	CNihilanth *m_pNihilanth;
-	EHANDLE m_hTouch;
-	int m_nFrames;
+	float						m_flIdealVel;
+	Vector						m_vecIdeal;
+	CEntityHandle<CNihilanth>	m_hNihilanth;
+	CEntityHandle<CBaseEntity>	m_hTouch;
+	int							m_nFrames;
 };
 
 LINK_ENTITY_TO_CLASS( nihilanth_energy_ball, CNihilanthHVR );
@@ -234,7 +234,7 @@ TYPEDESCRIPTION	CNihilanthHVR::m_SaveData[] =
 {
 	DEFINE_FIELD( CNihilanthHVR, m_flIdealVel, FIELD_FLOAT ),
 	DEFINE_FIELD( CNihilanthHVR, m_vecIdeal, FIELD_VECTOR ),
-	DEFINE_FIELD( CNihilanthHVR, m_pNihilanth, FIELD_CLASSPTR ),
+	DEFINE_FIELD( CNihilanthHVR, m_hNihilanth, FIELD_EHANDLE ),
 	DEFINE_FIELD( CNihilanthHVR, m_hTouch, FIELD_EHANDLE ),
 	DEFINE_FIELD( CNihilanthHVR, m_nFrames, FIELD_INTEGER ),
 };
@@ -480,16 +480,16 @@ void CNihilanth :: DyingThink( void )
 		pev->sequence = LookupSequence( "die1" );
 	}
 
-	if (m_pBall)
+	if (m_hBall)
 	{
-		if (m_pBall->pev->renderamt > 0)
+		if (m_hBall->pev->renderamt > 0)
 		{
-			m_pBall->pev->renderamt = V_max( 0, m_pBall->pev->renderamt - 2);
+			m_hBall->pev->renderamt = V_max( 0, m_hBall->pev->renderamt - 2);
 		}
 		else
 		{
-			UTIL_Remove( m_pBall );
-			m_pBall = NULL;
+			UTIL_Remove( m_hBall );
+			m_hBall = NULL;
 		}
 	}
 
@@ -702,20 +702,20 @@ void CNihilanth :: NextActivity( )
 
 	if (m_irritation >= 2)
 	{
-		if (m_pBall == NULL)
+		if (m_hBall == NULL)
 		{
-			m_pBall = CSprite::SpriteCreate( "sprites/tele1.spr", pev->origin, TRUE );
-			if (m_pBall)
+			m_hBall = CSprite::SpriteCreate( "sprites/tele1.spr", pev->origin, TRUE );
+			if (m_hBall)
 			{
-				m_pBall->SetTransparency( kRenderTransAdd, 255, 255, 255, 255, kRenderFxNoDissipation );
-				m_pBall->SetAttachment( edict(), 1 );
-				m_pBall->SetScale( 4.0 );
-				m_pBall->pev->framerate = 10.0;
-				m_pBall->TurnOn( );
+				m_hBall->SetTransparency( kRenderTransAdd, 255, 255, 255, 255, kRenderFxNoDissipation );
+				m_hBall->SetAttachment( edict(), 1 );
+				m_hBall->SetScale( 4.0 );
+				m_hBall->pev->framerate = 10.0;
+				m_hBall->TurnOn( );
 			}
 		}
 
-		if (m_pBall)
+		if (m_hBall)
 		{
 			MESSAGE_BEGIN( MSG_BROADCAST, SVC_TEMPENTITY );
 				WRITE_BYTE( TE_ELIGHT );
@@ -1592,7 +1592,7 @@ void CNihilanthHVR :: TeleportInit( CNihilanth *pOwner, CBaseEntity *pEnemy, CBa
 
 	SET_MODEL(edict(), "sprites/exit1.spr");
 
-	m_pNihilanth = pOwner;
+	m_hNihilanth = pOwner;
 	m_hEnemy = pEnemy;
 	m_hTargetEnt = pTarget;
 	m_hTouch = pTouch;
@@ -1702,9 +1702,9 @@ void CNihilanthHVR::TeleportTouch( CBaseEntity *pOther )
 		if (m_hTouch != NULL && pEnemy != NULL )
 			m_hTouch->Touch( pEnemy );
 	}
-	else
+	else if ( m_hNihilanth != NULL )
 	{
-		m_pNihilanth->MakeFriend( pev->origin );
+		m_hNihilanth->MakeFriend( pev->origin );
 	}
 
 	SetTouch( NULL );

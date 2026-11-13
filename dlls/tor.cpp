@@ -319,7 +319,7 @@ BOOL CTor::FCanCheckAttacks( void )
 
 BOOL CTor::CheckMeleeAttack1( float dot, float distance )
 {
-	if ( !HasConditions( bits_COND_SEE_ENEMY ) || TorHandleEntity( m_hEnemy ) == NULL )
+	if ( !HasConditions( bits_COND_SEE_ENEMY ) || TorHandleEntity( m_hEnemy.m_Handle ) == NULL )
 		return FALSE;
 
 	CBaseEntity *entity = NULL;
@@ -345,7 +345,7 @@ BOOL CTor::CheckMeleeAttack1( float dot, float distance )
 BOOL CTor::CheckMeleeAttack2( float dot, float distance )
 {
 	return !HasConditions( bits_COND_CAN_MELEE_ATTACK1 ) && HasConditions( bits_COND_SEE_ENEMY )
-		&& distance <= 100 && dot >= 0.6f && TorHandleEntity( m_hEnemy ) != NULL;
+		&& distance <= 100 && dot >= 0.6f && TorHandleEntity( m_hEnemy.m_Handle ) != NULL;
 }
 
 BOOL CTor::CheckRangeAttack1( float dot, float distance )
@@ -356,16 +356,16 @@ BOOL CTor::CheckRangeAttack1( float dot, float distance )
 	if ( gpGlobals->time < m_flNextHornetAttackCheck )
 		return m_fCanHornetAttack;
 
-	if ( TorHandleEntity( m_hEnemy ) != NULL && HasConditions( bits_COND_SEE_ENEMY ) )
+	if ( TorHandleEntity( m_hEnemy.m_Handle ) != NULL && HasConditions( bits_COND_SEE_ENEMY ) )
 	{
 		Vector armPosition, armAngles;
 		TraceResult trace;
 
 		UTIL_MakeVectors( pev->angles );
 		GetAttachment( 0, armPosition, armAngles );
-		UTIL_TraceLine( armPosition, TorHandleEntity( m_hEnemy )->BodyTarget( armPosition ), dont_ignore_monsters, edict(), &trace );
+		UTIL_TraceLine( armPosition, TorHandleEntity( m_hEnemy.m_Handle )->BodyTarget( armPosition ), dont_ignore_monsters, edict(), &trace );
 
-		if ( trace.flFraction == 1 || trace.pHit == TorHandleEntity( m_hEnemy )->edict() )
+		if ( trace.flFraction == 1 || trace.pHit == TorHandleEntity( m_hEnemy.m_Handle )->edict() )
 		{
 			m_fCanHornetAttack = true;
 			return TRUE;
@@ -405,7 +405,7 @@ BOOL CTor::ShouldSpeak( void )
 
 void CTor::PrescheduleThink( void )
 {
-	if ( TorHandleEntity( m_hEnemy ) != NULL && m_Activity == ACT_RUN )
+	if ( TorHandleEntity( m_hEnemy.m_Handle ) != NULL && m_Activity == ACT_RUN )
 		pev->framerate = 1.5f;
 
 	if ( !ShouldSpeak() || gpGlobals->time <= m_flNextWordTime )
@@ -793,8 +793,8 @@ void CTor::MakeGrunt( Vector origin )
 		grunt->m_iClassSelection = m_iClassSelection;
 		grunt->m_fPlayerAlly = m_fPlayerAlly;
 
-		if ( TorHandleEntity( m_hEnemy ) != NULL && TorHandleEntity( m_hEnemy )->IsAlive() )
-			grunt->PushEnemy( TorHandleEntity( m_hEnemy ), m_vecEnemyLKP );
+		if ( TorHandleEntity( m_hEnemy.m_Handle ) != NULL && TorHandleEntity( m_hEnemy.m_Handle )->IsAlive() )
+			grunt->PushEnemy( TorHandleEntity( m_hEnemy.m_Handle ), m_vecEnemyLKP );
 
 		grunt->pev->spawnflags |= SF_MONSTER_FALL_TO_GROUND;
 		grunt->m_flFallDamageTime = gpGlobals->time;
@@ -1089,7 +1089,7 @@ void CTor::HandleAnimEvent( MonsterEvent_t *event )
 
 		case 3:
 		{
-			if ( TorHandleEntity( m_hEnemy ) == NULL )
+			if ( TorHandleEntity( m_hEnemy.m_Handle ) == NULL )
 				break;
 
 			Vector angles;
@@ -1131,8 +1131,8 @@ void CTor::HandleAnimEvent( MonsterEvent_t *event )
 			ShootAtEnemy( armPosition );
 
 			Vector start = pev->origin + Vector( 0, 0, 55 );
-			Vector bodyTarget = TorHandleEntity( m_hEnemy )->BodyTarget( start );
-			Vector target = bodyTarget - TorHandleEntity( m_hEnemy )->Center() + m_vecEnemyLKP;
+			Vector bodyTarget = TorHandleEntity( m_hEnemy.m_Handle )->BodyTarget( start );
+			Vector target = bodyTarget - TorHandleEntity( m_hEnemy.m_Handle )->Center() + m_vecEnemyLKP;
 			TraceResult trace;
 
 			UTIL_TraceLine( start, target, dont_ignore_monsters, edict(), &trace );

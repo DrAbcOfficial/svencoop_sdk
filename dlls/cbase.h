@@ -142,6 +142,7 @@ public:
 	CBaseEntity * operator ->();
 };
 
+#include "TypedEntityHandle.h"
 
 // FireBullets draw mode options
 typedef enum
@@ -161,7 +162,7 @@ public:
 	entvars_t *pev;		// Don't need to save/restore this pointer, the engine resets it
 
 	// path corners
-	CBaseEntity			*m_pGoalEnt;// path corner we are heading towards
+	CEntityHandle<CBaseEntity> m_hGoalEnt; // path corner we are heading towards
 
 #ifndef CLIENT_DLL
 	EHANDLE				m_pLink;// used for temporary link-list operations.

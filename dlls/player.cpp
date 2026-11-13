@@ -142,8 +142,8 @@ TYPEDESCRIPTION	CBasePlayer::m_playerSaveData[] =
 	DEFINE_FIELD( CBasePlayer, m_fInitHUD, FIELD_BOOLEAN ),
 	DEFINE_FIELD( CBasePlayer, m_tbdPrev, FIELD_TIME ),
 
-	DEFINE_FIELD( CBasePlayer, m_pTank, FIELD_EHANDLE ),
-	DEFINE_FIELD( CBasePlayer, m_iHideHUD, FIELD_INTEGER ),
+	DEFINE_FIELD( CBasePlayer, m_hTank, FIELD_EHANDLE ),
+	DEFINE_FIELD( CBasePlayer, m_hVehicle, FIELD_EHANDLE ),
 	DEFINE_FIELD( CBasePlayer, m_iFOV, FIELD_INTEGER ),
 	
 	//DEFINE_FIELD( CBasePlayer, m_fDeadTime, FIELD_FLOAT ), // only used in multiplayer games
@@ -754,9 +754,9 @@ void CBasePlayer::Killed( entvars_t *pevAttacker, int iGib )
 	if ( iGib != 3 )
 		g_pGameRules->PlayerKilled( this, pevAttacker, g_pevLastInflictor );
 
-	if ( m_pTank != NULL )
+	if ( m_hTank != NULL )
 	{
-		m_pTank->Use( this, this, USE_OFF, 0 );
+		m_hTank->Use( this, this, USE_OFF, 0 );
 	}
 
 	if ( m_hVehicle )
@@ -1592,11 +1592,11 @@ void CBasePlayer::PlayerUse ( void )
 	// Hit Use on a train?
 	if ( m_afButtonPressed & IN_USE )
 	{
-		if ( m_pTank != NULL )
+		if ( m_hTank != NULL )
 		{
 			// Stop controlling the tank
 			// TODO: Send HUD Update
-			m_pTank->Use( this, this, USE_OFF, 0 );
+			m_hTank->Use( this, this, USE_OFF, 0 );
 			return;
 		}
 		else
@@ -2782,16 +2782,16 @@ void CBasePlayer::PostThink()
 		goto pt_end;
 
 	// Handle Tank controlling
-	if ( m_pTank != NULL )
+	if ( m_hTank != NULL )
 	{ // if they've moved too far from the gun,  or selected a weapon, unuse the gun
-		if ( m_pTank->OnControls( pev ) && !pev->weaponmodel )
+		if ( m_hTank->OnControls( pev ) && !pev->weaponmodel )
 		{  
-			m_pTank->Use( this, this, USE_SET, 2 );	// try fire the gun
+			m_hTank->Use( this, this, USE_SET, 2 );	// try fire the gun
 		}
 		else
 		{  // they've moved off the platform
-			m_pTank->Use( this, this, USE_OFF, 0 );
-			m_pTank = NULL;
+			m_hTank->Use( this, this, USE_OFF, 0 );
+			m_hTank = NULL;
 		}
 	}
 
@@ -4509,8 +4509,8 @@ void CBasePlayer::OnDisconnect( void )
 {
 	m_fConnected = false;
 
-	if ( m_pTank )
-		m_pTank->Use( this, this, USE_OFF, 0 );
+	if ( m_hTank )
+		m_hTank->Use( this, this, USE_OFF, 0 );
 
 	if ( m_hVehicle )
 		( (CAdvFuncVehicle *) (CBaseEntity *) m_hVehicle )->PlayerExit( this, true );
@@ -5148,7 +5148,7 @@ void CBasePlayer::UnblockWeapons( CBaseEntity *actor )
 	if ( !m_fWeaponsBlocked )
 		return;
 
-	edict_t *tank = m_pTank.Get();
+	edict_t *tank = m_hTank.Get();
 
 	if ( !tank || tank->free || !tank->pvPrivateData )
 	{
@@ -5323,9 +5323,9 @@ void CBasePlayer::ItemPostFrame()
 	{
 		CBasePlayerItem *item = ValidPlayerInventoryItem( m_pActiveItem );
 
-	if ( item && m_pTank == NULL && m_hVehicle == NULL && !item->m_bIsBeingRemoved )
+		if ( item && m_hTank == NULL && m_hVehicle == NULL && !item->m_bIsBeingRemoved )
 			item->ItemPostFrame( );
-}
+	}
 
 	PlayerUse();
 	ImpulseCommands();

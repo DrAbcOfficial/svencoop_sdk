@@ -321,7 +321,7 @@ bool CFuncTank :: StartControl( CBasePlayer *pController )
 
 	TankSetHandle( m_hController, pController );
 	pController->BlockWeapons( this );
-	TankSetHandle( pController->m_pTank, this );
+	TankSetHandle( pController->m_hTank.m_Handle, this );
 	m_vecControllerUsePos = TankHandle( m_hController )->pev->origin;
 
 	pev->nextthink = (float) ( (double) pev->ltime + 0.1 );
@@ -342,7 +342,7 @@ void CFuncTank :: StopControl( void )
 	if ( !controller )
 		return;
 
-	controller->m_pTank = NULL;
+	controller->m_hTank = NULL;
 	controller->UnblockWeapons( this );
 	m_hController = NULL;
 	pev->owner = NULL;
@@ -504,7 +504,7 @@ CBaseEntity *CFuncTank :: FindTarget( void )
 	CBaseMonster *controller = (CBaseMonster *) TankHandle( m_hMonsterController );
 
 	if ( controller && controller->IsAlive() )
-		return TankHandle( controller->m_hEnemy );
+		return TankHandle( controller->m_hEnemy.m_Handle );
 
 	if ( m_bMonsterControl )
 	{

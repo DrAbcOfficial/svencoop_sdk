@@ -343,7 +343,7 @@ void CCineMonster :: PossessEntity( void )
 		}
 #endif
 
-		pTarget->m_pGoalEnt = this;
+		pTarget->m_hGoalEnt = this;
 		pTarget->m_pCine = this;
 		pTarget->m_hTargetEnt = this;
 		pTarget->m_flMoveToRadius = m_flMoveToRadius;
@@ -415,7 +415,7 @@ void CCineAI :: PossessEntity( void )
 			return;
 		}
 
-		pTarget->m_pGoalEnt = this;
+		pTarget->m_hGoalEnt = this;
 		pTarget->m_pCine = this;
 		pTarget->m_hTargetEnt = this;
 		pTarget->m_fInAIScript = true;
@@ -835,7 +835,7 @@ BOOL CBaseMonster :: CineCleanup( )
 		pev->solid = SOLID_SLIDEBOX;
 	}
 	m_pCine = NULL;
-	m_pGoalEnt = NULL;
+	m_hGoalEnt = NULL;
 	if (pev->deadflag == DEAD_DYING)
 	{
 		// last frame of death animation?

@@ -2689,7 +2689,7 @@ void CTriggerChangeTarget::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, U
 
 		if (pMonster)
 		{
-			pMonster->m_pGoalEnt = NULL;
+			pMonster->m_hGoalEnt = NULL;
 		}
 
 		if ( FClassnameIs( pTarget->pev, "path_track" ) )

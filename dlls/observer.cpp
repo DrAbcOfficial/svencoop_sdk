@@ -438,10 +438,10 @@ void CObserver::StartObserver( const Vector &position, const Vector &angles, boo
 	if ( m_hPlayer->m_pActiveItem )
 		m_hPlayer->m_pActiveItem->Holster();
 
-	if ( m_hPlayer->m_pTank )
+	if ( m_hPlayer->m_hTank )
 	{
-		m_hPlayer->m_pTank->Use( m_hPlayer, m_hPlayer, USE_OFF, 0 );
-		m_hPlayer->m_pTank = NULL;
+		m_hPlayer->m_hTank->Use( m_hPlayer, m_hPlayer, USE_OFF, 0 );
+		m_hPlayer->m_hTank = NULL;
 	}
 
 	if ( m_hPlayer->m_hVehicle )
