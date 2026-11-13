@@ -292,6 +292,9 @@ void CApache :: Spawn( void )
 
 	pev->flags |= FL_MONSTER;
 	pev->takedamage		= DAMAGE_AIM;
+
+	m_afMoveShootCap = 0;
+
 	if ( pev->health == 0.0f )
 		pev->health			= sk_apache_health.value;
 
@@ -317,6 +320,9 @@ void CApache :: Spawn( void )
 	}
 
 	m_iRockets = 10;
+
+	if ( !m_FormattedName )
+		m_FormattedName = MAKE_STRING( "Apache" );
 }
 
 
@@ -336,11 +342,11 @@ void CApache::Precache( void )
 		UTIL_PrecacheModel( this, model );
 	}
 
-	PRECACHE_SOUND("apache/ap_rotor2.wav");
+	PrecacheSound_Intercept( this, "apache/ap_rotor2.wav" );
 
-	PRECACHE_SOUND("weapons/mortarhit.wav");
+	PrecacheSound_Intercept( this, "weapons/mortarhit.wav" );
 
-	PRECACHE_SOUND("turret/tu_fire1.wav");
+	PrecacheSound_Intercept( this, "turret/tu_fire1.wav" );
 
 	UTIL_PrecacheModel( this, "sprites/lgtning.spr");
 

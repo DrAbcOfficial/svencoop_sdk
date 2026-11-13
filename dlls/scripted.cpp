@@ -34,6 +34,7 @@
 
 #include "schedule.h"
 #include "scripted.h"
+#include "server_sound.h"
 #include "defaultai.h"
 
 
@@ -965,6 +966,7 @@ class CScriptedSentence : public CBaseToggle
 {
 public:
 	void Spawn( void );
+	void Precache( void );
 	void KeyValue( KeyValueData *pkvd );
 	void Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
 	void EXPORT FindThink( void );
@@ -1073,8 +1075,18 @@ void CScriptedSentence :: Use( CBaseEntity *pActivator, CBaseEntity *pCaller, US
 }
 
 
+void CScriptedSentence::Precache( void )
+{
+	const char *sentence = STRING( m_iszSentence );
+
+	if ( *sentence == '+' )
+		CServer_SoundEngine::GetSoundEngine()->PrecacheSound( sentence + 1 );
+}
+
 void CScriptedSentence :: Spawn( void )
 {
+	Precache();
+
 	pev->solid = SOLID_NOT;
 	
 	m_active = TRUE;

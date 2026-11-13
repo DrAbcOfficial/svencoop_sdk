@@ -805,6 +805,11 @@ void COspreyBlackOps::OnDestroy( void )
 	STOP_SOUND( edict(), CHAN_STATIC, "apache/ap_rotor4.wav" );
 }
 
+void COspreyBlackOps::UpdateOnRemove( void )
+{
+	STOP_SOUND( edict(), CHAN_STATIC, "apache/ap_rotor4.wav" );
+}
+
 Vector COspreyBlackOps::BodyTarget( const Vector &posSrc )
 {
 	Vector right, left, angles;

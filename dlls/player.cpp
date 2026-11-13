@@ -740,7 +740,8 @@ void CBasePlayer::Killed( entvars_t *pevAttacker, int iGib )
 {
 	CSound *pSound;
 
-	// Holster weapon immediately, to allow it to cleanup
+	STOP_SOUND( edict(), CHAN_STATIC, "weapons/egon_run3.wav" );
+
 	if ( pev->health > 0 )
 		pev->health = 0;
 

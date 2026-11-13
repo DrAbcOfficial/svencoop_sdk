@@ -2152,6 +2152,12 @@ void CLadder::ToggleUse( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE
 class CTriggerPush : public CBaseTrigger
 {
 public:
+	void OnCreate( void )
+	{
+		CBaseTrigger::OnCreate();
+		m_iPushMode = TRIGGER_PUSH_MODE_BASEVELOCITY;
+	}
+
 	void OnSetOriginByMap( void )
 	{
 		m_vecSavedAngles = pev->angles;

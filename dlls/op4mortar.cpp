@@ -446,7 +446,7 @@ COp4MortarController::~COp4MortarController()
 
 int COp4MortarController::ObjectCaps( void )
 {
-	return FCAP_IMPULSE_USE;
+	return FCAP_CONTINUOUS_USE;
 }
 
 void COp4MortarController::KeyValue( KeyValueData *data )

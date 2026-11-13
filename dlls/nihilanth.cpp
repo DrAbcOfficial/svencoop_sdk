@@ -332,6 +332,9 @@ void CNihilanth :: Spawn( void )
 	if (m_szDeadUse[0] == '\0')			strcpy( m_szDeadUse, "n_dead" );
 	if (m_szDeadTouch[0] == '\0')		strcpy( m_szDeadTouch, "n_ending" );
 
+	if ( !m_FormattedName )
+		m_FormattedName = MAKE_STRING( "Nihilanth" );
+
 	// near death
 	/*
 	m_iTeleport = 10;
