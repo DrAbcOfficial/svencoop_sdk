@@ -948,15 +948,15 @@ public:
 	static	TYPEDESCRIPTION m_SaveData[];
 
 private:
-	CLaser	*m_pLaser;
-	float	m_laserTime;
+	EHANDLE m_hLaser;
+	float   m_laserTime;
 };
 LINK_ENTITY_TO_CLASS( func_tanklaser, CFuncTankLaser );
 LINK_ENTITY_TO_CLASS( func_tanklaser_of, CFuncTankLaser );
 
 TYPEDESCRIPTION	CFuncTankLaser::m_SaveData[] = 
 {
-	DEFINE_FIELD( CFuncTankLaser, m_pLaser, FIELD_CLASSPTR ),
+	DEFINE_FIELD( CFuncTankLaser, m_hLaser, FIELD_EHANDLE ),
 	DEFINE_FIELD( CFuncTankLaser, m_laserTime, FIELD_TIME ),
 };
 
@@ -964,14 +964,16 @@ IMPLEMENT_SAVERESTORE( CFuncTankLaser, CFuncTank );
 
 void CFuncTankLaser::Activate( void )
 {
-	if ( !GetLaser() )
+	CLaser *pLaser = GetLaser();
+
+	if ( !pLaser )
 	{
-		UTIL_Remove(this);
+		UTIL_Remove( this );
 		ALERT( at_error, "Laser tank with no env_laser!\n" );
 	}
 	else
 	{
-		m_pLaser->TurnOff();
+		pLaser->TurnOff();
 	}
 }
 
@@ -990,8 +992,10 @@ void CFuncTankLaser::KeyValue( KeyValueData *pkvd )
 
 CLaser *CFuncTankLaser::GetLaser( void )
 {
-	if ( m_pLaser )
-		return m_pLaser;
+	CLaser *pLaser = (CLaser *) TankHandle( m_hLaser );
+
+	if ( pLaser )
+		return pLaser;
 
 	edict_t	*pentLaser;
 
@@ -1001,21 +1005,23 @@ CLaser *CFuncTankLaser::GetLaser( void )
 		// Found the landmark
 		if ( FClassnameIs( pentLaser, "env_laser" ) )
 		{
-			m_pLaser = (CLaser *)CBaseEntity::Instance(pentLaser);
+			TankSetHandle( m_hLaser, CBaseEntity::Instance( pentLaser ) );
 			break;
 		}
 		else
 			pentLaser = FIND_ENTITY_BY_TARGETNAME( pentLaser, STRING(pev->message) );
 	}
 
-	return m_pLaser;
+	return (CLaser *) TankHandle( m_hLaser );
 }
 
 
 void CFuncTankLaser::Think( void )
 {
-	if ( m_pLaser && (gpGlobals->time > m_laserTime) )
-		m_pLaser->TurnOff();
+	CLaser *pLaser = (CLaser *) TankHandle( m_hLaser );
+
+	if ( pLaser && gpGlobals->time > m_laserTime )
+		pLaser->TurnOff();
 
 	CFuncTank::Think();
 }
@@ -1036,14 +1042,18 @@ void CFuncTankLaser::Fire( const Vector &barrelEnd, const Vector &forward, entva
 		{
 			for ( i = 0; i < bulletCount; i++ )
 			{
-				m_pLaser->pev->origin = barrelEnd;
+				( (CLaser *) TankHandle( m_hLaser ) )->pev->origin = barrelEnd;
 				TankTrace( barrelEnd, forward, gTankSpread[m_spread], tr );
 				
 				m_laserTime = gpGlobals->time;
-				m_pLaser->TurnOn();
-				m_pLaser->pev->dmgtime = gpGlobals->time - 1.0;
-				m_pLaser->FireAtPoint( tr );
-				m_pLaser->pev->nextthink = 0;
+				( (CLaser *) TankHandle( m_hLaser ) )->TurnOn();
+				( (CLaser *) TankHandle( m_hLaser ) )->pev->dmgtime = gpGlobals->time - 1.0;
+
+				if ( pevAttacker )
+					( (CLaser *) TankHandle( m_hLaser ) )->pev->owner = ENT( pevAttacker );
+
+				( (CLaser *) TankHandle( m_hLaser ) )->FireAtPoint( tr );
+				( (CLaser *) TankHandle( m_hLaser ) )->pev->nextthink = 0;
 			}
 			CFuncTank::Fire( barrelEnd, forward, pev );
 		}
