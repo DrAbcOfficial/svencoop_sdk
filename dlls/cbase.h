@@ -853,6 +853,14 @@ typedef struct locksounds			// sounds that doors and buttons make when locked/un
 	BYTE	bEOFUnlocked;			// true if hit end of list of unlocked sentences
 } locksound_t;
 
+struct LockSoundsIndices
+{
+	BYTE	m_bLockedSound;
+	BYTE	m_bLockedSentence;
+	BYTE	m_bUnlockedSound;
+	BYTE	m_bUnlockedSentence;
+};
+
 void PlayLockSounds(entvars_t *pev, locksound_t *pls, int flocked, int fbutton);
 
 //
@@ -1193,8 +1201,8 @@ public:
 	// Buttons that don't take damage can be IMPULSE used
 	virtual int	ObjectCaps( void ) { return (CBaseToggle:: ObjectCaps() & ~FCAP_ACROSS_TRANSITION) | (pev->takedamage?0:FCAP_IMPULSE_USE); }
 
-	BOOL	m_fStayPushed;	// button stays pushed in until touched again?
-	BOOL	m_fRotating;		// a rotating button?  default is a sliding button.
+	bool	m_fStayPushed;	// button stays pushed in until touched again?
+	bool	m_fRotating;		// a rotating button?  default is a sliding button.
 
 	string_t m_strChangeTarget;	// if this field is not null, this is an index into the engine string array.
 							// when this button is touched, it's target entity's TARGET field will be set
@@ -1202,10 +1210,8 @@ public:
 
 	locksound_t m_ls;			// door lock sounds
 	
-	BYTE	m_bLockedSound;		// ordinals from entity selection
-	BYTE	m_bLockedSentence;	
-	BYTE	m_bUnlockedSound;	
-	BYTE	m_bUnlockedSentence;
+	LockSoundsIndices m_LockSoundsIndices;
+
 	int		m_sounds;
 	int		m_iUseType;
 };
