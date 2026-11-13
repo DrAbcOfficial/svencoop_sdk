@@ -585,7 +585,6 @@ void CBaseDelay::DelayThink( void )
 TYPEDESCRIPTION	CBaseToggle::m_SaveData[] = 
 {
 	DEFINE_FIELD( CBaseToggle, m_toggle_state, FIELD_INTEGER ),
-	DEFINE_FIELD( CBaseToggle, m_flActivateFinished, FIELD_TIME ),
 	DEFINE_FIELD( CBaseToggle, m_flMoveDistance, FIELD_FLOAT ),
 	DEFINE_FIELD( CBaseToggle, m_flWait, FIELD_FLOAT ),
 	DEFINE_FIELD( CBaseToggle, m_flLip, FIELD_FLOAT ),

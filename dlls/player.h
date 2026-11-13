@@ -384,7 +384,7 @@ public:
 
 	int					m_bitsHUDDamage;		// Damage bits for the current fame. These get sent to 
 												// the hude via the DAMAGE message
-	BOOL				m_fInitHUD;				// True when deferred HUD restart msg needs to be sent
+	bool				m_fInitHUD;				// True when deferred HUD restart msg needs to be sent
 	BOOL				m_fGameHUDInitialized;
 	float				m_flNextTimeEndUpdate;
 	int					m_iTrain;				// Train control position

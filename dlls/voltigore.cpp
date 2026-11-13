@@ -51,7 +51,7 @@ TYPEDESCRIPTION CVoltigore::m_SaveData[] =
 
 TYPEDESCRIPTION CBabyVoltigore::m_SaveData[] =
 {
-	DEFINE_FIELD( CBabyVoltigore, m_fCanThreatDisplay, FIELD_BOOLEAN ),
+	DEFINE_FIELD( CBabyVoltigore, m_fCanThreatDisplay, FIELD_CHARACTER ),
 	DEFINE_FIELD( CBabyVoltigore, m_flLastHurtTime, FIELD_TIME ),
 	DEFINE_FIELD( CBabyVoltigore, m_flNextSpitTime, FIELD_TIME ),
 };

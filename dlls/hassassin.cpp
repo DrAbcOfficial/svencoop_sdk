@@ -105,7 +105,7 @@ public:
 
 	float m_flNextGrenadeCheck;
 	Vector	m_vecTossVelocity;
-	BOOL	m_fThrowGrenade;
+	bool	m_fThrowGrenade;
 
 	int		m_iTargetRanderamt;
 
@@ -126,7 +126,7 @@ TYPEDESCRIPTION	CHAssassin::m_SaveData[] =
 
 	DEFINE_FIELD( CHAssassin, m_flNextGrenadeCheck, FIELD_TIME ),
 	DEFINE_FIELD( CHAssassin, m_vecTossVelocity, FIELD_VECTOR ),
-	DEFINE_FIELD( CHAssassin, m_fThrowGrenade, FIELD_BOOLEAN ),
+	DEFINE_FIELD( CHAssassin, m_fThrowGrenade, FIELD_CHARACTER ),
 
 	DEFINE_FIELD( CHAssassin, m_iTargetRanderamt, FIELD_INTEGER ),
 	DEFINE_FIELD( CHAssassin, m_iFrustration, FIELD_INTEGER ),

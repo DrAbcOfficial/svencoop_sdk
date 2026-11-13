@@ -801,7 +801,7 @@ void CGargantua :: PrescheduleThink( void )
 
 	if ( !victim )
 	{
-		m_flThinkInterval = 0.1;
+		m_flThinkDelay = 0.1;
 	}
 	else
 	{
@@ -1284,7 +1284,7 @@ void CGargantua::HandleAnimEvent(MonsterEvent_t *pEvent)
 				{
 					m_hBiteVictim = victim;
 					victim->FBecomeProne( this );
-					m_flThinkInterval = 0;
+					m_flThinkDelay = 0;
 				}
 				else
 					TaskFail();
@@ -1471,14 +1471,14 @@ void CGargantua::StartTask( Task_t *pTask )
 			if ( hit && ( IRelationship( hit ) > R_NO || hit == enemy ) )
 			{
 				TaskComplete();
-				m_flThinkInterval = 0;
+				m_flThinkDelay = 0;
 			}
 			else if ( !hit && enemy && ( enemy->Center() - Center() ).Length() < pev->scale * 112 )
 			{
 				MakeIdealYaw( enemy->Center() );
 				ChangeYaw( (int) pev->yaw_speed );
 				TaskComplete();
-				m_flThinkInterval = 0;
+				m_flThinkDelay = 0;
 			}
 			else
 				TaskFail();

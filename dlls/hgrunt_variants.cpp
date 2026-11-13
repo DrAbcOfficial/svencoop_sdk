@@ -152,8 +152,8 @@ struct HumanCombatData
 
 	Vector m_vecTossVelocity;
 
-	BOOL m_fThrowGrenade;
-	BOOL m_fStanding;
+	bool m_fThrowGrenade;
+	bool m_fStanding;
 	BOOL m_fGunHolstered;
 	BOOL m_fTorchActive;
 
@@ -2700,21 +2700,17 @@ void SquadMakerPrepareHumanGrunt( CBaseEntity *entity )
 	static_cast<CHGruntOp4 *>( entity )->m_bHeadSet = true;
 }
 
-TYPEDESCRIPTION CHGruntOp4::m_SaveData[] = {
-	DEFINE_FIELD( CHGruntOp4, m_Combat.m_cClipSize, FIELD_INTEGER ),
-	DEFINE_FIELD( CHGruntOp4, m_Combat.m_iHead, FIELD_INTEGER ),
-	DEFINE_FIELD( CHGruntOp4, m_Combat.m_iSidearm, FIELD_INTEGER ),
-	DEFINE_FIELD( CHGruntOp4, m_Combat.m_voicePitch, FIELD_INTEGER ),
-	DEFINE_FIELD( CHGruntOp4, m_Combat.m_flNextGrenadeCheck, FIELD_TIME ),
-	DEFINE_FIELD( CHGruntOp4, m_Combat.m_flNextPainTime, FIELD_TIME ),
-	DEFINE_FIELD( CHGruntOp4, m_Combat.m_vecTossVelocity, FIELD_VECTOR ),
-	DEFINE_FIELD( CHGruntOp4, m_Combat.m_fThrowGrenade, FIELD_BOOLEAN ),
-	DEFINE_FIELD( CHGruntOp4, m_Combat.m_fStanding, FIELD_BOOLEAN ),
-	DEFINE_FIELD( CHGruntOp4, m_Combat.m_fGunHolstered, FIELD_BOOLEAN ),
-	DEFINE_FIELD( CHGruntOp4, m_Combat.m_fTorchActive, FIELD_BOOLEAN ),
-	DEFINE_FIELD( CHGruntOp4, m_Combat.m_hTorchBeam, FIELD_EHANDLE ),
-	DEFINE_FIELD( CHGruntOp4, m_Combat.m_hSavedTarget, FIELD_EHANDLE ),
-	DEFINE_FIELD( CHGruntOp4, m_Combat.m_flHealTime, FIELD_TIME )
+TYPEDESCRIPTION CHGruntOp4::m_SaveData[] =
+{
+	{ FIELD_TIME, "m_flNextGrenadeCheck", offsetof( CHGruntOp4, m_Combat.m_flNextGrenadeCheck ), 1, 0 },
+	{ FIELD_TIME, "m_flNextPainTime", offsetof( CHGruntOp4, m_Combat.m_flNextPainTime ), 1, 0 },
+	{ FIELD_VECTOR, "m_vecTossVelocity", offsetof( CHGruntOp4, m_Combat.m_vecTossVelocity ), 1, 0 },
+	{ FIELD_CHARACTER, "m_fThrowGrenade", offsetof( CHGruntOp4, m_Combat.m_fThrowGrenade ), 1, 0 },
+	{ FIELD_CHARACTER, "m_fStanding", offsetof( CHGruntOp4, m_Combat.m_fStanding ), 1, 0 },
+	{ FIELD_CHARACTER, "m_fFirstEncounter", offsetof( CHGruntOp4, m_Combat.m_fFirstEncounter ), 1, 0 },
+	{ FIELD_INTEGER, "m_cClipSize", offsetof( CHGruntOp4, m_Combat.m_cClipSize ), 1, 0 },
+	DEFINE_FIELD( CHGruntOp4, m_voicePitch, FIELD_INTEGER ),
+	{ FIELD_INTEGER, "m_iSentence", offsetof( CHGruntOp4, m_Combat.m_iSentence ), 1, 0 },
 };
 
 IMPLEMENT_SAVERESTORE( CHGruntOp4, CSquadTalkMonster );
@@ -3862,21 +3858,17 @@ public:
 
 LINK_ENTITY_TO_CLASS( monster_human_medic_ally, CHGruntOp4Medic );
 
-TYPEDESCRIPTION CHGruntOp4Medic::m_SaveData[] = {
-	DEFINE_FIELD( CHGruntOp4Medic, m_Combat.m_cClipSize, FIELD_INTEGER ),
-	DEFINE_FIELD( CHGruntOp4Medic, m_Combat.m_iHead, FIELD_INTEGER ),
-	DEFINE_FIELD( CHGruntOp4Medic, m_Combat.m_iSidearm, FIELD_INTEGER ),
-	DEFINE_FIELD( CHGruntOp4Medic, m_Combat.m_voicePitch, FIELD_INTEGER ),
-	DEFINE_FIELD( CHGruntOp4Medic, m_Combat.m_flNextGrenadeCheck, FIELD_TIME ),
-	DEFINE_FIELD( CHGruntOp4Medic, m_Combat.m_flNextPainTime, FIELD_TIME ),
-	DEFINE_FIELD( CHGruntOp4Medic, m_Combat.m_vecTossVelocity, FIELD_VECTOR ),
-	DEFINE_FIELD( CHGruntOp4Medic, m_Combat.m_fThrowGrenade, FIELD_BOOLEAN ),
-	DEFINE_FIELD( CHGruntOp4Medic, m_Combat.m_fStanding, FIELD_BOOLEAN ),
-	DEFINE_FIELD( CHGruntOp4Medic, m_Combat.m_fGunHolstered, FIELD_BOOLEAN ),
-	DEFINE_FIELD( CHGruntOp4Medic, m_Combat.m_fTorchActive, FIELD_BOOLEAN ),
-	DEFINE_FIELD( CHGruntOp4Medic, m_Combat.m_hTorchBeam, FIELD_EHANDLE ),
-	DEFINE_FIELD( CHGruntOp4Medic, m_Combat.m_hSavedTarget, FIELD_EHANDLE ),
-	DEFINE_FIELD( CHGruntOp4Medic, m_Combat.m_flHealTime, FIELD_TIME )
+TYPEDESCRIPTION CHGruntOp4Medic::m_SaveData[] =
+{
+	{ FIELD_TIME, "m_flNextGrenadeCheck", offsetof( CHGruntOp4Medic, m_Combat.m_flNextGrenadeCheck ), 1, 0 },
+	{ FIELD_TIME, "m_flNextPainTime", offsetof( CHGruntOp4Medic, m_Combat.m_flNextPainTime ), 1, 0 },
+	{ FIELD_VECTOR, "m_vecTossVelocity", offsetof( CHGruntOp4Medic, m_Combat.m_vecTossVelocity ), 1, 0 },
+	{ FIELD_CHARACTER, "m_fThrowGrenade", offsetof( CHGruntOp4Medic, m_Combat.m_fThrowGrenade ), 1, 0 },
+	{ FIELD_CHARACTER, "m_fStanding", offsetof( CHGruntOp4Medic, m_Combat.m_fStanding ), 1, 0 },
+	{ FIELD_CHARACTER, "m_fFirstEncounter", offsetof( CHGruntOp4Medic, m_Combat.m_fFirstEncounter ), 1, 0 },
+	{ FIELD_INTEGER, "m_cClipSize", offsetof( CHGruntOp4Medic, m_Combat.m_cClipSize ), 1, 0 },
+	DEFINE_FIELD( CHGruntOp4Medic, m_voicePitch, FIELD_INTEGER ),
+	{ FIELD_INTEGER, "m_iSentence", offsetof( CHGruntOp4Medic, m_Combat.m_iSentence ), 1, 0 },
 };
 
 IMPLEMENT_SAVERESTORE( CHGruntOp4Medic, CSquadTalkMonster );
@@ -5110,21 +5102,16 @@ public:
 
 LINK_ENTITY_TO_CLASS( monster_male_assassin, CMassn );
 
-TYPEDESCRIPTION CMassn::m_SaveData[] = {
-	DEFINE_FIELD( CMassn, m_Combat.m_cClipSize, FIELD_INTEGER ),
-	DEFINE_FIELD( CMassn, m_Combat.m_iHead, FIELD_INTEGER ),
-	DEFINE_FIELD( CMassn, m_Combat.m_iSidearm, FIELD_INTEGER ),
-	DEFINE_FIELD( CMassn, m_Combat.m_voicePitch, FIELD_INTEGER ),
-	DEFINE_FIELD( CMassn, m_Combat.m_flNextGrenadeCheck, FIELD_TIME ),
-	DEFINE_FIELD( CMassn, m_Combat.m_flNextPainTime, FIELD_TIME ),
-	DEFINE_FIELD( CMassn, m_Combat.m_vecTossVelocity, FIELD_VECTOR ),
-	DEFINE_FIELD( CMassn, m_Combat.m_fThrowGrenade, FIELD_BOOLEAN ),
-	DEFINE_FIELD( CMassn, m_Combat.m_fStanding, FIELD_BOOLEAN ),
-	DEFINE_FIELD( CMassn, m_Combat.m_fGunHolstered, FIELD_BOOLEAN ),
-	DEFINE_FIELD( CMassn, m_Combat.m_fTorchActive, FIELD_BOOLEAN ),
-	DEFINE_FIELD( CMassn, m_Combat.m_hTorchBeam, FIELD_EHANDLE ),
-	DEFINE_FIELD( CMassn, m_Combat.m_hSavedTarget, FIELD_EHANDLE ),
-	DEFINE_FIELD( CMassn, m_Combat.m_flHealTime, FIELD_TIME )
+TYPEDESCRIPTION CMassn::m_SaveData[] =
+{
+	{ FIELD_TIME, "m_flNextGrenadeCheck", offsetof( CMassn, m_Combat.m_flNextGrenadeCheck ), 1, 0 },
+	{ FIELD_TIME, "m_flNextPainTime", offsetof( CMassn, m_Combat.m_flNextPainTime ), 1, 0 },
+	{ FIELD_VECTOR, "m_vecTossVelocity", offsetof( CMassn, m_Combat.m_vecTossVelocity ), 1, 0 },
+	{ FIELD_CHARACTER, "m_fThrowGrenade", offsetof( CMassn, m_Combat.m_fThrowGrenade ), 1, 0 },
+	{ FIELD_CHARACTER, "m_fStanding", offsetof( CMassn, m_Combat.m_fStanding ), 1, 0 },
+	{ FIELD_CHARACTER, "m_fFirstEncounter", offsetof( CMassn, m_Combat.m_fFirstEncounter ), 1, 0 },
+	{ FIELD_INTEGER, "m_cClipSize", offsetof( CMassn, m_Combat.m_cClipSize ), 1, 0 },
+	{ FIELD_INTEGER, "m_voicePitch", offsetof( CMassn, m_Combat.m_voicePitch ), 1, 0 },
 };
 
 IMPLEMENT_SAVERESTORE( CMassn, CSquadMonster );
@@ -5421,7 +5408,6 @@ void CMassn::SetActivity( Activity activity )
 			{
 				sequence = LookupSequence( "standing_armswing" );
 
-				// the fallback name carries a trailing space in 5.26
 				if ( sequence == ACTIVITY_NOT_AVAILABLE )
 					sequence = LookupSequence( "standing_m40a1 " );
 			}

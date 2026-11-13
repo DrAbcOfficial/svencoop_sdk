@@ -69,9 +69,9 @@ TYPEDESCRIPTION CShocktrooper::m_SaveData[] = {
 	DEFINE_FIELD( CShocktrooper, m_flNextGrenadeCheck, FIELD_TIME ),
 	DEFINE_FIELD( CShocktrooper, m_flNextPainTime, FIELD_TIME ),
 	DEFINE_FIELD( CShocktrooper, m_vecTossVelocity, FIELD_VECTOR ),
-	DEFINE_FIELD( CShocktrooper, m_fThrowGrenade, FIELD_BOOLEAN ),
-	DEFINE_FIELD( CShocktrooper, m_fStanding, FIELD_BOOLEAN ),
-	DEFINE_FIELD( CShocktrooper, m_fFirstEncounter, FIELD_BOOLEAN ),
+	DEFINE_FIELD( CShocktrooper, m_fThrowGrenade, FIELD_CHARACTER ),
+	DEFINE_FIELD( CShocktrooper, m_fStanding, FIELD_CHARACTER ),
+	DEFINE_FIELD( CShocktrooper, m_fFirstEncounter, FIELD_CHARACTER ),
 	DEFINE_FIELD( CShocktrooper, m_cClipSize, FIELD_INTEGER ),
 	DEFINE_FIELD( CShocktrooper, m_voicePitch, FIELD_INTEGER ),
 	DEFINE_FIELD( CShocktrooper, m_iSentence, FIELD_INTEGER )

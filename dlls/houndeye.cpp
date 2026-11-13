@@ -136,18 +136,20 @@ public:
 	static TYPEDESCRIPTION m_SaveData[];
 
 	int m_iSpriteTexture;
-	BOOL m_fAsleep;// some houndeyes sleep in idle mode if this is set, the houndeye is lying down
-	BOOL m_fDontBlink;// don't try to open/close eye if this bit is set!
+
+	bool m_fAsleep;// some houndeyes sleep in idle mode if this is set, the houndeye is lying down
+	bool m_fDontBlink;// don't try to open/close eye if this bit is set!
+
 	Vector	m_vecPackCenter; // the center of the pack. The leader maintains this by averaging the origins of all pack members.
-	Vector	m_vecEnemyCorpse;
+	Vector m_vecEnemyCorpse;
 };
 LINK_ENTITY_TO_CLASS( monster_houndeye, CHoundeye );
 
 TYPEDESCRIPTION	CHoundeye::m_SaveData[] = 
 {
 	DEFINE_FIELD( CHoundeye, m_iSpriteTexture, FIELD_INTEGER ),
-	DEFINE_FIELD( CHoundeye, m_fAsleep, FIELD_BOOLEAN ),
-	DEFINE_FIELD( CHoundeye, m_fDontBlink, FIELD_BOOLEAN ),
+	DEFINE_FIELD( CHoundeye, m_fAsleep, FIELD_CHARACTER ),
+	DEFINE_FIELD( CHoundeye, m_fDontBlink, FIELD_CHARACTER ),
 	DEFINE_FIELD( CHoundeye, m_vecPackCenter, FIELD_POSITION_VECTOR ),
 };
 

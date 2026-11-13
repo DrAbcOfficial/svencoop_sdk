@@ -125,7 +125,6 @@ TYPEDESCRIPTION	CController::m_SaveData[] =
 	DEFINE_ARRAY( CController, m_iBallTime, FIELD_TIME, 2 ),
 	DEFINE_ARRAY( CController, m_iBallCurrent, FIELD_INTEGER, 2 ),
 	DEFINE_FIELD( CController, m_vecEstVelocity, FIELD_VECTOR ),
-	DEFINE_FIELD( CController, m_flMoveSpeed, FIELD_FLOAT ),
 };
 IMPLEMENT_SAVERESTORE( CController, CSquadMonster );
 

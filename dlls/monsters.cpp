@@ -65,16 +65,6 @@ TYPEDESCRIPTION	CBaseMonster::m_SaveData[] =
 {
 	DEFINE_FIELD( CBaseMonster, m_hEnemy, FIELD_EHANDLE ),
 	DEFINE_FIELD( CBaseMonster, m_hTargetEnt, FIELD_EHANDLE ),
-	DEFINE_FIELD( CBaseMonster, m_hHealTarget, FIELD_EHANDLE ),
-	DEFINE_FIELD( CBaseMonster, m_fReviving, FIELD_CHARACTER ),
-	DEFINE_FIELD( CBaseMonster, m_hHealer, FIELD_EHANDLE ),
-	DEFINE_FIELD( CBaseMonster, m_flNextMedicCallTime, FIELD_TIME ),
-	DEFINE_FIELD( CBaseMonster, m_useTime, FIELD_TIME ),
-	DEFINE_FIELD( CBaseMonster, m_fCanPlayerFollow, FIELD_CHARACTER ),
-	DEFINE_FIELD( CBaseMonster, m_hGuardEnt, FIELD_EHANDLE ),
-	DEFINE_FIELD( CBaseMonster, m_iszGuardEntName, FIELD_STRING ),
-	DEFINE_FIELD( CBaseMonster, m_hCineBlocker, FIELD_EHANDLE ),
-	DEFINE_FIELD( CBaseMonster, m_flMoveToRadius, FIELD_FLOAT ),
 	DEFINE_ARRAY( CBaseMonster, m_hOldEnemy, FIELD_EHANDLE, MAX_OLD_ENEMIES ),
 	DEFINE_ARRAY( CBaseMonster, m_vecOldEnemy, FIELD_POSITION_VECTOR, MAX_OLD_ENEMIES ),
 	DEFINE_FIELD( CBaseMonster, m_flFieldOfView, FIELD_FLOAT ),
@@ -127,6 +117,8 @@ TYPEDESCRIPTION	CBaseMonster::m_SaveData[] =
 
 	DEFINE_FIELD( CBaseMonster, m_scriptState, FIELD_INTEGER ),
 	{ FIELD_EHANDLE, "m_hCine", offsetof( CBaseMonster, m_pCine ), 1, 0 },
+	DEFINE_FIELD( CBaseMonster, m_fPlayerAlly, FIELD_BOOLEAN ),
+	DEFINE_FIELD( CBaseMonster, m_flThinkDelay, FIELD_FLOAT ),
 };
 
 //IMPLEMENT_SAVERESTORE( CBaseMonster, CBaseToggle );
@@ -148,6 +140,7 @@ int CBaseMonster::Restore( CRestore &restore )
 
 	// We don't save/restore schedules yet
 	m_pSchedule = NULL;
+	m_pScheduleSaved = NULL;
 	m_iTaskStatus = TASKSTATUS_NEW;
 	
 	// Reset animation
@@ -543,7 +536,7 @@ CSound* CBaseMonster :: PBestScent ( void )
 //=========================================================
 void CBaseMonster :: MonsterThink ( void )
 {
-	pev->nextthink = gpGlobals->time + m_flThinkInterval;
+	pev->nextthink = gpGlobals->time + m_flThinkDelay;
 	m_flFrameTime = gpGlobals->time - m_flLastThinkTime;
 	m_flLastThinkTime = gpGlobals->time;// keep monster thinking.
 
@@ -3371,7 +3364,7 @@ void CBaseMonster :: StartMonster ( void )
 	m_flShockGlowTime = gpGlobals->time;
 	m_fCanFadeStart = false;
 	m_flNextTankSearchTime = gpGlobals->time;
-	m_flThinkInterval = 0.1f;
+	m_flThinkDelay = 0.1f;
 	m_flAutomaticAttackTime = 0;
 	m_fFallDamageReady = false;
 	m_fDeathKnockback = false;

@@ -51,7 +51,7 @@ IMPLEMENT_SAVERESTORE( CGonomeSpit, CBaseEntity );
 
 TYPEDESCRIPTION CGonome::m_SaveData[] =
 {
-	DEFINE_FIELD( CGonome, m_fCanThreatDisplay, FIELD_BOOLEAN ),
+	DEFINE_FIELD( CGonome, m_fCanThreatDisplay, FIELD_CHARACTER ),
 	DEFINE_FIELD( CGonome, m_flLastHurtTime, FIELD_TIME ),
 	DEFINE_FIELD( CGonome, m_flNextSpitTime, FIELD_TIME )
 };

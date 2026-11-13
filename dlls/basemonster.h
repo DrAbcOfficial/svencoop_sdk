@@ -207,7 +207,7 @@ public:
 	float				m_flEnemySeenTime;		// until then, a lost enemy still competes with a new one
 	float				m_flNextTankSearchTime;
 	int					m_iBloodColorOverride;
-	float				m_flThinkInterval;
+	float				m_flThinkDelay;
 	float				m_flNextLookTime;
 	float				m_flFrameTime;
 	float				m_flLastThinkTime;

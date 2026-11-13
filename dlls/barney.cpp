@@ -92,7 +92,7 @@ public:
 	virtual int		Restore( CRestore &restore );
 	static	TYPEDESCRIPTION m_SaveData[];
 
-	BOOL	m_fGunDrawn;
+	bool	m_fGunDrawn;
 	float	m_painTime;
 	float	m_checkAttackTime;
 	BOOL	m_lastAttackCheck;
@@ -111,7 +111,7 @@ LINK_ENTITY_TO_CLASS( monster_barney, CBarney );
 
 TYPEDESCRIPTION CBarney::m_SaveData[] =
 {
-	DEFINE_FIELD( CBarney, m_fGunDrawn, FIELD_BOOLEAN ),
+	DEFINE_FIELD( CBarney, m_fGunDrawn, FIELD_CHARACTER ),
 	DEFINE_FIELD( CBarney, m_painTime, FIELD_TIME ),
 };
 

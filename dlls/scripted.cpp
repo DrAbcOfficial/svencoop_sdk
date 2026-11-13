@@ -111,7 +111,6 @@ TYPEDESCRIPTION	CCineMonster::m_SaveData[] =
 	DEFINE_FIELD( CCineMonster, m_fMoveTo, FIELD_INTEGER ),
 	DEFINE_FIELD( CCineMonster, m_flRepeat, FIELD_FLOAT ),
 	DEFINE_FIELD( CCineMonster, m_flRadius, FIELD_FLOAT ),
-	DEFINE_FIELD( CCineMonster, m_flMoveToRadius, FIELD_FLOAT ),
 
 	DEFINE_FIELD( CCineMonster, m_iDelay, FIELD_INTEGER ),
 	DEFINE_FIELD( CCineMonster, m_startTime, FIELD_TIME ),
@@ -120,7 +119,7 @@ TYPEDESCRIPTION	CCineMonster::m_SaveData[] =
 	DEFINE_FIELD( CCineMonster,	m_saved_solid, FIELD_INTEGER ),
 	DEFINE_FIELD( CCineMonster, m_saved_effects, FIELD_INTEGER ),
 	DEFINE_FIELD( CCineMonster, m_iFinishSchedule, FIELD_INTEGER ),
-	DEFINE_FIELD( CCineMonster, m_interruptable, FIELD_BOOLEAN ),
+	DEFINE_FIELD( CCineMonster, m_interruptable, FIELD_CHARACTER ),
 };
 
 
@@ -990,7 +989,7 @@ private:
 	float	m_flRepeat;	// repeat rate
 	float	m_flAttenuation;
 	float	m_flVolume;
-	BOOL	m_active;
+	bool	m_active;
 	int		m_iszListener;	// name of entity to look at while talking
 };
 
@@ -1008,7 +1007,7 @@ TYPEDESCRIPTION	CScriptedSentence::m_SaveData[] =
 	DEFINE_FIELD( CScriptedSentence, m_flRepeat, FIELD_FLOAT ),
 	DEFINE_FIELD( CScriptedSentence, m_flAttenuation, FIELD_FLOAT ),
 	DEFINE_FIELD( CScriptedSentence, m_flVolume, FIELD_FLOAT ),
-	DEFINE_FIELD( CScriptedSentence, m_active, FIELD_BOOLEAN ),
+	DEFINE_FIELD( CScriptedSentence, m_active, FIELD_CHARACTER ),
 	DEFINE_FIELD( CScriptedSentence, m_iszListener, FIELD_STRING ),
 };
 

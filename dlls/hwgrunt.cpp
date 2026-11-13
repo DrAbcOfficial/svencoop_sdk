@@ -413,7 +413,7 @@ void CHWGrunt::SetArmedWeapon( int weapon )
 void CHWGrunt::SetFiringState( HWGRUNT::ShootingStates state )
 {
 	m_ShootingState = state;
-	m_flThinkInterval = state == HWGRUNT::SHOOTING_FIRING || state == HWGRUNT::SHOOTING_SUPPRESSING ? 0.0f : 0.1f;
+	m_flThinkDelay = state == HWGRUNT::SHOOTING_FIRING || state == HWGRUNT::SHOOTING_SUPPRESSING ? 0.0f : 0.1f;
 }
 
 void CHWGrunt::CheckAmmo( void )
@@ -995,7 +995,7 @@ void CHWGrunt::RunTask( Task_t *task )
 
 	if ( task->iTask != TASK_HWGRUNT_PICKUP_MINIGUN )
 	{
-		m_flThinkInterval = 0.1f;
+		m_flThinkDelay = 0.1f;
 		CSquadMonster::RunTask( task );
 		return;
 	}

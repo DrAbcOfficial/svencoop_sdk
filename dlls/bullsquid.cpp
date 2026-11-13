@@ -241,7 +241,7 @@ public:
 	CUSTOM_SCHEDULES;
 	static TYPEDESCRIPTION m_SaveData[];
 
-	BOOL m_fCanThreatDisplay;// this is so the squid only does the "I see a headcrab!" dance one time. 
+	bool m_fCanThreatDisplay;// this is so the squid only does the "I see a headcrab!" dance one time.
 
 	float m_flLastHurtTime;// we keep track of this, because if something hurts a squid, it will forget about its love of headcrabs for a while.
 	float m_flNextSpitTime;// last time the bullsquid used the spit attack.
@@ -250,7 +250,7 @@ LINK_ENTITY_TO_CLASS( monster_bullchicken, CBullsquid );
 
 TYPEDESCRIPTION	CBullsquid::m_SaveData[] = 
 {
-	DEFINE_FIELD( CBullsquid, m_fCanThreatDisplay, FIELD_BOOLEAN ),
+	DEFINE_FIELD( CBullsquid, m_fCanThreatDisplay, FIELD_CHARACTER ),
 	DEFINE_FIELD( CBullsquid, m_flLastHurtTime, FIELD_TIME ),
 	DEFINE_FIELD( CBullsquid, m_flNextSpitTime, FIELD_TIME ),
 };

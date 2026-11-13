@@ -102,7 +102,7 @@ void CAGrunt::DeathNotice( entvars_t *child )
 
 TYPEDESCRIPTION	CAGrunt::m_SaveData[] = 
 {
-	DEFINE_FIELD( CAGrunt, m_fCanHornetAttack, FIELD_BOOLEAN ),
+	DEFINE_FIELD( CAGrunt, m_fCanHornetAttack, FIELD_CHARACTER ),
 	DEFINE_FIELD( CAGrunt, m_flNextHornetAttackCheck, FIELD_TIME ),
 	DEFINE_FIELD( CAGrunt, m_flNextPainTime, FIELD_TIME ),
 	DEFINE_FIELD( CAGrunt, m_flNextSpeakTime, FIELD_TIME ),

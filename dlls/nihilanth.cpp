@@ -84,11 +84,11 @@ public:
 	
 	// x_teleattack1.wav	the looping sound of the teleport attack ball.
 
-	float m_flForce;
+	int		m_iInitialHealth;
+	float	m_flForce;
 
-	float m_flNextPainSound;
-	int m_iInitialHealth;
-	float m_flDyingTime;
+	float	m_flNextPainSound;
+	float	m_flDyingTime;
 
 	Vector m_velocity;
 	Vector m_avelocity;
@@ -140,8 +140,6 @@ TYPEDESCRIPTION	CNihilanth::m_SaveData[] =
 {
 	DEFINE_FIELD( CNihilanth, m_flForce, FIELD_FLOAT ),
 	DEFINE_FIELD( CNihilanth, m_flNextPainSound, FIELD_TIME ),
-	DEFINE_FIELD( CNihilanth, m_iInitialHealth, FIELD_INTEGER ),
-	DEFINE_FIELD( CNihilanth, m_flDyingTime, FIELD_TIME ),
 	DEFINE_FIELD( CNihilanth, m_velocity, FIELD_VECTOR ),
 	DEFINE_FIELD( CNihilanth, m_avelocity, FIELD_VECTOR ),
 	DEFINE_FIELD( CNihilanth, m_vecTarget, FIELD_VECTOR ),
