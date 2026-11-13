@@ -3046,6 +3046,11 @@ ReturnSpot:
 	return pSpot->edict();
 }
 
+bool CBasePlayer::IsMoving( void )
+{
+	return pev->velocity != g_vecZero;
+}
+
 bool CBasePlayer::IsRevivable( void )
 {
 	return AreBaseReviveConditionsMet() && !( pev->effects & EF_NODRAW );

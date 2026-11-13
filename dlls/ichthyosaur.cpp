@@ -108,6 +108,7 @@ public:
 
 	void  Move( float flInterval );
 	void  MoveExecute( CBaseEntity *pTargetEnt, const Vector &vecDir, float flInterval );
+	int CheckLocalMove( const Vector &vecStart, const Vector &vecEnd, CBaseEntity *pTarget, float *pflDist, Vector *pVecEnd = NULL, bool fCheckOnly = false );
 	void  MonsterThink( void );
 	void  RunAI( void );
 	void  Stop( void );
@@ -918,6 +919,11 @@ float CIchthyosaur::VectorToPitch( const Vector &vec )
 }
 
 //=========================================================
+int CIchthyosaur::CheckLocalMove( const Vector &vecStart, const Vector &vecEnd, CBaseEntity *pTarget, float *pflDist, Vector *pVecEnd, bool fCheckOnly )
+{
+	return CBaseMonster::CheckLocalMove( vecStart, vecEnd, pTarget, pflDist, pVecEnd, fCheckOnly );
+}
+
 void CIchthyosaur::Move(float flInterval)
 {
 	if ( FRouteClear() )

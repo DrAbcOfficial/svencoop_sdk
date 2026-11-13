@@ -256,12 +256,12 @@ public:
 
 	virtual CBaseMonster *MyMonsterPointer( void ) { return this; }
 	virtual bool IsMonster( void ) { return true; }
-	virtual bool IsGibbed( void ) { return !IsAlive() && ( pev->effects & EF_NODRAW ); }
 	virtual void Look ( int iDistance );// basic sight function for monsters
 	virtual void RunAI ( void );// core ai function!	
+	virtual bool IsGibbed( void ) { return !IsAlive() && ( pev->effects & EF_NODRAW ); }
 	void Listen ( void );
 
-	virtual BOOL	IsAlive( void ) { return (pev->deadflag != DEAD_DEAD); }
+	virtual BOOL	IsAlive( void ) { return ( pev->deadflag == DEAD_NO ) && pev->health > 0; }
 	virtual BOOL	ShouldFadeOnDeath( void );
 
 // Basic Monster AI functions
@@ -281,6 +281,7 @@ public:
 
 		void ApplyEffects( void );
 		virtual void EndRevive( float flTimeUntilRevive );
+		virtual void BecomeDead( float flSavedHealth );
 		void EXPORT ReviveThink( void );
 
 #ifndef CLIENT_DLL
@@ -292,7 +293,6 @@ public:
 		virtual bool IsRevivable( void );
 		virtual void BeginRevive( float flTimeUntilRevive );
 		virtual void Revive( void );
-		virtual void CheckRevival( void );
 		void ShockGlowEffect( bool fEnable );
 		bool FindBestPath( void );
 		void EvaluatePaths( void );
@@ -300,7 +300,6 @@ public:
 		bool RunPathWaypointTask( Task_t *pTask );
 #endif
 
-		virtual void BecomeDead( float flSavedHealth );
 		void AlignToGround( void );
 		void FloatInWater( void );
 		void EXPORT CorpseFallThink( void );
@@ -330,8 +329,6 @@ public:
 				m_IdealActivity = GetStoppedActivity();
 		}
 
-		virtual void SetGaitActivity( Activity NewActivity );
-
 		// This will stop animation until you call ResetSequenceInfo() at some point in the future
 		inline void StopAnimation( void ) { pev->framerate = 0; }
 
@@ -344,6 +341,10 @@ public:
 		virtual BOOL CheckMeleeAttack1_Move( float flDot, float flDist );
 		virtual BOOL CheckMeleeAttack2( float flDot, float flDist );
 		virtual BOOL CheckMeleeAttack2_Move( float flDot, float flDist );
+
+#ifndef CLIENT_DLL
+		virtual bool CheckTankUsage( void );
+#endif
 
 		BOOL FHaveSchedule( void );
 		BOOL FScheduleValid ( void );
@@ -374,6 +375,7 @@ public:
 		virtual MONSTERSTATE GetIdealState ( void );
 		void FaceSound( CSound *pSound, bool fMayFollowLook );
 		virtual void SetActivity ( Activity NewActivity );
+		virtual void SetGaitActivity( Activity NewActivity );
 		void SetSequenceByName ( const char *szSequence );
 		void SetState ( MONSTERSTATE State );
 		virtual void ReportAIState( void );
@@ -430,6 +432,7 @@ public:
 		virtual float CoverRadius( void ) { return 784; } // Default cover radius
 
 		virtual BOOL FCanCheckAttacks ( void );
+		virtual bool CheckAttacker( CBaseEntity *pAttacker );
 		virtual void CheckAmmo( void ) { return; };
 		virtual int IgnoreConditions ( void );
 		
@@ -522,6 +525,8 @@ public:
 	}
 
 	virtual	Vector  GetGunPosition( void );
+	virtual void CheckTimeBasedDamage( void );
+	virtual void ClearTimeBasedDamage( void );
 
 	virtual void SetClassification( int cl )
 	{
@@ -552,7 +557,6 @@ public:
 	virtual void AlertSound ( void ) { return; };
 	virtual void IdleSound ( void ) { return; };
 	virtual void PainSound ( void ) { return; };
-	virtual void MedicCallSound( float flDistance = 0.0f ) { PainSound(); }
 
 	// following a player (m_hTargetEnt is the leader)
 	virtual void EXPORT FollowerPlayerUse( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
@@ -574,9 +578,9 @@ public:
 	virtual bool CheckScared( void ) { return false; }
 	virtual void CheckCreatureDanger( void );
 	virtual void CheckFallDamage( void );
-	virtual void CheckTimeBasedDamage( void );
-	virtual void ClearTimeBasedDamage( void );
-	virtual bool CheckAttacker( CBaseEntity *pAttacker );
+#ifndef CLIENT_DLL
+	virtual void CheckRevival( void );
+#endif
 
 	// player allies can be pushed out of the way, then the entity's own touch runs
 	virtual void Touch( CBaseEntity *pOther )
@@ -612,13 +616,13 @@ public:
 	CBaseEntity *DropItem( CBaseEntity *item, const Vector &position, const Vector &angles );
 
 	void CheckSelectedTank( void );
-	virtual bool CheckTankUsage( void );
 	CFuncTank *FindTank( void );
 
 	virtual void HandleStep( void );
 #endif
 
 	virtual void PlayStepSound( int step, float volume );
+	virtual void MedicCallSound( float flDistance = 0.0f ) { PainSound(); }
 
 #ifndef CLIENT_DLL
 	int  m_iStepLeft;

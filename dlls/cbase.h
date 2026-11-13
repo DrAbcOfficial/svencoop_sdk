@@ -457,8 +457,8 @@ public:
 	virtual int Illumination( ) { return GETENTITYILLUM( ENT( pev ) ); };
 #endif
 
-	virtual	BOOL FVisible ( const Vector &vecOrigin );
 	virtual	bool FVisible ( CBaseEntity *pEntity, bool fIgnoreGlass = true );
+	virtual	BOOL FVisible ( const Vector &vecOrigin );
 	virtual bool FVisibleFromPos( const Vector &vecStart, const Vector &vecEnd );
 	virtual bool IsFacing( entvars_t *target, float fieldOfView );
 

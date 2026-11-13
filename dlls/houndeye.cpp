@@ -1028,7 +1028,6 @@ Schedule_t	slHoundRangeAttack[] =
 	{ 
 		tlHoundYell2,
 		ARRAYSIZE ( tlHoundYell2 ), 
-		bits_COND_LIGHT_DAMAGE	|
 		bits_COND_HEAVY_DAMAGE,
 		0,
 		"HoundRangeAttack2"

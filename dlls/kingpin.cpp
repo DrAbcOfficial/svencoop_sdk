@@ -216,6 +216,21 @@ enum
 	TASK_KINGPIN_PLASMA_BALL
 };
 
+Task_t tlKingpinSimpleMoveToLocation[] = {
+	{ TASK_SET_FAIL_SCHEDULE, SCHED_CHASE_ENEMY },
+	{ TASK_RUN_PATH, 0 },
+	{ TASK_WAIT_FOR_MOVEMENT, 0 }
+};
+Schedule_t slKingpinSimpleMoveToLocation[] = {
+	{
+		tlKingpinSimpleMoveToLocation,
+		ARRAYSIZE( tlKingpinSimpleMoveToLocation ),
+		bits_COND_TASK_FAILED,
+		0,
+		"KingpinSimpleMoveToLocation"
+	}
+};
+
 Task_t tlKingpinTeleport[] = {
 	{ TASK_KINGPIN_CHECK_TELEPORT, 0 },
 	{ TASK_STOP_MOVING, 0 },

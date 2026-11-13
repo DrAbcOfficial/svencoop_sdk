@@ -227,7 +227,7 @@ void CShocktrooper::Revive( void )
 
 int CShocktrooper::ISoundMask( void )
 {
-	return bits_SOUND_WORLD | bits_SOUND_COMBAT | bits_SOUND_PLAYER | bits_SOUND_DANGER | bits_SOUND_MEAT;
+	return bits_SOUND_WORLD | bits_SOUND_COMBAT | bits_SOUND_PLAYER | bits_SOUND_DANGER | bits_SOUND_BULLETHIT;
 }
 
 void CShocktrooper::SetYawSpeed( void )

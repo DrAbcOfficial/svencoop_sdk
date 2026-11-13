@@ -281,7 +281,6 @@ public:
 	bool	m_fWeaponsBlocked;
 
 #else
-	bool IsMoving( void );
 	virtual float GetLogFrequency( void );
 	virtual bool CanStartNextVote( VOTETYPE type );
 	virtual void Vote( VOTEINPUT input, const char *text );
@@ -292,6 +291,7 @@ public:
 #endif
 
 	virtual float GetPointsForDamage( float flDamage );
+	virtual bool IsMoving( void );
 
 	// Grapple firing, rappel preference, and release state
 	bool	m_fGrappleFired;
